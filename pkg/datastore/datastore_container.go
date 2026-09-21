@@ -144,5 +144,5 @@ func getPostgresConnectionString(dbConfig *settings.DatabaseConfig) (string, err
 }
 
 func getSqlite3ConnectionString(dbConfig *settings.DatabaseConfig) (string, error) {
-	return fmt.Sprintf("file:%s?cache=shared&mode=rwc", dbConfig.DatabasePath), nil
+	return fmt.Sprintf("file:%s?cache=shared&mode=rwc&_busy_timeout=10000&_journal_mode=WAL", dbConfig.DatabasePath), nil
 }

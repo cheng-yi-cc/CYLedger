@@ -74,6 +74,7 @@ var defaultCreditCardAccountLimit = "0"
 
 // Account represents account data stored in database
 type Account struct {
+	SystemRole      string          `xorm:"VARCHAR(32) NOT NULL DEFAULT ''"`
 	AccountId       int64           `xorm:"PK"`
 	Uid             int64           `xorm:"INDEX(IDX_account_uid_deleted_parent_account_id_order) NOT NULL"`
 	Deleted         bool            `xorm:"INDEX(IDX_account_uid_deleted_parent_account_id_order) NOT NULL"`

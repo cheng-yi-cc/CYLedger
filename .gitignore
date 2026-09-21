@@ -165,3 +165,12 @@ ezbookkeeping
 /data/
 /storage/
 /log/
+/.runtime/
+/runtime/
+/backups/
+
+# Python bytecode and local environment overrides
+__pycache__/
+*.py[cod]
+.env.*
+!.env.example

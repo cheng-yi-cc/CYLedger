@@ -255,6 +255,8 @@ export function updateCurrentUserInfo(user: UserBasicInfo): void {
 }
 
 export function clearCurrentUserInfo(): void {
+    const investmentDraftOwner = getCurrentUserInfo()?.username;
+    if (investmentDraftOwner) localStorage.removeItem(`cyledger_investment_draft:${investmentDraftOwner}`);
     localStorage.removeItem(userInfoLocalStorageKey);
 }
 

@@ -11,7 +11,7 @@ on:
 
 jobs:
   update-i18n-progress:
-    if: ${{ vars.UPDATE_I18N_BADGE_REPO == 'true' }}
+    if: ${{ github.repository == 'mayswind/ezbookkeeping' && vars.UPDATE_I18N_BADGE_REPO == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

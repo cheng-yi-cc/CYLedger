@@ -2520,14 +2520,14 @@ export function useI18n() {
 
     function setLanguage(languageKey: string | null, force?: boolean): LocaleDefaultSettings | null {
         if (!languageKey) {
-            languageKey = getDefaultLanguage();
+            languageKey = DEFAULT_LANGUAGE;
             logger.info(`No specified language, use browser default language ${languageKey}`);
         }
 
         const languageInfo = getLanguageInfo(languageKey);
 
         if (!languageInfo) {
-            languageKey = getDefaultLanguage();
+            languageKey = DEFAULT_LANGUAGE;
             logger.warn(`Not found language ${languageKey}, use browser default language ${languageKey}`);
         }
 

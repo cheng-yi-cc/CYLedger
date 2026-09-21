@@ -103,7 +103,8 @@ function injectFramework7CssFile({ htmlFileName, placeHolders }: { htmlFileName:
 }
 
 export default defineConfig(() => {
-    const licenseContent = fs.readFileSync('./LICENSE', { encoding: 'utf-8' });
+    const licenseContent = ['./LICENSE', './NOTICE', './licenses/ezbookkeeping-MIT-LICENSE']
+        .map(path => fs.readFileSync(path, { encoding: 'utf-8' })).join('\n\n');
     const buildUnixTime = process.env['buildUnixTime'] || '';
 
     const options: UserConfig = {
@@ -157,10 +158,10 @@ export default defineConfig(() => {
                 injectRegister: false,
                 manifestFilename: 'manifest.json',
                 manifest: {
-                    name: 'ezBookkeeping',
-                    short_name: 'ezBookkeeping',
-                    description: 'An open source, powerful, self-hosted personal finance app that is easy to use.',
-                    theme_color: '#C67E48',
+                    name: 'CYLedger',
+                    short_name: 'CYLedger',
+                    description: '日常记账与投资资产管理',
+                    theme_color: '#12786f',
                     background_color: '#F6F7F8',
                     start_url: './',
                     scope: './',
@@ -272,71 +273,7 @@ export default defineConfig(() => {
                     },
                     chunkFileNames: 'js/[name]-[hash].js',
                     entryFileNames: 'js/[name]-[hash].js',
-                    codeSplitting: {
-                        includeDependenciesRecursively: false,
-                        groups: [
-                            {
-                                name:  'leaflet',
-                                test: /[\\/]node_modules[\\/]leaflet[\\/]/i
-                            },
-                            {
-                                name:  'moment',
-                                test: /[\\/]node_modules[\\/](moment|moment-timezone)[\\/]/i
-                            },
-                            {
-                                name:  'echarts',
-                                test: /[\\/]node_modules[\\/](echarts|zrender|tslib|resize-detector)[\\/]/i
-                            },
-                            {
-                                name: 'monaco-editor',
-                                test: /[\\/]node_modules[\\/](monaco-editor|monaco-editor-core)[\\/]/i
-                            },
-                            {
-                                name:  'vendor-mobile',
-                                test: /[\\/]node_modules[\\/](dom7|framework7.*|skeleton-elements|swiper)[\\/]/i
-                            },
-                            {
-                                name:  'vendor-desktop',
-                                test: id => {
-                                    if (/[\\/]node_modules[\\/](vuetify|vue-router|vue3-perfect-scrollbar|perfect-scrollbar|vuedraggable|sortablejs|@mdi.*)[\\/]/i.test(id)) {
-                                        return true;
-                                    } else if (/[\\/]node_modules[\\/]vue-echarts[\\/]/i.test(id)) {
-                                        return true;
-                                    } else if (/plugin-vuetify:/i.test(id)) {
-                                        return true;
-                                    } else {
-                                        return false;
-                                    }
-                                }
-                            },
-                            {
-                                name:  'vendor-common',
-                                test: /[\\/]node_modules[\\/]/i
-                            },
-                            {
-                                name:  'common',
-                                test: id => {
-                                    if (/[\\/]src[\\/](core|consts|models|stores)[\\/]/i.test(id)) {
-                                        return true;
-                                    } else if (/[\\/]src[\\/]lib[\\/](map[\\/]|ui[\\/]common|calendar[\\/]|[a-zA-Z0-9-_]+\.(js|ts))/i.test(id)) {
-                                        return true;
-                                    } else if (/[\\/]src[\\/]components[\\/](base|common)[\\/]/i.test(id)) {
-                                        return true;
-                                    } else if (/[\\/]src[\\/]views[\\/]base[\\/]/i.test(id)) {
-                                        return true;
-                                    } else if (/[\\/]src[\\/]locales[\\/]helpers\.(js|ts)/i.test(id)) {
-                                        return true;
-                                    } else {
-                                        return false;
-                                    }
-                                }
-                            },
-                            {
-                                name:  'locales',
-                                test: /[\\/]src[\\/]locales[\\/]/i
-                            }
-                        ]
-                    }
+
                 },
                 treeshake: false
             },
@@ -352,51 +289,51 @@ export default defineConfig(() => {
             strictPort: true,
             proxy: {
                 '/server_settings.js': {
-                    target: 'http://127.0.0.1:8080/',
+                    target: process.env['CYLEDGER_DEV_BACKEND'] || 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 },
                 '/mobile/server_settings.js': {
-                    target: 'http://127.0.0.1:8080/',
+                    target: process.env['CYLEDGER_DEV_BACKEND'] || 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 },
                 '/desktop/server_settings.js': {
-                    target: 'http://127.0.0.1:8080/',
+                    target: process.env['CYLEDGER_DEV_BACKEND'] || 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 },
                 '/oauth2': {
-                    target: 'http://127.0.0.1:8080/',
+                    target: process.env['CYLEDGER_DEV_BACKEND'] || 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 },
                 '/api': {
-                    target: 'http://127.0.0.1:8080/',
+                    target: process.env['CYLEDGER_DEV_BACKEND'] || 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 },
                 '/mcp': {
-                    target: 'http://127.0.0.1:8080/',
+                    target: process.env['CYLEDGER_DEV_BACKEND'] || 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 },
                 '/avatar': {
-                    target: 'http://127.0.0.1:8080/',
+                    target: process.env['CYLEDGER_DEV_BACKEND'] || 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 },
                 '/pictures': {
-                    target: 'http://127.0.0.1:8080/',
+                    target: process.env['CYLEDGER_DEV_BACKEND'] || 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 },
                 '/icons': {
-                    target: 'http://127.0.0.1:8080/',
+                    target: process.env['CYLEDGER_DEV_BACKEND'] || 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 },
                 '/qrcode': {
-                    target: 'http://127.0.0.1:8080/',
+                    target: process.env['CYLEDGER_DEV_BACKEND'] || 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 },
                 '/proxy': {
-                    target: 'http://127.0.0.1:8080/',
+                    target: process.env['CYLEDGER_DEV_BACKEND'] || 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 },
                 '/_AMapService': {
-                    target: 'http://127.0.0.1:8080/',
+                    target: process.env['CYLEDGER_DEV_BACKEND'] || 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 }
             }

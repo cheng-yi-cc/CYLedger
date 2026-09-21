@@ -1,0 +1,24 @@
+name: cyledger
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.cyledger
+    image: cyledger:local
+    restart: unless-stopped
+    ports:
+      - "${CYLEDGER_BIND:-127.0.0.1}:${CYLEDGER_PORT:-8080}:8080"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      CYLEDGER_ROOT_URL: ${CYLEDGER_ROOT_URL:-http://localhost:8080/}
+      CYLEDGER_COINGECKO_DEMO_API_KEY: ${CYLEDGER_COINGECKO_DEMO_API_KEY:-}
+    volumes:
+      - cyledger_data:/app/runtime
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  cyledger_data:
+    name: ${CYLEDGER_VOLUME:-cyledger_data}

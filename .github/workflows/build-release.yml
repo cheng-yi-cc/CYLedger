@@ -7,6 +7,7 @@ on:
 
 jobs:
   setup:
+    if: github.repository == 'mayswind/ezbookkeeping'
     runs-on: ubuntu-latest
     outputs:
       docker-push: ${{ steps.variable.outputs.docker_push }}

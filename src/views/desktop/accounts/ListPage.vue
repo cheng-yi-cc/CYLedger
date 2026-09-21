@@ -2,21 +2,21 @@
     <main-page-layout nav-items-class="account-category-tabs my-3">
         <template #nav-items>
             <div class="mx-2 mb-2">
-                <span class="text-body-medium">{{ tt('Net assets') }}</span>
+                <span class="text-body-medium">日常账户净余额</span>
                 <div class="text-body-large text-income text-truncate mt-1 mb-2">
                     <span v-if="!loading || allAccountCount > 0">{{ netAssets }}</span>
                     <span v-else-if="loading && allAccountCount <= 0">
                         <v-skeleton-loader class="skeleton-no-margin mt-1 mb-2" type="text" :loading="true"></v-skeleton-loader>
                     </span>
                 </div>
-                <span class="text-body-medium">{{ tt('Total liabilities') }}</span>
+                <span class="text-body-medium">日常账户负债</span>
                 <div class="text-body-large text-expense text-truncate mt-1 mb-2">
                     <span v-if="!loading || allAccountCount > 0">{{ totalLiabilities }}</span>
                     <span v-else-if="loading && allAccountCount <= 0">
                         <v-skeleton-loader class="skeleton-no-margin mt-1 mb-1" type="text" :loading="true"></v-skeleton-loader>
                     </span>
                 </div>
-                <span class="text-body-medium">{{ tt('Total assets') }}</span>
+                <span class="text-body-medium">日常账户资产</span>
                 <div class="text-body-large mt-1">
                     <span v-if="!loading || allAccountCount > 0">{{ totalAssets }}</span>
                     <span v-else-if="loading && allAccountCount <= 0">
@@ -25,6 +25,7 @@
                 </div>
             </div>
 
+            <router-link to="/investments" class="mx-2">查看含投资的统一资产 →</router-link>
             <v-divider class="my-2" />
 
             <li class="nav-link"

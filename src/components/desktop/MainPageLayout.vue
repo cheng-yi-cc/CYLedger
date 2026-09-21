@@ -34,12 +34,12 @@
                         <div class="app-top-toolbar d-inline-flex"
                              :class="{ 'app-top-toolbar-without-navbar': noNavbar }">
                             <slot name="top-toolbar">
-                                <router-link to="/" :aria-current="isTopNavigationActive('/') ? 'page' : undefined">
+                                <router-link to="/overview" :aria-current="isTopNavigationActive('/overview') ? 'page' : undefined">
                                     <v-btn class="top-navigation-button" density="comfortable" variant="text"
                                            :aria-label="tt('Overview')" :icon="true"
-                                           :active="isTopNavigationActive('/')"
-                                           :color="isTopNavigationActive('/') ? 'primary' : 'default'">
-                                        <v-icon :icon="isTopNavigationActive('/') ? mdiHome : mdiHomeOutline" size="24" />
+                                           :active="isTopNavigationActive('/overview')"
+                                           :color="isTopNavigationActive('/overview') ? 'primary' : 'default'">
+                                        <v-icon :icon="isTopNavigationActive('/overview') ? mdiHome : mdiHomeOutline" size="24" />
                                         <v-tooltip activator="parent">{{ tt('Overview') }}</v-tooltip>
                                     </v-btn>
                                 </router-link>
@@ -66,14 +66,10 @@
                                     </v-btn>
                                 </router-link>
 
-                                <router-link to="/insights/explorer"
-                                             :aria-current="isTopNavigationActive('/insights/explorer') ? 'page' : undefined">
-                                    <v-btn class="top-navigation-button ms-1" density="comfortable" variant="text"
-                                           :aria-label="tt('Insights Explorer')" :icon="true"
-                                           :active="isTopNavigationActive('/insights/explorer')"
-                                           :color="isTopNavigationActive('/insights/explorer') ? 'primary' : 'default'">
-                                        <v-icon :icon="isTopNavigationActive('/insights/explorer') ? mdiCompass : mdiCompassOutline" size="24" />
-                                        <v-tooltip activator="parent">{{ tt('Insights Explorer') }}</v-tooltip>
+                                <router-link to="/investments" :aria-current="isTopNavigationActive('/investments') ? 'page' : undefined">
+                                    <v-btn class="top-navigation-button ms-1" density="comfortable" variant="text" aria-label="资产" :icon="true" :active="isTopNavigationActive('/investments')" :color="isTopNavigationActive('/investments') ? 'primary' : 'default'">
+                                        <v-icon :icon="mdiChartPie" size="24" />
+                                        <v-tooltip activator="parent">资产</v-tooltip>
                                     </v-btn>
                                 </router-link>
 
@@ -210,8 +206,6 @@ import {
     mdiCreditCardOutline,
     mdiChartPie,
     mdiChartPieOutline,
-    mdiCompass,
-    mdiCompassOutline,
     mdiPlus,
     mdiCellphone,
     mdiThemeLightDark,

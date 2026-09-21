@@ -4,12 +4,13 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mayswind/ezbookkeeping.git"
+    "url": "git+https://github.com/cheng-yi-cc/CYLedger.git"
   },
-  "author": "MaysWind <i@mayswind.net>",
-  "license": "MIT",
+  "author": "CYLedger contributors",
+  "contributors": ["MaysWind <i@mayswind.net>"],
+  "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/mayswind/ezbookkeeping/issues"
+    "url": "https://github.com/cheng-yi-cc/CYLedger/issues"
   },
   "scripts": {
     "serve": "cross-env NODE_ENV=development vite",

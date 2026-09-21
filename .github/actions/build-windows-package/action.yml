@@ -41,6 +41,8 @@ runs:
         Copy-Item -Recurse -Force conf -Destination ezbookkeeping\conf
         Copy-Item -Recurse -Force templates -Destination ezbookkeeping\templates
         Copy-Item .\LICENSE -Destination ezbookkeeping\
+        Copy-Item .\NOTICE -Destination ezbookkeeping\
+        Copy-Item .\licenses -Destination ezbookkeeping\licenses -Recurse
         Push-Location ezbookkeeping
         7z a -r -tzip -mx9 ..\${{ inputs.package-file-name-prefix }}-windows-x64.zip *
         Pop-Location

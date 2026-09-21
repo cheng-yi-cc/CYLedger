@@ -44,6 +44,8 @@ runs:
         cp -R conf ezbookkeeping/conf
         cp -R templates ezbookkeeping/templates
         cp LICENSE ezbookkeeping/
+        cp NOTICE ezbookkeeping/
+        cp -R licenses ezbookkeeping/licenses
         cd ezbookkeeping
         chmod +x ezbookkeeping
         tar -czf ${{ runner.temp }}/${{ inputs.package-file-name-prefix }}-macos-${{ inputs.architecture }}.tar.gz *

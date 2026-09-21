@@ -1,22 +1,17 @@
 <template>
-    <f7-page>
-        <f7-navbar :title="tt('Settings')" :back-link="tt('Back')"></f7-navbar>
+    <f7-page class="cy-main-page cy-mobile-surface" @page:afterin="refreshProfile">
+        <f7-navbar title="我的"><f7-nav-right><f7-link href="/user/profile" aria-label="编辑个人资料" icon-f7="person_crop_circle_badge_checkmark" /></f7-nav-right></f7-navbar>
 
-        <f7-block-title class="margin-top">{{ currentNickName }}</f7-block-title>
-        <f7-list strong inset dividers>
-            <f7-list-item :title="tt('User Profile')" link="/user/profile"></f7-list-item>
-            <f7-list-item :title="tt('Transaction Categories')" link="/category/all"></f7-list-item>
-            <f7-list-item :title="tt('Transaction Tags')" link="/tag/list"></f7-list-item>
-            <f7-list-item :title="tt('Transaction Templates')" link="/template/list"></f7-list-item>
-            <f7-list-item :title="tt('Scheduled Transactions')" link="/schedule/list" v-if="isUserScheduledTransactionEnabled()"></f7-list-item>
-            <f7-list-item :title="tt('Data Management')" link="/user/data/management"></f7-list-item>
-            <f7-list-item :title="tt('Two-Factor Authentication')" link="/user/2fa"></f7-list-item>
-            <f7-list-item :title="tt('Device & Sessions')" link="/user/sessions"></f7-list-item>
-            <f7-list-button :class="{ 'disabled': logouting }" @click="logout">{{ tt('Log Out') }}</f7-list-button>
-        </f7-list>
+        <main class="cy-page-body cy-profile-body">
+            <f7-link href="/user/profile" class="cy-panel cy-hero cy-profile-card"><img v-if="userStore.currentUserAvatar" :src="userStore.currentUserAvatar" alt="个人头像" /><span v-else class="cy-avatar"><f7-icon f7="person_fill" /></span><h1>{{ currentNickName }}</h1><p>把每一笔生活，记在心里。</p><div class="cy-profile-counts"><span>已保存 <strong>{{ dataStats?.totalTransactionCount ?? '—' }}</strong> 条账务记录</span><span><strong>{{ dataStats?.totalAccountCount ?? '—' }}</strong> 个日常账户</span></div></f7-link>
+            <p v-if="profileError" class="cy-message" role="alert">{{ profileError }} <button @click="refreshProfile">重试</button></p>
+            <nav class="cy-panel cy-feature-grid" aria-label="账本管理"><f7-link href="/template/list"><f7-icon f7="doc_on_doc" />记账模板</f7-link><f7-link v-if="isUserScheduledTransactionEnabled()" href="/schedule/list"><f7-icon f7="clock" />周期记账</f7-link><f7-link href="/account/list"><f7-icon f7="book" />账户管理</f7-link><f7-link href="/investments/ledger"><f7-icon f7="chart_bar" />投资理财</f7-link><f7-link href="/tag/list"><f7-icon f7="tag" />标签管理</f7-link><f7-link href="/category/all"><f7-icon f7="square_grid_2x2" />分类管理</f7-link><f7-link href="/overview"><f7-icon f7="rectangle_grid_1x2" />自定义概览</f7-link><button @click="openMoreSettings"><f7-icon f7="gear_alt" />更多设置</button></nav>
+            <section class="cy-panel cy-profile-links"><h2>数据管理</h2><f7-link href="/user/data/management"><f7-icon f7="tray_arrow_down" /><span>数据管理与导出<small>账单数据、图片与清理</small></span><f7-icon f7="chevron_right" size="14" /></f7-link><f7-link href="/transaction/list?view=pictures"><f7-icon f7="photo_on_rectangle" /><span>账单图片</span><f7-icon f7="chevron_right" size="14" /></f7-link><f7-link href="/settings/sync"><f7-icon f7="cloud" /><span>设置同步<small>同步应用偏好设置</small></span><f7-icon f7="chevron_right" size="14" /></f7-link></section>
+            <section class="cy-panel cy-profile-links"><h2>外观与安全</h2><button @click="showThemePopup = true"><f7-icon f7="paintbrush" /><span>主题外观<small>{{ findNameByValue(allThemes,currentTheme) }}</small></span><f7-icon f7="chevron_right" size="14" /></button><f7-link href="/user/2fa"><f7-icon f7="lock_shield" /><span>双重认证</span><f7-icon f7="chevron_right" size="14" /></f7-link><f7-link href="/user/sessions"><f7-icon f7="device_phone_portrait" /><span>登录设备与会话</span><f7-icon f7="chevron_right" size="14" /></f7-link></section>
+        </main>
 
-        <f7-block-title>{{ tt('Application') }}</f7-block-title>
-        <f7-list strong inset dividers class="settings-list">
+        <div ref="moreSettingsAnchor" /><f7-block-title><f7-link @click="showMoreSettings = !showMoreSettings">更多设置 {{ showMoreSettings ? '⌃' : '⌄' }}</f7-link></f7-block-title>
+        <f7-list strong inset dividers class="settings-list" v-show="showMoreSettings">
             <f7-list-item
                 link="#"
                 :title="tt('Theme')"
@@ -95,11 +90,15 @@
 
             <f7-list-item :title="tt('About')" link="/about" :after="version"></f7-list-item>
         </f7-list>
+        <f7-list strong inset><f7-list-button :class="{ 'disabled': logouting }" @click="logout">{{ tt('Log Out') }}</f7-list-button></f7-list>
+    <template #fixed><LedgerNavigation active="settings" /></template>
     </f7-page>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import LedgerNavigation from '@/components/mobile/LedgerNavigation.vue';
+import { ref, computed, nextTick } from 'vue';
+import type { DataStatisticsResponse } from '@/models/data_management.ts';
 import type { Router } from 'framework7/types';
 
 import { useI18n } from '@/locales/helpers.ts';
@@ -135,6 +134,20 @@ const version = `${getClientDisplayVersion()}`;
 const logouting = ref<boolean>(false);
 const showThemePopup = ref<boolean>(false);
 const showTimezonePopup = ref<boolean>(false);
+const showMoreSettings = ref(false);
+const moreSettingsAnchor = ref<HTMLElement>();
+async function openMoreSettings(): Promise<void> {
+    showMoreSettings.value = true;
+    await nextTick();
+    moreSettingsAnchor.value?.scrollIntoView({ block: 'start' });
+}
+const dataStats = ref<DataStatisticsResponse>();
+const profileError = ref('');
+async function refreshProfile(): Promise<void> {
+    profileError.value = '';
+    try { dataStats.value = await userStore.getUserDataStatistics(); }
+    catch { profileError.value = '暂时无法加载账本统计。'; }
+}
 
 const currentNickName = computed<string>(() => userStore.currentUserNickname || tt('User'));
 
@@ -223,3 +236,6 @@ function logout(): void {
     });
 }
 </script>
+<style scoped>
+.cy-profile-body{padding-bottom:0!important}.cy-profile-card{display:flex;flex-direction:column;align-items:center;text-align:center;padding:26px 16px!important}.cy-profile-card img,.cy-avatar{width:62px;height:62px;border-radius:50%;object-fit:cover;background:#dcece6;color:#145d58;display:grid;place-items:center;margin-bottom:16px}.cy-avatar .icon{font-size:30px}.cy-profile-card h1{font-size:22px;font-weight:650}.cy-profile-card>p{font-size:12px;color:#ffffffb0;margin:10px 0 20px}.cy-profile-counts{display:flex;gap:18px;font-size:11px;color:#ffffffb0;flex-wrap:wrap;justify-content:center}.cy-profile-counts strong{color:white;font-size:16px}.cy-feature-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:26px 8px;padding:24px 12px!important}.cy-feature-grid a,.cy-feature-grid button{display:flex;flex-direction:column;align-items:center;gap:12px;font-size:12px;color:var(--cy-ink);border:0;background:transparent;padding:0;white-space:nowrap}.cy-feature-grid .icon{color:var(--cy-accent);font-size:25px}.cy-profile-links h2{font-size:12px;color:var(--cy-muted);font-weight:500;margin-bottom:8px}.cy-profile-links>a,.cy-profile-links>button{display:flex;align-items:center;gap:15px;color:var(--cy-ink);width:100%;text-align:left;padding:17px 0;border:0;border-bottom:1px solid var(--cy-line);background:transparent}.cy-profile-links>a:last-child,.cy-profile-links>button:last-child{border-bottom:0;padding-bottom:3px}.cy-profile-links .icon{color:var(--cy-accent);font-size:23px}.cy-profile-links span{flex:1;font-size:15px}.cy-profile-links small{display:block;font-size:11px;color:var(--cy-muted);margin-top:5px}
+</style>

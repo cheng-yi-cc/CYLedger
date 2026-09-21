@@ -1,0 +1,18 @@
+CYLedger / CY Finance Manager
+Copyright 2026 CYLedger contributors
+
+CYLedger additions and modifications are licensed under the Apache License,
+Version 2.0. See LICENSE for the complete terms.
+
+This product is derived from ezBookkeeping v2.0.0:
+https://github.com/mayswind/ezbookkeeping
+Upstream baseline: b2a3f4ede42c8a7aa3bab1e6dbbc7b8e6196ef35
+Copyright (c) 2020-2026 MaysWind (i@mayswind.net)
+
+The upstream ezBookkeeping code retains its MIT license and copyright notice.
+The complete original notice is included in licenses/ezbookkeeping-MIT-LICENSE.
+Upstream contributors are listed in contributors.json and the Git history.
+
+Other third-party components retain their own licenses. See
+third-party-dependencies.json, licenses/, and notices included with those
+components. These notices do not change the terms of any license.

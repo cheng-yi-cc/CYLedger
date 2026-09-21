@@ -1,5 +1,5 @@
 <template>
-    <f7-page ptr @ptr:refresh="reload" @page:afterin="onPageAfterIn">
+    <f7-page class="cy-main-page" ptr @ptr:refresh="reload" @page:afterin="onPageAfterIn">
         <f7-navbar>
             <f7-nav-left :class="{ 'disabled': loading }" :back-link="tt('Back')"></f7-nav-left>
             <f7-nav-title>
@@ -388,10 +388,12 @@
                 <f7-actions-button bold close>{{ tt('Cancel') }}</f7-actions-button>
             </f7-actions-group>
         </f7-actions>
+    <template #fixed><LedgerNavigation active="statistics" /></template>
     </f7-page>
 </template>
 
 <script setup lang="ts">
+import LedgerNavigation from '@/components/mobile/LedgerNavigation.vue';
 import { ref, computed } from 'vue';
 import type { Router } from 'framework7/types';
 

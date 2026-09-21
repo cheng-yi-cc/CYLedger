@@ -1,5 +1,19 @@
 [
     {
+        "name": "ezBookkeeping (upstream foundation)",
+        "copyright": "Copyright (c) 2020-2026 MaysWind (i@mayswind.net)",
+        "url": "https://github.com/mayswind/ezbookkeeping",
+        "license": "MIT License",
+        "licenseUrl": "https://github.com/cheng-yi-cc/CYLedger/blob/main/licenses/ezbookkeeping-MIT-LICENSE"
+    },
+    {
+        "name": "shopspring decimal",
+        "copyright": "Copyright (c) 2015 Spring, Inc.; Copyright (c) 2013 Oguz Bilgic",
+        "url": "https://github.com/shopspring/decimal",
+        "license": "MIT License",
+        "licenseUrl": "https://github.com/shopspring/decimal/blob/v1.4.0/LICENSE"
+    },
+    {
         "name": "Gin",
         "copyright": "Copyright (c) 2014 Manuel Martínez-Almeida",
         "url": "https://github.com/gin-gonic/gin",

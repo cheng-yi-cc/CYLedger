@@ -1,36 +1,15 @@
 <template>
-    <f7-page ptr @ptr:refresh="reload" @page:afterin="onPageAfterIn">
+    <f7-page class="cy-main-page cy-mobile-surface" ptr @ptr:refresh="reload" @page:afterin="onPageAfterIn">
         <f7-navbar>
             <f7-nav-title :title="tt('global.app.title')"></f7-nav-title>
         </f7-navbar>
 
         <overview-dashboard :layout="layout" :loading="loading" @navigate="onNavigate" />
 
-        <f7-toolbar tabbar icons bottom class="main-tabbar">
-            <f7-link class="link" href="/transaction/list" :aria-label="tt('Details')">
-                <f7-icon f7="square_list" aria-hidden="true"></f7-icon>
-                <span class="tabbar-label">{{ tt('Details') }}</span>
-            </f7-link>
-            <f7-link class="link" href="/account/list" :aria-label="tt('Accounts')">
-                <f7-icon f7="creditcard" aria-hidden="true"></f7-icon>
-                <span class="tabbar-label">{{ tt('Accounts') }}</span>
-            </f7-link>
-            <!-- "homepage-add-button" must have the "dragenabled" class, otherwise the popover disappears immediately after the second long press -->
-            <f7-link id="homepage-add-button" class="link dragenabled"
-                     href="/transaction/add"
-                     :aria-label="tt('Add Transaction')"
-                     @taphold="openTransactionTemplatePopover">
-                <f7-icon f7="plus_square" class="ebk-tarbar-big-icon" aria-hidden="true"></f7-icon>
-            </f7-link>
-            <f7-link class="link" href="/statistic/transaction" :aria-label="tt('Statistics')">
-                <f7-icon f7="chart_pie" aria-hidden="true"></f7-icon>
-                <span class="tabbar-label">{{ tt('Statistics') }}</span>
-            </f7-link>
-            <f7-link class="link" href="/settings" :aria-label="tt('Settings')">
-                <f7-icon f7="gear_alt" aria-hidden="true"></f7-icon>
-                <span class="tabbar-label">{{ tt('Settings') }}</span>
-            </f7-link>
-        </f7-toolbar>
+        <template #fixed>
+            <f7-link id="homepage-add-button" class="cy-fab dragenabled" href="/transaction/add" :aria-label="tt('Add Transaction')" @taphold="openTransactionTemplatePopover"><f7-icon f7="plus" /></f7-link>
+            <LedgerNavigation active="home" />
+        </template>
 
         <f7-popover class="template-popover-menu" target-el="#homepage-add-button"
                     v-model:opened="showTransactionTemplatePopover">
@@ -68,6 +47,7 @@
 </template>
 
 <script setup lang="ts">
+import LedgerNavigation from '@/components/mobile/LedgerNavigation.vue';
 import AIImageRecognitionSheet, { type AIImageRecognitionResult } from '@/components/mobile/AIImageRecognitionSheet.vue';
 import OverviewDashboard from './overview/OverviewDashboard.vue';
 

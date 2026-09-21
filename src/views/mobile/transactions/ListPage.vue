@@ -1,5 +1,5 @@
 <template>
-    <f7-page ptr
+    <f7-page class="cy-main-page" ptr
              infinite
              :infinite-preloader="loadingMore"
              :infinite-distance="600"
@@ -640,10 +640,12 @@
                 <f7-actions-button bold close>{{ tt('Cancel') }}</f7-actions-button>
             </f7-actions-group>
         </f7-actions>
+    <template #fixed><LedgerNavigation active="bills" /></template>
     </f7-page>
 </template>
 
 <script setup lang="ts">
+import LedgerNavigation from '@/components/mobile/LedgerNavigation.vue';
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
 import type { Router } from 'framework7/types';
 
@@ -980,6 +982,7 @@ function getCategoryListItemCheckedClass(category: TransactionCategory, queryCat
 
 function init(): void {
     const initQuery = props.f7route.query;
+    if (initQuery['view'] === 'pictures') pageType.value = TransactionListPageType.Gallery.type;
 
     let dateRange: TimeRangeAndDateType | null = getDateRangeByDateType(initQuery['dateType'] ? parseInt(initQuery['dateType']) : undefined, firstDayOfWeek.value, fiscalYearStart.value);
 

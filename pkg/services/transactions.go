@@ -564,6 +564,12 @@ func (s *TransactionService) GetTransactionCount(c core.Context, uid int64, maxT
 
 // CreateTransaction saves a new transaction to database
 func (s *TransactionService) CreateTransaction(c core.Context, transaction *models.Transaction, tagIds []int64, pictureIds []int64) error {
+	return s.UserDataDB(transaction.Uid).DoTransaction(c, func(sess *xorm.Session) error {
+		return s.createTransactionInSession(c, sess, transaction, tagIds, pictureIds)
+	})
+}
+
+func (s *TransactionService) createTransactionInSession(c core.Context, sess *xorm.Session, transaction *models.Transaction, tagIds []int64, pictureIds []int64) error {
 	if transaction.Uid <= 0 {
 		return errs.ErrUserIdInvalid
 	}
@@ -629,9 +635,7 @@ func (s *TransactionService) CreateTransaction(c core.Context, transaction *mode
 
 	userDataDb := s.UserDataDB(transaction.Uid)
 
-	return userDataDb.DoTransaction(c, func(sess *xorm.Session) error {
-		return s.doCreateTransaction(c, userDataDb, sess, transaction, transactionTagIndexes, tagIds, pictureIds, pictureUpdateModel)
-	})
+	return s.doCreateTransaction(c, userDataDb, sess, transaction, transactionTagIndexes, tagIds, pictureIds, pictureUpdateModel)
 }
 
 // BatchCreateTransactions saves new transactions to database
@@ -1008,6 +1012,12 @@ func (s *TransactionService) ModifyTransaction(c core.Context, transaction *mode
 	}
 
 	err := s.UserDataDB(transaction.Uid).DoTransaction(c, func(sess *xorm.Session) error {
+		if err := guardInvestmentTransactions(sess, transaction.Uid, []int64{transaction.TransactionId}); err != nil {
+			return err
+		}
+		if err := InvalidateWealthSnapshots(sess, transaction.Uid, 0); err != nil {
+			return err
+		}
 		// Get and verify current transaction
 		oldTransaction := &models.Transaction{}
 		has, err := sess.ID(transaction.TransactionId).Where("uid=? AND deleted=?", transaction.Uid, false).Get(oldTransaction)
@@ -1057,6 +1067,9 @@ func (s *TransactionService) ModifyTransaction(c core.Context, transaction *mode
 			return err
 		}
 
+		if transaction.InvestmentEventId == "" && (sourceAccount.SystemRole != "" || (destinationAccount != nil && destinationAccount.SystemRole != "")) {
+			return ErrInvestmentLinked
+		}
 		if sourceAccount.Hidden || (destinationAccount != nil && destinationAccount.Hidden) {
 			return errs.ErrCannotModifyTransactionInHiddenAccount
 		}
@@ -1592,6 +1605,12 @@ func (s *TransactionService) BatchUpdateTransactionsCategory(c core.Context, uid
 	}
 
 	return s.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
+		if err := guardInvestmentTransactions(sess, uid, transactionIds); err != nil {
+			return err
+		}
+		if err := InvalidateWealthSnapshots(sess, uid, 0); err != nil {
+			return err
+		}
 		updatedRows, err := sess.Cols("category_id", "updated_unix_time").Where("uid=? AND deleted=?", uid, false).In("transaction_id", uniqueTransactionIds).Update(updateModel)
 
 		if err != nil {
@@ -1675,6 +1694,12 @@ func (s *TransactionService) BatchAddTagsToTransactions(c core.Context, uid int6
 	}
 
 	return s.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
+		if err := guardInvestmentTransactions(sess, uid, s.GetTransactionIds(transactions)); err != nil {
+			return err
+		}
+		if err := InvalidateWealthSnapshots(sess, uid, 0); err != nil {
+			return err
+		}
 		// Get and verify tags
 		err := s.isTagsValid(sess, uid, transactionTagIndexes, tagIds)
 
@@ -1715,6 +1740,12 @@ func (s *TransactionService) BatchRemoveTagsFromTransactions(c core.Context, uid
 	}
 
 	return s.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
+		if err := guardInvestmentTransactions(sess, uid, transactionIds); err != nil {
+			return err
+		}
+		if err := InvalidateWealthSnapshots(sess, uid, 0); err != nil {
+			return err
+		}
 		deletedRows, err := sess.Cols("deleted", "deleted_unix_time").Where("uid=? AND deleted=?", uid, false).In("transaction_id", uniqueTransactionIds).In("tag_id", uniqueTagIds).Update(tagIndexUpdateModel)
 
 		if err != nil {
@@ -1746,6 +1777,12 @@ func (s *TransactionService) BatchClearAllTagsFromTransactions(c core.Context, u
 	}
 
 	return s.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
+		if err := guardInvestmentTransactions(sess, uid, transactionIds); err != nil {
+			return err
+		}
+		if err := InvalidateWealthSnapshots(sess, uid, 0); err != nil {
+			return err
+		}
 		deletedRows, err := sess.Cols("deleted", "deleted_unix_time").Where("uid=? AND deleted=?", uid, false).In("transaction_id", uniqueTransactionIds).Update(tagIndexUpdateModel)
 
 		if err != nil {
@@ -1773,6 +1810,19 @@ func (s *TransactionService) MoveAllTransactionsBetweenAccounts(c core.Context, 
 	}
 
 	return s.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
+		if err := guardSystemAccounts(sess, uid, []int64{fromAccountId, toAccountId}); err != nil {
+			return err
+		}
+		linked, err := sess.Where("uid=? AND deleted=? AND investment_event_id<>?", uid, false, "").In("account_id", []int64{fromAccountId, toAccountId}).Exist(&models.Transaction{})
+		if err != nil {
+			return err
+		}
+		if linked {
+			return ErrInvestmentLinked
+		}
+		if err := InvalidateWealthSnapshots(sess, uid, 0); err != nil {
+			return err
+		}
 		// get and verify from and to account
 		fromAccount := &models.Account{}
 		has, err := sess.ID(fromAccountId).Where("uid=? AND deleted=?", uid, false).Get(fromAccount)
@@ -2031,6 +2081,12 @@ func (s *TransactionService) DeleteTransaction(c core.Context, uid int64, transa
 	}
 
 	return s.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
+		if err := guardInvestmentTransactions(sess, uid, []int64{transactionId}); err != nil {
+			return err
+		}
+		if err := InvalidateWealthSnapshots(sess, uid, 0); err != nil {
+			return err
+		}
 		// Get and verify current transaction
 		oldTransaction := &models.Transaction{}
 		has, err := sess.ID(transactionId).Where("uid=? AND deleted=?", uid, false).Get(oldTransaction)
@@ -2188,6 +2244,12 @@ func (s *TransactionService) DeleteAllTransactions(c core.Context, uid int64, de
 	}
 
 	return s.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
+		if err := guardInvestmentTransactions(sess, uid, nil); err != nil {
+			return err
+		}
+		if err := InvalidateWealthSnapshots(sess, uid, 0); err != nil {
+			return err
+		}
 		// Update all transactions to deleted
 		_, err := sess.Cols("deleted", "deleted_unix_time").Where("uid=? AND deleted=?", uid, false).Update(updateModel)
 
@@ -2274,6 +2336,7 @@ func (s *TransactionService) GetRelatedTransferTransaction(originalTransaction *
 
 	relatedTransaction := &models.Transaction{
 		TransactionId:        originalTransaction.RelatedId,
+		InvestmentEventId:    originalTransaction.InvestmentEventId,
 		Uid:                  originalTransaction.Uid,
 		Deleted:              originalTransaction.Deleted,
 		Type:                 relatedType,
@@ -2703,6 +2766,9 @@ func (s *TransactionService) GetTransactionIds(transactions []*models.Transactio
 }
 
 func (s *TransactionService) doCreateTransaction(c core.Context, database *datastore.Database, sess *xorm.Session, transaction *models.Transaction, transactionTagIndexes []*models.TransactionTagIndex, tagIds []int64, pictureIds []int64, pictureUpdateModel *models.TransactionPictureInfo) error {
+	if err := InvalidateWealthSnapshots(sess, transaction.Uid, utils.GetUnixTimeFromTransactionTime(transaction.TransactionTime)); err != nil {
+		return err
+	}
 	// Get and verify source and destination account
 	sourceAccount, destinationAccount, err := s.getAccountModels(sess, transaction)
 
@@ -3400,6 +3466,9 @@ func (s *TransactionService) getAccountModels(sess *xorm.Session, transaction *m
 		}
 	}
 
+	if transaction.InvestmentEventId == "" && (sourceAccount.SystemRole != "" || (destinationAccount != nil && destinationAccount.SystemRole != "")) {
+		return nil, nil, ErrInvestmentLinked
+	}
 	return sourceAccount, destinationAccount, nil
 }
 
@@ -3455,6 +3524,9 @@ func (s *TransactionService) getRelatedUpdateColumns(updateCols []string) []stri
 }
 
 func (s *TransactionService) isCategoryValid(sess *xorm.Session, transaction *models.Transaction) error {
+	if transaction.InvestmentEventId != "" {
+		return nil
+	}
 	if transaction.Type == models.TRANSACTION_DB_TYPE_MODIFY_BALANCE {
 		if transaction.CategoryId != 0 {
 			return errs.ErrBalanceModificationTransactionCannotSetCategory

@@ -181,5 +181,14 @@ func updateAllDatabaseTablesStructure(c *core.CliContext) error {
 
 	log.BootInfof(c, "[database.updateAllDatabaseTablesStructure] insights explorer table maintained successfully")
 
+	err = datastore.Container.UserDataStore.SyncStructs(
+		new(models.InvestmentSettings), new(models.PortfolioAccount), new(models.InvestmentInstrument),
+		new(models.InvestmentEventRecord), new(models.InvestmentEventRevision), new(models.InvestmentTransactionLink),
+		new(models.InvestmentIdempotency), new(models.InvestmentQuote), new(models.WealthSnapshot),
+	)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

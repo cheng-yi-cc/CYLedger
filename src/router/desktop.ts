@@ -12,6 +12,7 @@ import OAuth2CallbackPage from '@/views/desktop/OAuth2CallbackPage.vue';
 import UnlockPage from '@/views/desktop/UnlockPage.vue';
 
 import HomePage from '@/views/desktop/HomePage.vue';
+import InvestmentPage from '@/views/desktop/InvestmentPage.vue';
 
 import TransactionListPage from '@/views/desktop/transactions/ListPage.vue';
 
@@ -103,6 +104,11 @@ const router = createRouter({
     routes: [
         {
             path: '/',
+            redirect: '/transaction/list',
+            beforeEnter: checkLogin
+        },
+        {
+            path: '/overview',
             component: HomePage,
             beforeEnter: checkLogin
         },
@@ -156,6 +162,11 @@ const router = createRouter({
                 initStartTime: route.query['startTime'],
                 initEndTime: route.query['endTime']
             })
+        },
+        {
+            path: '/investments',
+            component: InvestmentPage,
+            beforeEnter: checkLogin
         },
         {
             path: '/account/list',

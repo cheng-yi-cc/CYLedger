@@ -1,3 +1,15 @@
+# CYLedger / CY Finance Manager
+
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
+项目仓库：[cheng-yi-cc/CYLedger](https://github.com/cheng-yi-cc/CYLedger)。CYLedger 新增与修改部分使用 [Apache License 2.0](LICENSE)；上游 ezBookkeeping 部分保留 [MIT 许可及原版权声明](licenses/ezbookkeeping-MIT-LICENSE)，其他依赖沿用各自许可。详见 [NOTICE](NOTICE)。
+
+本仓库是基于 ezBookkeeping v2.0.0 的个人记账与投资资产管理初版。日常记账沿用上游，新增独立投资事件、成本核算、资金结算、真实行情与统一资产估值。
+
+**本项目的安装、运行和验收说明见 [README.CYLEDGER.md](README.CYLEDGER.md)。** 下方保留上游介绍与许可归属；其中的发布版本、演示站和 Docker 镜像均属于上游项目。
+
+---
+
 # ezBookkeeping
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/mayswind/ezbookkeeping/blob/master/LICENSE)
 [![Latest Release](https://img.shields.io/github/release/mayswind/ezbookkeeping.svg?style=flat)](https://github.com/mayswind/ezbookkeeping/releases)

@@ -35,7 +35,7 @@ export interface LanguageOption {
     readonly nativeDisplayName: string;
 }
 
-export const DEFAULT_LANGUAGE: string = 'en';
+export const DEFAULT_LANGUAGE: string = 'zh-Hans';
 
 // To add new languages, please refer to https://ezbookkeeping.mayswind.net/translating
 export const ALL_LANGUAGES: Record<string, LanguageInfo> = {

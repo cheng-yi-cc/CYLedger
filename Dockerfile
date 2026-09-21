@@ -53,6 +53,8 @@ COPY --from=fe-builder --chown=1000:1000 /go/src/github.com/mayswind/ezbookkeepi
 COPY --chown=1000:1000 conf /ezbookkeeping/conf
 COPY --chown=1000:1000 templates /ezbookkeeping/templates
 COPY --chown=1000:1000 LICENSE /ezbookkeeping/LICENSE
+COPY --chown=1000:1000 NOTICE /ezbookkeeping/NOTICE
+COPY --chown=1000:1000 licenses /ezbookkeeping/licenses
 USER 1000:1000
 EXPOSE 8080
 ENTRYPOINT ["/docker-entrypoint.sh"]

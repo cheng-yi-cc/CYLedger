@@ -339,8 +339,8 @@ const vuetify = createVuetify({
             light: {
                 dark: false,
                 colors: {
-                    'primary': '#c67e48',
-                    'primary-darken-1': '#b67443',
+                    'primary': '#12786f',
+                    'primary-darken-1': '#0c635b',
                     'on-primary': '#ffffff',
                     'secondary': '#8c8c8c',
                     'secondary-darken-1': '#595754',
@@ -358,7 +358,7 @@ const vuetify = createVuetify({
                     'error-darken-1': '#e1342b',
                     'on-error': '#ffffff',
                     'teal': '#009688',
-                    'background': '#faf8f4',
+                    'background': '#f4f7f6',
                     'on-background': '#413935',
                     'surface': '#fff',
                     'on-surface': '#413935',
@@ -410,8 +410,8 @@ const vuetify = createVuetify({
             dark: {
                 dark: true,
                 colors: {
-                    'primary': '#c67e48',
-                    'primary-darken-1': '#b67443',
+                    'primary': '#12786f',
+                    'primary-darken-1': '#0c635b',
                     'on-primary': '#ffffff',
                     'secondary': '#9d9b99',
                     'secondary-darken-1': '#3e3d3c',

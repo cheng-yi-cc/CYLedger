@@ -1,7 +1,7 @@
 <template>
     <v-card class="overview-widget net-assets-trend-card h-100" :class="{ disabled: loading }">
         <template #title>
-            <overview-widget-header :title="title || tt('Net Assets Trends')" :icon="mdiChartTimelineVariant" />
+            <overview-widget-header :title="title || '日常账户余额趋势'" :icon="mdiChartTimelineVariant" />
         </template>
 
         <trends-chart hide-x-axis-line hide-y-axis-labels hide-horizontal-grid-lines hide-line-symbols no-animation
@@ -30,7 +30,6 @@ import type { TrendsBarChartClickEvent } from '@/components/base/TrendsChartBase
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { useI18n } from '@/locales/helpers.ts';
 
 import { useSettingsStore } from '@/stores/setting.ts';
 import { useUserStore } from '@/stores/user.ts';
@@ -62,7 +61,6 @@ const props = defineProps<{
 
 const router = useRouter();
 
-const { tt } = useI18n();
 
 const settingsStore = useSettingsStore();
 const userStore = useUserStore();
@@ -125,7 +123,7 @@ const items = computed<TransactionAssetTrendsAnalysisDataItem[]>(() => {
     }
 
     return [{
-        name: tt('Net assets'),
+        name: '日常账户净余额',
         type: 'total',
         id: 'total',
         icon: '',

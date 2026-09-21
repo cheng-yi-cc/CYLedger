@@ -1,7 +1,7 @@
 {
     "global": {
         "app": {
-            "title": "ezBookkeeping"
+            "title": "CYLedger"
         }
     },
     "language": {
@@ -1779,8 +1779,8 @@
     "Change Language": "修改语言",
     "Date is too early": "日期过早",
     "User Canceled": "用户已取消",
-    "Welcome to ezBookkeeping": "欢迎使用 ezBookkeeping",
-    "Please log in with your ezBookkeeping account": "请使用您的 ezBookkeeping 账号登录",
+    "Welcome to ezBookkeeping": "欢迎使用 CYLedger",
+    "Please log in with your ezBookkeeping account": "登录你的 CYLedger 账本",
     "Unlock Application": "解锁应用",
     "Please enter your PIN code or use WebAuthn to unlock application": "请输入您的 PIN 码，或使用 WebAuthn 解锁应用",
     "Please enter your PIN code to unlock application": "请输入您的 PIN 码解锁应用",

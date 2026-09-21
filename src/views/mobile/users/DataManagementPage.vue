@@ -2,6 +2,11 @@
     <f7-page @page:afterin="onPageAfterIn">
         <f7-navbar :class="{ 'disabled': loading }" :back-link="tt('Back')" :title="tt('Data Management')"></f7-navbar>
 
+        <f7-block strong inset>
+            <p>CSV 字段映射与批量导入在电脑版完成。使用「历史流水方式」时，起始余额应为最早流水之前的余额；使用「当前余额方式」时，从迁移日开始记账，不再叠加以前的流水。</p>
+            <f7-button external :href="getDesktopVersionPath() + 'transaction/list'">打开电脑版导入 CSV</f7-button>
+            <f7-button href="/investments/ledger">投资流水与持仓导出</f7-button>
+        </f7-block>
         <f7-list strong inset dividers class="margin-vertical-half skeleton-text" v-if="loading">
             <f7-list-item title="Transactions" after="Count"></f7-list-item>
             <f7-list-item title="Transaction Pictures" after="Count"></f7-list-item>
@@ -102,6 +107,7 @@ import { useDataManagementPageBase } from '@/views/base/users/DataManagementPage
 import { useRootStore } from '@/stores/index.ts';
 import { useUserStore } from '@/stores/user.ts';
 
+import { getDesktopVersionPath } from '@/lib/version.ts';
 import { isDataExportingEnabled } from '@/lib/server_settings.ts';
 
 const props = defineProps<{

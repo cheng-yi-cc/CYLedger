@@ -5,6 +5,7 @@
 </template>
 
 <script setup lang="ts">
+import '@/styles/mobile/cyledger.scss';
 import { ref, computed, watch, onMounted } from 'vue';
 
 import type { Framework7Parameters, Notification, Actions, Dialog, Popover, Popup, Sheet } from 'framework7/types';
@@ -42,10 +43,10 @@ const tokensStore = useTokensStore();
 const exchangeRatesStore = useExchangeRatesStore();
 
 const f7params = ref<Framework7Parameters>({
-    name: 'ezBookkeeping',
+    name: 'CYLedger',
     theme: 'ios',
     colors: {
-        primary: '#c67e48'
+        primary: '#12786f'
     },
     routes: routes,
     darkMode: (() => {

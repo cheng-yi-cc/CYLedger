@@ -1,5 +1,6 @@
 <template>
     <v-row>
+        <v-col cols="12"><v-card title="迁移与投资数据"><v-card-text>日常流水从账单页导入 CSV，支持字段映射、预览和重复检查。迁移时请先选择「历史流水重建」或「当前余额起步」，避免把余额重复累计。</v-card-text><v-card-actions><v-btn to="/transaction/list">前往账单导入</v-btn><v-btn to="/investments">投资流水与持仓导出</v-btn></v-card-actions></v-card></v-col>
         <v-col cols="12">
             <v-card :class="{ 'disabled': loadingDataStatistics }">
                 <template #title>

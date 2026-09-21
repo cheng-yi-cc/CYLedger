@@ -19,10 +19,13 @@ import (
 	"github.com/mayswind/ezbookkeeping/pkg/core"
 	"github.com/mayswind/ezbookkeeping/pkg/cron"
 	"github.com/mayswind/ezbookkeeping/pkg/errs"
+	"github.com/mayswind/ezbookkeeping/pkg/exchangerates"
 	"github.com/mayswind/ezbookkeeping/pkg/log"
 	"github.com/mayswind/ezbookkeeping/pkg/mcp"
 	"github.com/mayswind/ezbookkeeping/pkg/middlewares"
+	"github.com/mayswind/ezbookkeeping/pkg/models"
 	"github.com/mayswind/ezbookkeeping/pkg/requestid"
+	"github.com/mayswind/ezbookkeeping/pkg/services"
 	"github.com/mayswind/ezbookkeeping/pkg/settings"
 	"github.com/mayswind/ezbookkeeping/pkg/utils"
 	"github.com/mayswind/ezbookkeeping/pkg/validators"
@@ -59,6 +62,10 @@ func startWebServer(c *core.CliContext) error {
 		}
 	}
 
+	services.InvestmentCashFXProvider = func(ctx core.Context, uid int64) (*models.LatestExchangeRateResponse, error) {
+		return exchangerates.Container.GetLatestExchangeRates(ctx, uid, config)
+	}
+	services.Investments.StartMarketCache()
 	err = requestid.InitializeRequestIdGenerator(c, config)
 
 	if err != nil {
@@ -390,6 +397,23 @@ func startWebServer(c *core.CliContext) error {
 			}
 
 			// Accounts
+			apiV1Route.GET("/investments/settings", bindApi(api.Investments.Settings, config))
+			apiV1Route.POST("/investments/settings", bindApi(api.Investments.Settings, config))
+			apiV1Route.GET("/investments/accounts", bindApi(api.Investments.Accounts, config))
+			apiV1Route.POST("/investments/accounts", bindApi(api.Investments.Accounts, config))
+			apiV1Route.GET("/investments/instruments", bindApi(api.Investments.Instruments, config))
+			apiV1Route.POST("/investments/instruments", bindApi(api.Investments.Instruments, config))
+			apiV1Route.GET("/investments/events", bindApi(api.Investments.Events, config))
+			apiV1Route.POST("/investments/events", bindApi(api.Investments.Events, config))
+			apiV1Route.POST("/investments/events/preview", bindApi(api.Investments.Preview, config))
+			apiV1Route.POST("/investments/events/:id/revise", bindApi(api.Investments.Revise, config))
+			apiV1Route.POST("/investments/events/:id/void", bindApi(api.Investments.Void, config))
+			apiV1Route.GET("/investments/positions", bindApi(api.Investments.Positions, config))
+			apiV1Route.GET("/investments/quotes", bindApi(api.Investments.Quotes, config))
+			apiV1Route.POST("/investments/quotes/manual", bindApi(api.Investments.ManualQuote, config))
+			apiV1Route.GET("/investments/export", bindApi(api.Investments.Export, config))
+			apiV1Route.GET("/wealth/summary", bindApi(api.Investments.Summary, config))
+			apiV1Route.GET("/wealth/history", bindApi(api.Investments.History, config))
 			apiV1Route.GET("/accounts/list.json", bindApi(api.Accounts.AccountListHandler, config))
 			apiV1Route.GET("/accounts/get.json", bindApi(api.Accounts.AccountGetHandler, config))
 			apiV1Route.POST("/accounts/add.json", bindApi(api.Accounts.AccountCreateHandler, config))

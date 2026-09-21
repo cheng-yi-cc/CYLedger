@@ -38,7 +38,7 @@
 
             <template #toolbar>
                 <v-btn class="ms-2 me-1" density="comfortable" variant="outlined" color="primary"
-                       :disabled="loading || submitting || (!isImportDataFromTextbox && !isAIImageImport && !importFile) || (isImportDataFromTextbox && !importData) || (!isImportDataFromTextbox && !isAIImageImport && allSupportedEncodings && fileEncoding === 'auto' && !autoDetectedFileEncoding) || (!isImportDataFromTextbox && isAIImageImport && importImageFiles.length === 0)"
+                       :disabled="migrationMode !== 'history' || loading || submitting || (!isImportDataFromTextbox && !isAIImageImport && !importFile) || (isImportDataFromTextbox && !importData) || (!isImportDataFromTextbox && !isAIImageImport && allSupportedEncodings && fileEncoding === 'auto' && !autoDetectedFileEncoding) || (!isImportDataFromTextbox && isAIImageImport && importImageFiles.length === 0)"
                        @click="parseData"
                        v-if="currentStep === 'defineColumn' || currentStep === 'executeCustomScript' || (currentStep === 'recognizeImages' && !submitting) || currentStep === 'uploadFile'">
                     {{ tt('Next') }}
@@ -142,7 +142,17 @@
                           v-model="currentStep">
                     <v-window-item value="uploadFile">
                         <div class="pa-4">
-                            <v-row>
+                            <v-alert type="info" variant="tonal" class="mb-4">
+                                <strong>先确定余额起点，避免历史流水重复计入。</strong>
+                                <v-radio-group v-model="migrationMode" hide-details class="mt-2">
+                                    <v-radio value="history" label="历史流水方式：使用文件中的流水及其之前的起始余额重建账户" />
+                                    <v-radio value="current" label="当前余额方式：填写今天的实际余额，从今天开始记账" />
+                                </v-radio-group>
+                                <p class="mt-2" v-if="migrationMode === 'history'">请先把账户起始余额设为最早导入流水之前的余额。不要使用已包含这些流水的当前余额。导入预览中还需核对转账配对和重复记录。</p>
+                                <p class="mt-2" v-if="migrationMode === 'current'">此方式不叠加以前的历史流水。请到日常账户填写当前余额；已有投资通过「资产 → 期初持仓」录入。</p>
+                                <v-btn class="mt-3" variant="outlined" to="/account/list" @click="close(false)" v-if="migrationMode === 'current'">管理日常账户</v-btn>
+                            </v-alert>
+                            <v-row v-show="migrationMode === 'history'">
                                 <v-col cols="12" md="12">
                                     <two-column-select primary-key-field="displayCategoryName"
                                                        primary-value-field="displayCategoryName"
@@ -471,6 +481,7 @@ const showState = ref<boolean>(false);
 const additionalOptionsMenuState = ref<boolean>(false);
 const clientSessionId = ref<string>('');
 const currentStep = ref<ImportTransactionDialogStep>('uploadFile');
+const migrationMode = ref<'history' | 'current' | ''>('');
 const importProcess = ref<number>(0);
 const fileType = ref<string>('ezbookkeeping');
 const fileSubType = ref<string>('ezbookkeeping_csv');
@@ -682,6 +693,7 @@ function loadInitFileTypeFromSettings(): void {
 }
 
 function open(): Promise<void> {
+    migrationMode.value = '';
     fileType.value = 'ezbookkeeping';
     fileSubType.value = 'ezbookkeeping_csv';
 
@@ -947,6 +959,7 @@ function cancelBatchRecognizeImages(): void {
 }
 
 function parseData(): void {
+    if (migrationMode.value !== 'history') return;
     let uploadFile: File;
     let type: string = fileType.value;
     let encoding: string | undefined = undefined;
@@ -1182,6 +1195,7 @@ function batchApplyRules(): void {
 }
 
 function submit(): void {
+    if (migrationMode.value !== 'history') return;
     if (importTransactionCheckDataTab.value?.isEditing) {
         return;
     }

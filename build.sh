@@ -241,6 +241,8 @@ build_package() {
     cp -R conf package/conf
     cp -R templates package/templates
     cp LICENSE package/
+    cp NOTICE package/
+    cp -R licenses package/licenses
 
     cd package || { echo_red "Error: Build Failed"; exit 1; }
     tar cvzf "../$package_file_name" .

@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"strings"
+	// Keep IANA zones available in portable Windows and trimmed builds.
+	_ "time/tzdata"
 
 	"github.com/urfave/cli/v3"
 

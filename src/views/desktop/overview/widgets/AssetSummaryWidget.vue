@@ -1,7 +1,7 @@
 <template>
     <v-card class="overview-widget asset-summary-widget h-100" :class="{ disabled: loading }">
         <template #title>
-            <overview-widget-header :title="title || tt('Asset Summary')" :icon="mdiBankOutline" />
+            <overview-widget-header :title="title || '日常账户资产'" :icon="mdiBankOutline" />
         </template>
 
         <v-card-text class="overview-widget__body mt-3">
@@ -17,12 +17,13 @@
                         <v-icon size="24" :icon="item.icon" />
                     </v-avatar>
                     <div class="d-flex flex-column gap-1 text-truncate">
-                        <span class="overview-widget__caption text-body-medium">{{ tt(item.title) }}</span>
+                        <span class="overview-widget__caption text-body-medium">{{ item.title }}</span>
                         <span class="overview-widget__amount text-title-large text-truncate" :class="{ 'text-primary': item.color === 'primary' }" v-if="!loading || (allAccounts && allAccounts.length)">{{ item.value }}</span>
                         <v-skeleton-loader class="skeleton-no-margin pb-2" style="margin-top: 6px" width="120px" type="text" :loading="true" v-else-if="loading && (!allAccounts || !allAccounts.length)"></v-skeleton-loader>
                     </div>
                 </div>
             </div>
+        <router-link to="/investments" class="d-inline-block mt-4">查看含投资的统一资产 →</router-link>
         </v-card-text>
     </v-card>
 </template>
@@ -66,19 +67,19 @@ const displayAccountCount = computed<string>(() => formatNumberToLocalizedNumera
 
 const summaryItems = computed<SummaryItem[]>(() => [
     {
-        title: 'Total assets',
+        title: '日常账户资产',
         value: totalAssets.value,
         icon: mdiBankOutline,
         color: 'grey'
     },
     {
-        title: 'Total liabilities',
+        title: '日常账户负债',
         value: totalLiabilities.value,
         icon: mdiCreditCardOutline,
         color: 'expense'
     },
     {
-        title: 'Net assets',
+        title: '日常账户净余额',
         value: netAssets.value,
         icon: mdiPiggyBankOutline,
         color: 'primary'

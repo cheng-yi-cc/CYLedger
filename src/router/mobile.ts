@@ -3,6 +3,10 @@ import type { Router } from 'framework7/types';
 import { isUserLogined, isUserUnlocked } from '@/lib/userstate.ts';
 
 import HomePage from '@/views/mobile/HomePage.vue';
+import InvestmentPage from '@/views/mobile/InvestmentPage.vue';
+import InvestmentDetailPage from '@/views/mobile/InvestmentDetailPage.vue';
+import LedgerMonthPage from '@/views/mobile/LedgerMonthPage.vue';
+import StatisticsOverviewPage from '@/views/mobile/StatisticsOverviewPage.vue';
 import LoginPage from '@/views/mobile/LoginPage.vue';
 import SignUpPage from '@/views/mobile/SignupPage.vue';
 import UnlockPage from '@/views/mobile/UnlockPage.vue';
@@ -128,11 +132,36 @@ function checkNotLogin({ router, resolve, reject }: { router: Router.Router, res
 const routes: Router.RouteParameters[] = [
     {
         path: '/',
-        async: asyncResolve(HomePage),
+        async: asyncResolve(LedgerMonthPage),
         beforeEnter: [checkLogin],
         options: {
             animate: false,
         }
+    },
+    {
+        path: '/calendar',
+        async: asyncResolve(LedgerMonthPage),
+        beforeEnter: [checkLogin]
+    },
+    {
+        path: '/statistics',
+        async: asyncResolve(StatisticsOverviewPage),
+        beforeEnter: [checkLogin]
+    },
+    {
+        path: '/investments/ledger',
+        async: asyncResolve(InvestmentDetailPage),
+        beforeEnter: [checkLogin]
+    },
+    {
+        path: '/investments',
+        async: asyncResolve(InvestmentPage),
+        beforeEnter: [checkLogin]
+    },
+    {
+        path: '/overview',
+        async: asyncResolve(HomePage),
+        beforeEnter: [checkLogin]
     },
     {
         path: '/login',

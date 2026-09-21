@@ -3,7 +3,7 @@
         <f7-card-header class="display-block" :style="cardHeaderStyle">
             <p class="no-margin">
                 <small class="card-header-content" v-if="loading">Net assets</small>
-                <small class="card-header-content" v-else-if="!loading">{{ tt('Net assets') }}</small>
+                <small class="card-header-content" v-else-if="!loading">日常账户净余额</small>
             </p>
             <p class="no-margin">
                 <span class="net-assets" v-if="loading">0.00 USD</span>
@@ -20,13 +20,14 @@
                     <span>Total assets | Total liabilities</span>
                 </small>
                 <small class="account-overview-info" v-else-if="!loading">
-                    <span>{{ tt('Total assets') }}</span>
+                    <span>日常资产</span>
                     <span>{{ totalAssets }}</span>
                     <span>|</span>
-                    <span>{{ tt('Total liabilities') }}</span>
+                    <span>日常负债</span>
                     <span>{{ totalLiabilities }}</span>
                 </small>
             </p>
+        <f7-link href="/investments" class="margin-top-half" :style="iconStyle">查看含投资的统一资产 →</f7-link>
         </f7-card-header>
     </f7-card>
 </template>
