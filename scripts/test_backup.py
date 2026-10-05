@@ -55,6 +55,16 @@ class CompleteBackupTest(unittest.TestCase):
                 INSERT INTO fixed_deposit VALUES ('deposit-1', '5000.00', '2026-09-01', '2027-09-01', '2026-10-01', 505);
                 CREATE TABLE debt_movement (id TEXT PRIMARY KEY, debt_account_id INTEGER, principal_transaction_id INTEGER, interest_transaction_id INTEGER, digest TEXT);
                 INSERT INTO debt_movement VALUES ('repay-1', 2, 506, 507, 'idem-debt');
+                ALTER TABLE transactions ADD COLUMN discount_amount TEXT NOT NULL DEFAULT '0';
+                UPDATE transactions SET discount_amount='12.34' WHERE id=320;
+                CREATE TABLE transaction_tag (tag_id INTEGER PRIMARY KEY, parent_tag_id INTEGER, name TEXT);
+                INSERT INTO transaction_tag VALUES (10,0,'旅行'),(11,10,'交通');
+                CREATE TABLE statistics_budget (id TEXT PRIMARY KEY, book_id TEXT, category_id INTEGER, amount TEXT, start_date TEXT, end_date TEXT, repeat INTEGER, revision INTEGER);
+                INSERT INTO statistics_budget VALUES ('budget-1','trip',0,'1000.01','2026-10-01','2026-10-31',1,2);
+                CREATE TABLE statistics_note (id TEXT PRIMARY KEY, book_id TEXT, period TEXT, content TEXT, revision INTEGER);
+                INSERT INTO statistics_note VALUES ('note-1','trip','2026-10','本月旅行总结',3);
+                CREATE TABLE statistics_preference (uid INTEGER PRIMARY KEY, revision INTEGER, payload TEXT);
+                INSERT INTO statistics_preference VALUES (1,4,'{"carrySurplus":true,"carryDeficit":false}');
                 PRAGMA user_version = 1;
             """)
         attachment = self.runtime / "storage" / "user-1" / "receipt.bin"
@@ -88,6 +98,11 @@ class CompleteBackupTest(unittest.TestCase):
             self.assertEqual(json.loads(copy.execute("SELECT data FROM credit_installment").fetchone()[0])["payments"][0]["feeTransactionId"], '504')
             self.assertEqual(copy.execute("SELECT closed_date FROM fixed_deposit").fetchone()[0], '2026-10-01')
             self.assertEqual(copy.execute("SELECT debt_account_id,principal_transaction_id,interest_transaction_id,digest FROM debt_movement").fetchone(), (2,506,507,'idem-debt'))
+            self.assertEqual(copy.execute("SELECT discount_amount FROM transactions WHERE id=320").fetchone()[0], '12.34')
+            self.assertEqual(copy.execute("SELECT parent_tag_id FROM transaction_tag WHERE tag_id=11").fetchone()[0], 10)
+            self.assertEqual(copy.execute("SELECT amount,repeat,revision FROM statistics_budget").fetchone(), ('1000.01',1,2))
+            self.assertEqual(copy.execute("SELECT content,revision FROM statistics_note").fetchone(), ('本月旅行总结',3))
+            self.assertTrue(json.loads(copy.execute("SELECT payload FROM statistics_preference").fetchone()[0])['carrySurplus'])
         self.assertEqual((self.runtime / "storage/user-1/receipt.bin").read_bytes(), (restored / "storage/user-1/receipt.bin").read_bytes())
         before, after = configparser.ConfigParser(interpolation=None), configparser.ConfigParser(interpolation=None)
         before.read(self.config, encoding="utf-8")

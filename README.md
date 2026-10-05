@@ -1,12 +1,12 @@
 # CYLedger
 
-简体中文、人民币本位的个人记账与资产管理工具。基于 ezBookkeeping v2.0.0，保留 Vue、Go 和 SQLite，在日常收支之外提供多账本、投资持仓、报销、债务、信用卡、定存与货币基金收益。
+简体中文、人民币本位的个人记账与资产管理工具。基于 ezBookkeeping v2.0.0，保留 Vue、Go 和 SQLite，在日常收支之外提供多账本、预算与统计、投资持仓、报销、债务、信用卡、定存与货币基金收益。
 
 支持电脑网页和独立 Android 应用。Android 在手机内运行 Go / SQLite，断网也能记账；手机与电脑使用各自的账本，尚无自动同步。
 
 ## 开始使用
 
-手机安装包：`dist/android/CYLedger-Android-arm64.apk`。打开 **CYLedger → 资产**；已有正式版须使用同签名覆盖升级，不能卸载或清除数据。构建和安装见 [Android 说明](android/README.md)。
+手机安装包：`dist/android/CYLedger-Android-arm64.apk`。账户与持仓在 **CYLedger → 资产**；收支分析、预算和总结在 **统计**。已有正式版须使用同签名覆盖升级，不能卸载或清除数据。构建和安装见 [Android 说明](android/README.md)。
 
 Windows 在项目目录执行：
 

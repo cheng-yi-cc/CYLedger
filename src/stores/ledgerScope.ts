@@ -2,14 +2,15 @@ import { computed, onScopeDispose, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 import moment from 'moment-timezone';
 import { useUserStore } from '@/stores/user.ts';
+import { useSettingsStore } from '@/stores/setting.ts';
 
 export const useLedgerScopeStore = defineStore('ledgerScope', () => {
     const users = useUserStore();
     const now = ref(Date.now());
-    const timeZone = ref(moment.tz.guess(true));
+    const settings = useSettingsStore();
+    const timeZone = computed(() => settings.appSettings.timeZone && moment.tz.zone(settings.appSettings.timeZone) ? settings.appSettings.timeZone : moment.tz.guess(true));
     const currentDay = computed(() => moment(now.value).tz(timeZone.value).format('YYYY-MM-DD'));
     function syncClock(): void {
-        timeZone.value = moment.tz.guess(true);
         now.value = Date.now();
     }
     const clockTimer = window.setInterval(syncClock, 1000);

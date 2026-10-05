@@ -172,6 +172,7 @@ export function setTransactionModelByTransaction(transaction: Transaction, trans
 
     if (transaction2) {
         transaction.bookId = transaction2.bookId || transaction.bookId;
+        transaction.discountAmount = transaction2.discountAmount || '0';
         transaction.excludeFromStatistics = transaction2.excludeFromStatistics;
         transaction.reimbursementAccountId = transaction2.reimbursementAccountId;
         transaction.reimbursementReceiptId = setContextData ? transaction2.reimbursementReceiptId : '';

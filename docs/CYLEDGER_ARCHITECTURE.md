@@ -23,6 +23,8 @@ Vue 网页 / Android WebView
 |---|---|
 | `Book` | 默认、归档、排序及显示偏好；流水/模板/投资事件携带账本归属，账户仍共用 |
 | `CalendarEvent` | 手动到期事项，完成状态不产生现金流水 |
+| `StatisticsBudget` / `StatisticsNote` / `StatisticsPreference` | 预算规则、账本与周期总结、各周期模块顺序及预算口径；修订号避免并发覆盖 |
+| `Transaction.DiscountAmount` / `TransactionTag.ParentTagId` | 原币优惠金额、两级标签关系；优惠不改实收付，两级关系同用户且无循环 |
 | `Account.Extend.AssetProfile` | 类型、分组、简称、卡号、夜间图标、资产统计选择、信用规则与借款日期；没有第二份余额 |
 | `AssetPresentation` | 隐藏、生效账本和提醒偏好，带修订号 |
 | `ReimbursementReceipt` | 原支出与到账流水关联；待报额由有效事实推导 |
@@ -52,6 +54,10 @@ Vue 网页 / Android WebView
 
 **余额与删除**：校准以 `expectedBalance` 检查并发并新增差额流水。账户删除先预览关联范围，再确认；事务内撤销转账双边、作废投资、处理报销/债务/计划及模板、重放持仓并使快照失效。引用变化或无法成立的后续持仓导致回滚。
 
+**统计与预算**：`statistics_workspace.go` 持久保存预算规则、总结和模块偏好，使用用户归属验证及修订号比较更新。Vue 的 `statistics-report.ts` 使用精度 40 的 Decimal 重放支出、退款与月度结转；坐标绘制才转为数值。总预算和分类预算各自统计，不相加。临时账户/标签筛选不影响预算事实。下钻链接携带原账本与筛选条件；日期桶和日均使用用户会计时区。普通外币流水没有确认的历史汇率时保持未知，资产走势只展示已保存且有效的历史快照。
+
+两级标签在普通标签表扩展，不复用标签分组。父与子必须同一用户，不能自引用、循环或超过两级；存在子标签时不能删除父标签或将其降为二级。一级含子级统计按账单去重。优惠金额与普通收支在同一事务保存，为原币十进制字符串；退款、转账、投资结算和报销到账不能携带非零优惠。旧客户端省略修改字段时保留原优惠和标签父级。
+
 ## 路由
 
 路由统一挂在 `/api/v1` 并使用原有鉴权。新增路由如下；字段、请求例子及错误处理见 [接口指南](CYLEDGER_API.md)。普通账户/交易接口继续复用上游路由。
@@ -59,6 +65,9 @@ Vue 网页 / Android WebView
 | 方法 | 路径（省略 `/api/v1`） |
 |---|---|
 | GET | `/books/list` |
+| GET / POST | `/statistics/preferences` |
+| GET | `/statistics/budgets`、`/statistics/notes`、`/statistics/auxiliary` |
+| POST | `/statistics/budgets/save`、`/statistics/budgets/delete`、`/statistics/notes/save` |
 | GET | `/monetary-income/search` |
 | GET | `/assets/reimbursements` |
 | GET | `/assets/debts` |

@@ -18,9 +18,10 @@ export interface LedgerEntry {
     categoryId: string; primaryCategoryId: string; primaryCategory: string; comment: string; tags: string[];
     bookId: string; accountId: string; destinationAccountId: string; tagIds: string[]; investment: boolean;
     investmentEventId?: string; excludeFromStatistics?: boolean; reimbursementAccountId?: string; reimbursementReceiptId?: string;
+    discountAmount?: string;
     bookName?: string; icon?: string; iconType?: number; color?: string; transferDirection?: 'in'|'out';
 }
-export function useMobileLedger(options: { applyFilters?: () => boolean; accountId?: () => string } = {}) {
+export function useMobileLedger(options: { applyFilters?: () => boolean; accountId?: () => string; bookIds?: () => string[] } = {}) {
     const accounts = useAccountsStore();
     const categories = useTransactionCategoriesStore();
     const tags = useTransactionTagsStore();
@@ -60,6 +61,7 @@ export function useMobileLedger(options: { applyFilters?: () => boolean; account
         const converted = currency === 'CNY' ? amount : null;
         return {
             id: item.id, type: item.type, excludeFromStatistics: !!item.excludeFromStatistics || (!!item.reimbursementAccountId && item.reimbursementAccountId !== '0'), reimbursementAccountId: item.reimbursementAccountId, reimbursementReceiptId: item.reimbursementReceiptId, day: moment.unix(item.time).tz(scope.timeZone).format('YYYY-MM-DD'), time: item.time,
+            discountAmount: item.discountAmount || '0',
             title: item.investmentEventId ? '投资结算' : category?.name || ({ 1: '余额调整', 2: '收入', 3: '支出', 4: '账户转账' }[item.type] || '账户转账'),
             primaryCategory: parent?.name || category?.name || '未分类', primaryCategoryId: parent?.id || item.categoryId, categoryId: item.categoryId,
             bookId: item.bookId || '', accountId: item.sourceAccountId, destinationAccountId: item.destinationAccountId,
@@ -73,14 +75,14 @@ export function useMobileLedger(options: { applyFilters?: () => boolean; account
     }
     async function load(startTime: number, endTime: number): Promise<void> {
         const version = ++requestNumber;
-        const isCurrentScope = books.captureReportScope();
+        const isCurrentScope = options.bookIds ? () => true : books.captureReportScope();
         loading.value = true;
         error.value = '';
         allEntries.value = [];
         try {
             const [, , , , response] = await Promise.all([
                 accounts.loadAllAccounts({ force: true }).catch(keepUpToDate), categories.loadAllCategories({ force: false }).catch(keepUpToDate),
-                tags.loadAllTags({ force: false }).catch(keepUpToDate), books.loadBooks(), services.getAllTransactions({ startTime, endTime, bookIds: books.selectedBookIds })
+                tags.loadAllTags({ force: false }).catch(keepUpToDate), books.loadBooks(), services.getAllTransactions({ startTime: Math.max(0,startTime), endTime, bookIds: options.bookIds?.() || books.selectedBookIds })
             ]);
             if (version !== requestNumber || !isCurrentScope()) return;
             if (!response.data.success) throw new Error('账单加载失败，请重试。');

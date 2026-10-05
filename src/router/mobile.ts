@@ -21,6 +21,7 @@ import CalendarDuePage from '@/views/mobile/CalendarDuePage.vue';
 import LedgerDetailsPage from '@/views/mobile/LedgerDetailsPage.vue';
 import BooksPage from '@/views/mobile/BooksPage.vue';
 import StatisticsOverviewPage from '@/views/mobile/StatisticsOverviewPage.vue';
+import StatisticsBudgetPage from '@/views/mobile/StatisticsBudgetPage.vue';
 import LoginPage from '@/views/mobile/LoginPage.vue';
 import SignUpPage from '@/views/mobile/SignupPage.vue';
 import UnlockPage from '@/views/mobile/UnlockPage.vue';
@@ -168,6 +169,7 @@ const routes: Router.RouteParameters[] = [
     { path: '/crypto/convert', async: asyncResolve(CryptoConvertPage), beforeEnter: [checkLogin] },
     { path: '/investments/record', async: asyncResolve(InvestmentRecordPage), beforeEnter: [checkLogin] },
     { path: '/ledger/details', async: asyncResolve(LedgerDetailsPage), beforeEnter: [checkLogin] },
+    { path: '/statistics/budgets', async: asyncResolve(StatisticsBudgetPage), beforeEnter: [checkLogin] },
     { path: '/books', async: asyncResolve(BooksPage), beforeEnter: [checkLogin] },
     { path: '/calendar/settings', async: asyncResolve(CalendarSettingsPage), beforeEnter: [checkLogin] },
     { path: '/calendar/due', async: asyncResolve(CalendarDuePage), beforeEnter: [checkLogin] },

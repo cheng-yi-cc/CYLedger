@@ -80,7 +80,7 @@
                     <div class="display-flex">
                         <div class="transaction-tag-list-item-content list-item-valign-middle padding-inline-start-half"
                              v-if="editingTag.id !== tag.id">
-                            {{ tag.name }}
+                            {{ tagPath(tag) }}
                         </div>
                         <f7-input class="list-title-input padding-inline-start-half"
                                   type="text"
@@ -91,6 +91,7 @@
                         </f7-input>
                     </div>
                 </template>
+                <template #footer v-if="editingTag.id === tag.id"><label class="cy-tag-parent">上级标签<select v-model="editingTag.parentId" :disabled="hasChildren(tag.id)"><option value="0">无（一级标签）</option><option v-for="parent in parentTags.filter(item => item.id !== tag.id)" :key="parent.id" :value="parent.id">{{ parent.name }}</option></select><small v-if="hasChildren(tag.id)">有子标签时保留为一级标签</small></label></template>
                 <template #after>
                     <button v-if="!sortable && !hasEditingTag" class="cy-tag-edit" :aria-label="`编辑${tag.name}`" @click="edit(tag)"><f7-icon f7="pencil" /></button>
                     <button v-if="!sortable && !hasEditingTag" class="cy-tag-edit" :aria-label="`${tag.hidden ? '显示' : '隐藏'}${tag.name}`" @click="hide(tag, !tag.hidden)"><f7-icon :f7="tag.hidden ? 'eye_slash' : 'eye'" /></button>
@@ -129,6 +130,7 @@
             </f7-list-item>
 
             <f7-list-item ref="newTagItem" class="editing-list-item" v-if="newTag">
+                <template #footer><label class="cy-tag-parent">上级标签<select v-model="newTag.parentId"><option value="0">无（一级标签）</option><option v-for="parent in parentTags" :key="parent.id" :value="parent.id">{{ parent.name }}</option></select></label></template>
                 <template #media>
                     <f7-icon class="transaction-tag-icon" f7="number"></f7-icon>
                 </template>
@@ -271,6 +273,9 @@ const {
 } = useTagListPageBase();
 
 const transactionTagsStore = useTransactionTagsStore();
+const parentTags = computed(() => Object.values(transactionTagsStore.allTransactionTagsMap).filter(tag => !tag.parentId || tag.parentId === '0'));
+function hasChildren(id: string): boolean { return Object.values(transactionTagsStore.allTransactionTagsMap).some(tag => tag.parentId === id); }
+function tagPath(tag: TransactionTag): string { const parent=transactionTagsStore.allTransactionTagsMap[tag.parentId];return parent ? `${parent.name} / ${tag.name}` : tag.name; }
 
 const newTagItem = useTemplateRef<{ $el: HTMLElement }>('newTagItem');
 
@@ -290,7 +295,7 @@ const firstShowingId = computed<string | null>(() => getFirstShowingId(tags.valu
 const lastShowingId = computed<string | null>(() => getLastShowingId(tags.value, showHidden.value));
 const filteredTagCount = computed(() => tags.value.filter(tag => (showHidden.value || !tag.hidden) && matchesSearch(tag)).length);
 function matchesSearch(tag: TransactionTag): boolean {
-    return !searchText.value.trim() || tag.name.toLocaleLowerCase().includes(searchText.value.trim().toLocaleLowerCase());
+    return !searchText.value.trim() || tagPath(tag).toLocaleLowerCase().includes(searchText.value.trim().toLocaleLowerCase());
 }
 
 const displayTagGroupName = computed<string>(() => {
@@ -717,3 +722,4 @@ init();
     overflow-y: auto;
 }
 </style>
+<style scoped>.cy-tag-parent{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-top:10px;font-size:12px}.cy-tag-parent select{max-width:200px;background:var(--cy-soft);color:var(--cy-ink);padding:6px;border:1px solid var(--cy-line);border-radius:6px}.cy-tag-parent small{width:100%;color:var(--cy-muted)}</style>

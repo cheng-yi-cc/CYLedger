@@ -125,6 +125,7 @@ const (
 
 // Transaction represents transaction data stored in database
 type Transaction struct {
+	DiscountAmount         string            `xorm:"VARCHAR(32) NOT NULL DEFAULT '0'"`
 	ExcludeFromStatistics  bool              `xorm:"NOT NULL DEFAULT 0"`
 	ReimbursementAccountId int64             `xorm:"NOT NULL DEFAULT 0 INDEX"`
 	ReimbursementClosedAt  int64             `xorm:"NOT NULL DEFAULT 0"`
@@ -169,6 +170,7 @@ type TransactionGeoLocationRequest struct {
 
 // TransactionCreateRequest represents all parameters of transaction creation request
 type TransactionCreateRequest struct {
+	DiscountAmount         string                         `json:"discountAmount" binding:"max=16"`
 	ExcludeFromStatistics  bool                           `json:"excludeFromStatistics"`
 	ReimbursementAccountId int64                          `json:"reimbursementAccountId,string" binding:"min=0"`
 	BookId                 string                         `json:"bookId" binding:"max=64"`
@@ -190,6 +192,7 @@ type TransactionCreateRequest struct {
 
 // TransactionModifyRequest represents all parameters of transaction modification request
 type TransactionModifyRequest struct {
+	DiscountAmount         *string                        `json:"discountAmount" binding:"omitempty,max=16"`
 	ExcludeFromStatistics  *bool                          `json:"excludeFromStatistics"`
 	ReimbursementAccountId *int64                         `json:"reimbursementAccountId,string" binding:"omitempty,min=0"`
 	BookId                 string                         `json:"bookId" binding:"max=64"`
@@ -423,6 +426,7 @@ type TransactionGeoLocationResponse struct {
 
 // TransactionInfoResponse represents a view-object of transaction
 type TransactionInfoResponse struct {
+	DiscountAmount         string                                   `json:"discountAmount"`
 	ExcludeFromStatistics  bool                                     `json:"excludeFromStatistics"`
 	ReimbursementAccountId int64                                    `json:"reimbursementAccountId,string"`
 	ReimbursementClosedAt  int64                                    `json:"reimbursementClosedAt"`
@@ -667,6 +671,7 @@ func (t *Transaction) ToTransactionInfoResponse(tagIds []int64, editable bool) *
 
 	return &TransactionInfoResponse{
 		BookId:                 t.BookId,
+		DiscountAmount:         t.DiscountAmount,
 		InvestmentEventId:      t.InvestmentEventId,
 		Id:                     t.TransactionId,
 		TimeSequenceId:         t.TransactionTime,

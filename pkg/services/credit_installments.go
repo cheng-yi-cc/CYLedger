@@ -464,7 +464,7 @@ func guardCreditInstallmentTransaction(sess *xorm.Session, tx, old *models.Trans
 			}
 		}
 	}
-	if !deleting && total.GreaterThan(decimal.New(tx.Amount, -2)) {
+	if !deleting && total.IsPositive() && total.GreaterThan(decimal.New(tx.Amount, -2)) {
 		return investmentError("账单金额不能小于已分期的本金")
 	}
 	return nil

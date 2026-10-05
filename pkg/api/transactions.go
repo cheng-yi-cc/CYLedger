@@ -1437,6 +1437,7 @@ func (a *TransactionsApi) TransactionModifyHandler(c *core.WebContext) (any, *er
 
 	newTransaction := &models.Transaction{
 		BookId: transactionModifyReq.BookId, TransactionId: transaction.TransactionId,
+		DiscountAmount:         transaction.DiscountAmount,
 		ExcludeFromStatistics:  transaction.ExcludeFromStatistics,
 		ReimbursementAccountId: transaction.ReimbursementAccountId,
 		ReimbursementClosedAt:  transaction.ReimbursementClosedAt,
@@ -1452,6 +1453,9 @@ func (a *TransactionsApi) TransactionModifyHandler(c *core.WebContext) (any, *er
 		Comment:                transactionModifyReq.Comment,
 	}
 
+	if transactionModifyReq.DiscountAmount != nil {
+		newTransaction.DiscountAmount = *transactionModifyReq.DiscountAmount
+	}
 	if transactionModifyReq.ExcludeFromStatistics != nil {
 		newTransaction.ExcludeFromStatistics = *transactionModifyReq.ExcludeFromStatistics
 	}
@@ -1472,6 +1476,7 @@ func (a *TransactionsApi) TransactionModifyHandler(c *core.WebContext) (any, *er
 		newTransaction.BookId = transaction.BookId
 	}
 	if newTransaction.BookId == transaction.BookId &&
+		newTransaction.DiscountAmount == transaction.DiscountAmount &&
 		newTransaction.ExcludeFromStatistics == transaction.ExcludeFromStatistics &&
 		newTransaction.ReimbursementAccountId == transaction.ReimbursementAccountId &&
 		newTransaction.Type == transaction.Type &&
@@ -3193,6 +3198,7 @@ func (a *TransactionsApi) createNewTransactionModel(uid int64, transactionCreate
 
 	transaction := &models.Transaction{
 		BookId:                 transactionCreateReq.BookId,
+		DiscountAmount:         transactionCreateReq.DiscountAmount,
 		Uid:                    uid,
 		Type:                   transactionDbType,
 		CategoryId:             transactionCreateReq.CategoryId,

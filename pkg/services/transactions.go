@@ -1040,6 +1040,12 @@ func (s *TransactionService) ModifyTransaction(c core.Context, transaction *mode
 			return bookErr
 		}
 		transaction.BookId = bookID
+		if err := validateTransactionDiscount(transaction); err != nil {
+			return err
+		}
+		if transaction.DiscountAmount != oldTransaction.DiscountAmount {
+			updateCols = append(updateCols, "discount_amount")
+		}
 		if err := guardCreditInstallmentTransaction(sess, transaction, oldTransaction, false); err != nil {
 			return err
 		}
@@ -2852,6 +2858,9 @@ func (s *TransactionService) GetTransactionIds(transactions []*models.Transactio
 }
 
 func (s *TransactionService) doCreateTransaction(c core.Context, database *datastore.Database, sess *xorm.Session, transaction *models.Transaction, transactionTagIndexes []*models.TransactionTagIndex, tagIds []int64, pictureIds []int64, pictureUpdateModel *models.TransactionPictureInfo) error {
+	if err := validateTransactionDiscount(transaction); err != nil {
+		return err
+	}
 	bookID, bookErr := Books.ResolveInSession(sess, transaction.Uid, transaction.BookId, false)
 	if bookErr != nil {
 		return bookErr

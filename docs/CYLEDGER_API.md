@@ -9,6 +9,9 @@
 | 方法 | 路径（省略 `/api/v1`） |
 |---|---|
 | GET | `/books/list` |
+| GET / POST | `/statistics/preferences` |
+| GET | `/statistics/budgets`、`/statistics/notes`、`/statistics/auxiliary` |
+| POST | `/statistics/budgets/save`、`/statistics/budgets/delete`、`/statistics/notes/save` |
 | GET | `/monetary-income/search` |
 | GET | `/assets/reimbursements` |
 | GET | `/assets/debts` |
@@ -71,7 +74,7 @@
 - 投资类 JSON 绑定限制请求体 64 KiB；格式/长度验证先于十进制解析。普通资金支持两位小数，投资数量/价格上限为 18 位；不接收指数表示或浮点替代。
 - 返回使用现有成功/错误信封。先处理 HTTP 状态及业务错误，再读取结果；失败不能当作空列表或零余额。
 - 投资创建/修订/撤销及加密账户创建使用 `Idempotency-Key` 请求头；余额校准、报销到账、债务和分期使用请求体 `requestId`。重试保持同一键及同一内容，改内容须创建新请求。
-- 投资修订、分期更新与资产偏好使用返回的版本/修订号。冲突后重新读取与预览，不盲目覆盖。
+- 投资修订、分期更新、资产偏好及预算/总结/统计偏好使用返回的版本/修订号。冲突后重新读取与预览，不盲目覆盖。
 - `GET /wealth/summary` 可能保存估值快照；`POST */sync` 可能写入到期费用/收益，不能当作无副作用的健康检查。健康检查使用 `/healthz.json`。
 
 ## 查询与最小示例
@@ -139,7 +142,28 @@ Invoke-RestMethod "$ledgerBase/monetary-income/search?q=000198" -Headers $ledger
 | 未登录/会话无效 | 重新通过原有认证流程取得会话，不能改 UID 绕过 |
 | `ErrInvestmentLinked`，HTTP 409 | 从投资事件修订/撤销，不能单独更改关联资金流水 |
 | `ErrInvestmentConflict`，HTTP 409 | 版本变化或同键不同内容；重新读取并让用户确认 |
+| `ErrStatisticsConflict`，HTTP 409 | 预算、总结或统计偏好的修订号已过期；保留编辑内容，读取新版本后再提交 |
 | 输入、归属、金额或历史约束，通常 HTTP 400 | 保留表单，显示服务端业务错误，修正后再提交 |
 | 网络中断/未知提交结果 | 同一请求键重试并查询结果，不能换键盲目再记一次 |
 
 账务操作可能因过额、超卖、共享额度引用、历史关联或账户状态被拒绝。具体业务错误沿用现有错误信封；不能仅凭中文提示反推稳定错误码。运维配置见 [运维说明](CYLEDGER_OPERATIONS.md)，内部计算边界见 [架构](CYLEDGER_ARCHITECTURE.md)。
+
+## 统计、预算、总结与两级标签
+
+`GET /statistics/preferences` 返回 `revision`（字符串）、`modules`（daily/month/year/custom 四个数组，元素 `{id,visible}`）、`carrySurplus`、`carryDeficit`、`dailyBudgetMode`（remaining/fixed）和 `budgetProgress`（remaining/spent）。POST 提交完整对象及读取时的修订号，每种周期的模块必须完整且不重复。
+
+预算保存示例：
+
+```json
+{"id":"","bookId":"账本ID","categoryId":"0","name":"月预算","amount":"1500.00","startDate":"2026-10-01","endDate":"2026-10-31","kind":"monthly","repeat":true,"revision":"0"}
+```
+
+`POST /statistics/budgets/save`：`categoryId="0"` 为总预算，否则为本人支出分类；`amount` 大于零，最多 13 位整数和 2 位小数。月规则日期必须为同一月首尾；`kind="custom"` 使用任意有效起止日期且 `repeat=false`。身份由用户、账本、类型、日期与分类确定，修改时不可改变这些键；要调整周期应新增规则。名称最多 64 个字符。返回完整规则和递增 `revision`。删除提交 `{id,revision}` 到 `/statistics/budgets/delete`，仅删除规则，不改账单。
+
+`GET /statistics/notes` 返回当前用户的总结；`POST /statistics/notes/save` 提交 `{id,bookId,period,content,revision}`，`period` 为 YYYY 或 YYYY-MM，`bookId=""` 表示全部账本，正文最多 10000 个字符。预算、总结、偏好修订冲突返回 HTTP 409，客户端应重新读取后处理，不静默覆盖。
+
+`GET /statistics/auxiliary` 返回 `debtActions`（本金流水 ID 到借还动作的映射）与 `feeIds`（债务利息、分期服务费流水 ID），供客户端按当前日期和筛选范围计算辅助汇总。此接口不创建账务。
+
+普通 `transactions/add.json`、`transactions/modify.json` 支持 `discountAmount`：最多 13 位整数和 2 位小数的非负原币字符串，默认零；修改时省略则保留原值。实收付金额沿用原接口的整数分。优惠仅允许正数普通收入/支出，不能附在转账、退款、投资结算或报销到账上；它不会再次修改余额。
+
+普通标签创建/修改接口支持字符串 `parentId`；`"0"` 为一级标签。父级必须是本人的有效一级标签，存在子标签的标签不能降级；父标签不能在仍有子标签时删除。修改省略 `parentId` 保留原层级。分组与父级关系互相独立。

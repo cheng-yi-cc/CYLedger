@@ -398,6 +398,14 @@ func startWebServer(c *core.CliContext) error {
 
 			// Books
 			apiV1Route.GET("/books/list", bindApi(api.Books.List, config))
+			apiV1Route.GET("/statistics/preferences", bindApi(api.StatisticsWorkspace.Preferences, config))
+			apiV1Route.POST("/statistics/preferences", bindApi(api.StatisticsWorkspace.SavePreferences, config))
+			apiV1Route.GET("/statistics/budgets", bindApi(api.StatisticsWorkspace.Budgets, config))
+			apiV1Route.POST("/statistics/budgets/save", bindApi(api.StatisticsWorkspace.SaveBudget, config))
+			apiV1Route.POST("/statistics/budgets/delete", bindApi(api.StatisticsWorkspace.DeleteBudget, config))
+			apiV1Route.GET("/statistics/notes", bindApi(api.StatisticsWorkspace.Notes, config))
+			apiV1Route.POST("/statistics/notes/save", bindApi(api.StatisticsWorkspace.SaveNote, config))
+			apiV1Route.GET("/statistics/auxiliary", bindApi(api.StatisticsWorkspace.Auxiliary, config))
 			apiV1Route.GET("/monetary-income/search", bindApi(api.MonetaryIncome.Search, config))
 			apiV1Route.GET("/assets/reimbursements", bindApi(api.AssetTools.Reimbursements, config))
 			apiV1Route.GET("/assets/debts", bindApi(api.AssetTools.DebtReports, config))

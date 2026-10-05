@@ -2,6 +2,7 @@ package models
 
 // TransactionTag represents transaction tag data stored in database
 type TransactionTag struct {
+	ParentTagId     int64  `xorm:"NOT NULL DEFAULT 0 INDEX"`
 	TagId           int64  `xorm:"PK"`
 	Uid             int64  `xorm:"INDEX(IDX_tag_uid_deleted_group_order) NOT NULL"`
 	Deleted         bool   `xorm:"INDEX(IDX_tag_uid_deleted_group_order) NOT NULL"`
@@ -21,8 +22,9 @@ type TransactionTagGetRequest struct {
 
 // TransactionTagCreateRequest represents all parameters of transaction tag creation request
 type TransactionTagCreateRequest struct {
-	GroupId int64  `json:"groupId,string"`
-	Name    string `json:"name" binding:"required,notBlank,max=64"`
+	ParentId int64  `json:"parentId,string" binding:"min=0"`
+	GroupId  int64  `json:"groupId,string"`
+	Name     string `json:"name" binding:"required,notBlank,max=64"`
 }
 
 // TransactionTagCreateBatchRequest represents all parameters of transaction tag batch creation request
@@ -34,9 +36,10 @@ type TransactionTagCreateBatchRequest struct {
 
 // TransactionTagModifyRequest represents all parameters of transaction tag modification request
 type TransactionTagModifyRequest struct {
-	Id      int64  `json:"id,string" binding:"required,min=1"`
-	GroupId int64  `json:"groupId,string"`
-	Name    string `json:"name" binding:"required,notBlank,max=64"`
+	ParentId *int64 `json:"parentId,string" binding:"omitempty,min=0"`
+	Id       int64  `json:"id,string" binding:"required,min=1"`
+	GroupId  int64  `json:"groupId,string"`
+	Name     string `json:"name" binding:"required,notBlank,max=64"`
 }
 
 // TransactionTagHideRequest represents all parameters of transaction tag hiding request
@@ -63,6 +66,7 @@ type TransactionTagDeleteRequest struct {
 
 // TransactionTagInfoResponse represents a view-object of transaction tag
 type TransactionTagInfoResponse struct {
+	ParentId     int64  `json:"parentId,string"`
 	Id           int64  `json:"id,string"`
 	Name         string `json:"name"`
 	TagGroupId   int64  `json:"groupId,string"`
@@ -73,6 +77,7 @@ type TransactionTagInfoResponse struct {
 // FillFromOtherTag fills all the fields in this current tag from other transaction tag
 func (t *TransactionTag) FillFromOtherTag(tag *TransactionTag) {
 	t.TagId = tag.TagId
+	t.ParentTagId = tag.ParentTagId
 	t.Uid = tag.Uid
 	t.Deleted = tag.Deleted
 	t.Name = tag.Name
@@ -87,6 +92,7 @@ func (t *TransactionTag) FillFromOtherTag(tag *TransactionTag) {
 // ToTransactionTagInfoResponse returns a view-object according to database model
 func (t *TransactionTag) ToTransactionTagInfoResponse() *TransactionTagInfoResponse {
 	return &TransactionTagInfoResponse{
+		ParentId:     t.ParentTagId,
 		Id:           t.TagId,
 		Name:         t.Name,
 		TagGroupId:   t.TagGroupId,

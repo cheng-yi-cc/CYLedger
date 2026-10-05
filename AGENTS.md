@@ -10,14 +10,15 @@
 - 系统结算账户必须在旧接口、批量操作、账户合并、普通列表和资产汇总中受保护。
 - 不记录密钥或完整财务数据，不把 `.runtime`、`runtime`、备份和测试令牌提交到仓库。
 - 报销到账、债务本金/利息、余额校准、分期费用与定存收益必须在对应服务中原子提交并防重；定存和分期不能再次增加本金，普通行情不能驱动这些入账。
-- `Account.Extend.AssetProfile` 只存展示与账户规则，不维护第二份余额；新增表模型为 `Book`、`CalendarEvent`、`AssetPresentation`、`ReimbursementReceipt`、`AssetAdjustment`、`DebtMovement`、`CreditInstallment`、`FixedDeposit`、`MonetaryIncomeBinding`、`MonetaryIncomeDay`，与投资模型统一在 `cmd/database.go` 注册。
+- `Account.Extend.AssetProfile` 只存展示与账户规则，不维护第二份余额；新增表模型为 `Book`、`CalendarEvent`、`AssetPresentation`、`ReimbursementReceipt`、`AssetAdjustment`、`DebtMovement`、`CreditInstallment`、`FixedDeposit`、`MonetaryIncomeBinding`、`MonetaryIncomeDay`、`StatisticsBudget`、`StatisticsNote`、`StatisticsPreference`，与投资模型统一在 `cmd/database.go` 注册。
 - 基金解绑、重绑、删除收益不得删除逐日防重记录；账户级联删除须核对预览令牌，保护转账对端余额和历史投资依赖。
-- API 在 `cmd/webserver.go` 注册：`/api/v1/books/*`、`calendar/*`、`assets/*`、`monetary-income/*`、`investments/*`、`wealth/*`；完整方法与字段以接口文档和代码为准。
+- 预算由账务事实重算，不能维护另一份余额或受临时统计筛选影响；优惠不再次改实收付金额，一级含子级标签统计须按账单去重。预算、总结和统计偏好保存必须校验修订号。
+- API 在 `cmd/webserver.go` 注册：`/api/v1/books/*`、`calendar/*`、`statistics/*`、`assets/*`、`monetary-income/*`、`investments/*`、`wealth/*`；完整方法与字段以接口文档和代码为准。
 
 ## 本地运行与验证
 
 - 本地启动：`powershell -ExecutionPolicy Bypass -File .\scripts\Start-CYLedger.ps1`；打开 `http://localhost:8080/`。
-- 重建加 `-Build -DirectNpm`。本机工具路径和首次创建账户步骤见 `README.CYLEDGER.md`。
+- 重建加 `-Build -DirectNpm`。本机工具路径见 `README.CYLEDGER.md`，首次创建账户见 `docs/CYLEDGER_OPERATIONS.md`。
 - 账务改动运行相关 Go 核心与 SQLite 集成测试；界面改动做类型检查及适当浏览器验收；备份改动运行 `scripts/test_backup.py`。
 - 手机已连接电脑时，涉及手机界面或手机账务流程的改动默认一步完成：构建 APK、在已连接真机验收、同签名覆盖升级正式版，并给出手机内的预览路径；不以仅浏览器验证或“尚未打包 APK”结束交付。使用独立测试版及虚构数据验证删除等操作，不能删除、清空或覆盖正式账本；正式版升级使用 `adb install -r`，不得先卸载或清除数据。设备未连接或安装授权受阻时明确报告。
 - 不为可逆、影响小、只是复述实现的改动添加测试。必要检查通过后不无故扩大测试范围。

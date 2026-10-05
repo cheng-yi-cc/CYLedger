@@ -75,6 +75,7 @@
                                @more="showExtendedFields = true" @tags="showTransactionTagSheet = true" @cancel="f7router.back()">
             <template v-if="debtMode" #selection><DebtEntryFields :accounts="debtAccounts" :categories="debtCategories" :amount="transaction.sourceAmount" :disabled="submitting" :previous-account-id="previousDebtAccountId" :previous-impact="previousDebtImpact" v-model:operation="debtOperation" v-model:source-id="transaction.sourceAccountId" v-model:destination-id="transaction.destinationAccountId" v-model:category-id="transaction.transferCategoryId" /></template>
             <template #context>
+                <button v-if="canRecordDiscount" class="cy-entry-chip" @click="openDiscount"><f7-icon f7="tag" />优惠{{ transaction.discountAmount && transaction.discountAmount !== '0' && transaction.discountAmount !== '0.00' ? ' '+transaction.discountAmount : '' }}</button>
                 <button v-if="transaction.type === TransactionType.Expense && reimbursementAccounts.length" class="cy-entry-chip" @click="showReimbursementSheet=true"><f7-icon f7="doc_text" />{{allAccountsMap[transaction.reimbursementAccountId]?.name||'报销'}}</button>
                 <button class="cy-entry-chip" @click="showDateTimeDialog('date')"><f7-icon f7="calendar" />{{ quickDate }}</button>
                 <template v-if="!debtMode"><button v-if="allVisibleAccounts.length" class="cy-entry-chip" @click="showSourceAccountSheet = true"><f7-icon f7="creditcard" />{{ sourceAccountName || '选择账户' }}</button><f7-link v-else class="cy-entry-chip" href="/account/add">＋ 添加账户</f7-link>
@@ -105,6 +106,7 @@
             <BookPicker v-model="transaction.bookId" />
         </div>
         <f7-list form strong inset dividers class="margin-vertical-half" v-if="!loading && !useQuickEntry">
+            <f7-list-item v-if="canRecordDiscount" title="优惠金额" :after="transaction.discountAmount || '0.00'" link="#" @click="mode !== TransactionEditPageMode.View && openDiscount()" />
             <f7-list-item v-if="pageTypeAndMode?.type === TransactionEditPageType.Transaction && transaction.type === TransactionType.Expense" title="报销账户" :after="allAccountsMap[transaction.reimbursementAccountId]?.name||'不报销'" link="#" @click="mode!==TransactionEditPageMode.View&&(showReimbursementSheet=true)" />
             <f7-list-item v-if="pageTypeAndMode?.type === TransactionEditPageType.Transaction && [TransactionType.Expense,TransactionType.Income].includes(transaction.type)" title="计入收支与预算"><template #after><f7-toggle :disabled="mode===TransactionEditPageMode.View||!!transaction.reimbursementReceiptId||transaction.reimbursementAccountId!=='0'" :checked="!transaction.excludeFromStatistics&&transaction.reimbursementAccountId==='0'" @toggle:change="transaction.excludeFromStatistics=!$event" /></template></f7-list-item>
             <f7-list-item v-if="pageTypeAndMode?.type === TransactionEditPageType.Template"><template #default><BookPicker v-model="transaction.bookId" :disabled="submitting || recognizing" /></template></f7-list-item>
@@ -567,6 +569,7 @@
                           :navbar-show-count="true" :exposition="false"
                           :photos="transactionPictures" :thumbs="transactionThumbs" />
         <input ref="pictureInput" type="file" style="display: none" :accept="`${SUPPORTED_IMAGE_EXTENSIONS};capture=camera`" @change="onUploadPicture($event)" />
+        <StatisticsSheet v-model:open="showDiscountSheet" title="优惠金额"><div class="cy-discount-form"><label>优惠（{{ sourceAccountCurrency }}）<input v-model="discountDraft" inputmode="decimal" maxlength="16" placeholder="0.00" aria-label="优惠金额" /></label><p>记账金额仍为实付或实收；优惠仅作统计记录，不会再次扣减账户余额。</p><p v-if="discountValid">优惠前金额：{{ discountOriginal }}</p><p v-if="discountError" role="alert">{{ discountError }}</p><button class="cy-button cy-primary" @click="saveDiscount">确定</button></div></StatisticsSheet>
         <f7-sheet v-model:opened="showReimbursementSheet" class="cy-mobile-surface cy-reimbursement-picker" backdrop><f7-list><f7-list-item title="不报销" link="#" sheet-close @click="transaction.reimbursementAccountId='0'"/><f7-list-item v-for="a in reimbursementAccounts" :key="a.id" :title="a.name" link="#" sheet-close @click="transaction.reimbursementAccountId=a.id"/><f7-list-item title="添加报销账户" link="/account/add?preset=reimbursement" sheet-close/></f7-list></f7-sheet>
     </f7-page>
 </template>
@@ -580,6 +583,8 @@ import DebtEntryFields from '@/components/mobile/DebtEntryFields.vue';
 import moment from 'moment-timezone';
 import { DEBT_OPERATIONS, debtImpact, debtIsSource, inferDebtOperation, isDebtCashAccount, validateDebtEntry, type DebtOperation } from '@/lib/ledger-debt.ts';
 import BookPicker from '@/components/mobile/BookPicker.vue';
+import StatisticsSheet from '@/components/mobile/StatisticsSheet.vue';
+import { LedgerDecimal, ledgerMoney } from '@/lib/ledger-display.ts';
 import { useBooksStore } from '@/stores/books.ts';
 import type { PhotoBrowser, Router } from 'framework7/types';
 
@@ -721,6 +726,12 @@ const isSupportClipboard = !!navigator.clipboard;
 
 const settingsStore = useSettingsStore();
 const showReimbursementSheet=ref(false);
+const showDiscountSheet=ref(false),discountDraft=ref('0'),discountError=ref('');
+const canRecordDiscount=computed(()=>pageTypeAndMode?.type===TransactionEditPageType.Transaction&&[TransactionType.Expense,TransactionType.Income].includes(transaction.value.type)&&transaction.value.sourceAmount>=0&&!transaction.value.reimbursementReceiptId);
+const discountValid=computed(()=>/^(0|[1-9]\d{0,12})(\.\d{1,2})?$/.test(discountDraft.value));
+const discountOriginal=computed(()=>discountValid.value?ledgerMoney(new LedgerDecimal(transaction.value.sourceAmount.toString()).div(100).plus(discountDraft.value).toString(),false):'—');
+function openDiscount(){discountDraft.value=transaction.value.discountAmount||'0';discountError.value='';showDiscountSheet.value=true;}
+function saveDiscount(){if(!discountValid.value){discountError.value='请输入非负金额，最多两位小数。';return;}transaction.value.discountAmount=new LedgerDecimal(discountDraft.value).toFixed(2);showDiscountSheet.value=false;}
 const reimbursementAccounts=computed(()=>Object.values(allAccountsMap.value).filter(a=>a.visible&&a.assetProfile.kind==='reimbursement'&&a.currency===sourceAccountCurrency.value));
 const booksStore = useBooksStore();
 const ledgerScope = useLedgerScopeStore();
@@ -1238,6 +1249,7 @@ function save(afterAction: AfterSaveAction): void {
     const router = props.f7router;
 
     if (useQuickEntry.value && quickEntry.value && !quickEntry.value.prepareSave()) return;
+    if (canRecordDiscount.value && !/^(0|[1-9]\d{0,12})(\.\d{1,2})?$/.test(transaction.value.discountAmount || '0')) { showAlert('优惠金额格式无效，请重新填写。'); return; }
 
     if (debtMode.value && debtValidationMessage.value) { showAlert(debtValidationMessage.value); return; }
 
@@ -1761,3 +1773,4 @@ init();
     border-radius: 8px;
 }
 </style>
+<style scoped>.cy-discount-form{display:grid;gap:18px}.cy-discount-form label{display:grid;gap:10px}.cy-discount-form input{padding:14px;border:1px solid var(--cy-line);border-radius:8px;background:var(--cy-bg);color:var(--cy-ink);font-size:24px}.cy-discount-form p{font-size:13px;line-height:1.8;color:var(--cy-muted)}</style>

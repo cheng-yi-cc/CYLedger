@@ -85,19 +85,20 @@
                         <template #title>
                             <div class="display-flex">
                                 <div class="tag-selection-list-item list-item-valign-middle padding-inline-start-half">
-                                    {{ tag.name }}
+                                    {{ tag.parentId && tag.parentId !== '0' ? (transactionTagsStore.allTransactionTagsMap[tag.parentId]?.name || '上级标签') + ' / ' : '' }}{{ tag.name }}
                                 </div>
                             </div>
                         </template>
                     </f7-list-item>
                 </template>
             </f7-list>
+            <f7-list v-if="newTag"><f7-list-item><label>上级标签 <select v-model="newTag.parentId" aria-label="新标签的上级标签"><option value="0">无（一级标签）</option><option v-for="parent in parentTags" :key="parent.id" :value="parent.id">{{ parent.name }}</option></select></label></f7-list-item></f7-list>
         </f7-page-content>
     </f7-sheet>
 </template>
 
 <script setup lang="ts">
-import { ref, useTemplateRef } from 'vue';
+import { computed, ref, useTemplateRef } from 'vue';
 import type { Sheet, Searchbar } from 'framework7/types';
 
 import { useI18n } from '@/locales/helpers.ts';
@@ -134,6 +135,7 @@ const {
 } = useTransactionTagSelectionBase(props, true, true);
 
 const transactionTagsStore = useTransactionTagsStore();
+const parentTags = computed(() => Object.values(transactionTagsStore.allTransactionTagsMap).filter(tag => (!tag.parentId || tag.parentId === '0') && !tag.hidden));
 
 const sheet = useTemplateRef<Sheet.Sheet>('sheet');
 const searchbar = useTemplateRef<Searchbar.Searchbar>('searchbar');

@@ -212,6 +212,7 @@ func (a *TransactionTagsApi) TagModifyHandler(c *core.WebContext) (any, *errs.Er
 	}
 
 	newTag := &models.TransactionTag{
+		ParentTagId:  tag.ParentTagId,
 		TagId:        tag.TagId,
 		Uid:          uid,
 		Name:         tagModifyReq.Name,
@@ -219,9 +220,12 @@ func (a *TransactionTagsApi) TagModifyHandler(c *core.WebContext) (any, *errs.Er
 		DisplayOrder: tag.DisplayOrder,
 	}
 
+	if tagModifyReq.ParentId != nil {
+		newTag.ParentTagId = *tagModifyReq.ParentId
+	}
 	tagNameChanged := newTag.Name != tag.Name
 
-	if !tagNameChanged && newTag.TagGroupId == tag.TagGroupId {
+	if !tagNameChanged && newTag.TagGroupId == tag.TagGroupId && newTag.ParentTagId == tag.ParentTagId {
 		return nil, errs.ErrNothingWillBeUpdated
 	}
 
@@ -246,6 +250,7 @@ func (a *TransactionTagsApi) TagModifyHandler(c *core.WebContext) (any, *errs.Er
 	log.Infof(c, "[transaction_tags.TagModifyHandler] user \"uid:%d\" has updated tag \"id:%d\" successfully", uid, tagModifyReq.Id)
 
 	tag.Name = newTag.Name
+	tag.ParentTagId = newTag.ParentTagId
 	tag.TagGroupId = newTag.TagGroupId
 	tag.DisplayOrder = newTag.DisplayOrder
 	tagResp := tag.ToTransactionTagInfoResponse()
@@ -334,6 +339,7 @@ func (a *TransactionTagsApi) TagDeleteHandler(c *core.WebContext) (any, *errs.Er
 
 func (a *TransactionTagsApi) createNewTagModel(uid int64, tagCreateReq *models.TransactionTagCreateRequest, order int32) *models.TransactionTag {
 	return &models.TransactionTag{
+		ParentTagId:  tagCreateReq.ParentId,
 		Uid:          uid,
 		Name:         tagCreateReq.Name,
 		TagGroupId:   tagCreateReq.GroupId,

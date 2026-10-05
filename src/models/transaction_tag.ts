@@ -4,6 +4,7 @@ export class TransactionTag implements TransactionTagInfoResponse {
     public groupId: string;
     public displayOrder: number;
     public hidden: boolean;
+    public parentId = '0';
 
     private constructor(id: string, name: string, groupId: string, displayOrder: number, hidden: boolean) {
         this.id = id;
@@ -16,6 +17,7 @@ export class TransactionTag implements TransactionTagInfoResponse {
     public toCreateRequest(): TransactionTagCreateRequest {
         return {
             name: this.name,
+            parentId: this.parentId,
             groupId: this.groupId
         };
     }
@@ -23,17 +25,22 @@ export class TransactionTag implements TransactionTagInfoResponse {
     public toModifyRequest(): TransactionTagModifyRequest {
         return {
             id: this.id,
+            parentId: this.parentId,
             groupId: this.groupId,
             name: this.name
         };
     }
 
     public clone(): TransactionTag {
-        return new TransactionTag(this.id, this.name, this.groupId, this.displayOrder, this.hidden);
+        const tag = new TransactionTag(this.id, this.name, this.groupId, this.displayOrder, this.hidden);
+        tag.parentId = this.parentId;
+        return tag;
     }
 
     public static of(tagResponse: TransactionTagInfoResponse): TransactionTag {
-        return new TransactionTag(tagResponse.id, tagResponse.name, tagResponse.groupId, tagResponse.displayOrder, tagResponse.hidden);
+        const tag = new TransactionTag(tagResponse.id, tagResponse.name, tagResponse.groupId, tagResponse.displayOrder, tagResponse.hidden);
+        tag.parentId = tagResponse.parentId || '0';
+        return tag;
     }
 
     public static ofMulti(tagResponses: TransactionTagInfoResponse[]): TransactionTag[] {
@@ -52,6 +59,7 @@ export class TransactionTag implements TransactionTagInfoResponse {
 }
 
 export interface TransactionTagCreateRequest {
+    readonly parentId?: string;
     readonly groupId: string;
     readonly name: string;
 }
@@ -63,6 +71,7 @@ export interface TransactionTagCreateBatchRequest {
 }
 
 export interface TransactionTagModifyRequest {
+    readonly parentId?: string;
     readonly id: string;
     readonly groupId: string;
     readonly name: string;
@@ -87,6 +96,7 @@ export interface TransactionTagDeleteRequest {
 }
 
 export interface TransactionTagInfoResponse {
+    readonly parentId?: string;
     readonly id: string;
     readonly name: string;
     readonly groupId: string;

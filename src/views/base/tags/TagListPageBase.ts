@@ -38,7 +38,8 @@ export function useTagListPageBase() {
 
     function isTagModified(tag: TransactionTag): boolean {
         if (tag.id) {
-            return editingTag.value.name !== '' && editingTag.value.name !== tag.name;
+            const original = transactionTagsStore.allTransactionTagsMap[tag.id];
+            return editingTag.value.name !== '' && (editingTag.value.name !== original?.name || editingTag.value.parentId !== original?.parentId);
         } else {
             return tag.name !== '';
         }
@@ -60,6 +61,7 @@ export function useTagListPageBase() {
         editingTag.value.id = tag.id;
         editingTag.value.groupId = tag.groupId;
         editingTag.value.name = tag.name;
+        editingTag.value.parentId = tag.parentId;
     }
 
     return {

@@ -218,6 +218,9 @@ func (s *TransactionTagService) CreateTag(c core.Context, tag *models.Transactio
 	tag.UpdatedUnixTime = time.Now().Unix()
 
 	return s.UserDataDB(tag.Uid).DoTransaction(c, func(sess *xorm.Session) error {
+		if err := validateTagHierarchy(sess, tag); err != nil {
+			return err
+		}
 		_, err := sess.Insert(tag)
 		return err
 	})
@@ -282,6 +285,9 @@ func (s *TransactionTagService) CreateTags(c core.Context, uid int64, tags []*mo
 	return s.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
 		for i := 0; i < len(newTags); i++ {
 			tag := newTags[i]
+			if err := validateTagHierarchy(sess, tag); err != nil {
+				return err
+			}
 			_, err := sess.Insert(tag)
 
 			if err != nil {
@@ -312,7 +318,10 @@ func (s *TransactionTagService) ModifyTag(c core.Context, tag *models.Transactio
 	tag.UpdatedUnixTime = time.Now().Unix()
 
 	return s.UserDataDB(tag.Uid).DoTransaction(c, func(sess *xorm.Session) error {
-		updatedRows, err := sess.ID(tag.TagId).Cols("name", "tag_group_id", "display_order", "updated_unix_time").Where("uid=? AND deleted=?", tag.Uid, false).Update(tag)
+		if err := validateTagHierarchy(sess, tag); err != nil {
+			return err
+		}
+		updatedRows, err := sess.ID(tag.TagId).Cols("name", "parent_tag_id", "tag_group_id", "display_order", "updated_unix_time").Where("uid=? AND deleted=?", tag.Uid, false).Update(tag)
 
 		if err != nil {
 			return err
@@ -396,6 +405,13 @@ func (s *TransactionTagService) DeleteTag(c core.Context, uid int64, tagId int64
 			return err
 		} else if exists {
 			return errs.ErrTransactionTagInUseCannotBeDeleted
+		}
+		hasChildren, err := sess.Where("uid=? AND deleted=? AND parent_tag_id=?", uid, false, tagId).Exist(&models.TransactionTag{})
+		if err != nil {
+			return err
+		}
+		if hasChildren {
+			return ErrTagHasChildren
 		}
 
 		var relatedTransactionTemplatesByTag []*models.TransactionTemplate

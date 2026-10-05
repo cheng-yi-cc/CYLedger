@@ -17,6 +17,7 @@ export class Transaction implements TransactionInfoResponse {
     public bookId: string = '';
     public investmentEventId?: string;
     public excludeFromStatistics = false;
+    public discountAmount = '0';
     public reimbursementAccountId = '0';
     public reimbursementReceiptId = '';
     public reimbursementClosedAt = 0;
@@ -239,6 +240,7 @@ export class Transaction implements TransactionInfoResponse {
     public toCreateRequest(clientSessionId: string): TransactionCreateRequest {
         return {
             bookId: this.bookId,
+            discountAmount: [TransactionType.Expense, TransactionType.Income].includes(this.type) && this.sourceAmount > 0 ? this.discountAmount : '0',
             excludeFromStatistics: this.excludeFromStatistics,
             reimbursementAccountId: this.type === TransactionType.Expense ? this.reimbursementAccountId : '0',
             type: this.type,
@@ -267,6 +269,7 @@ export class Transaction implements TransactionInfoResponse {
 
         return {
             bookId: this.bookId,
+            discountAmount: [TransactionType.Expense, TransactionType.Income].includes(this.type) && this.sourceAmount > 0 ? this.discountAmount : '0',
             excludeFromStatistics: this.excludeFromStatistics,
             reimbursementAccountId: this.type === TransactionType.Expense ? this.reimbursementAccountId : '0',
             id: this.id,
@@ -295,6 +298,7 @@ export class Transaction implements TransactionInfoResponse {
 
         return {
             bookId: this.bookId,
+            discountAmount: [TransactionType.Expense, TransactionType.Income].includes(this.type) && this.sourceAmount > 0 ? this.discountAmount : '0',
             excludeFromStatistics: this.excludeFromStatistics,
             reimbursementAccountId: this.type === TransactionType.Expense ? this.reimbursementAccountId : '0',
             type: this.type,
@@ -350,6 +354,7 @@ export class Transaction implements TransactionInfoResponse {
         );
 
         transaction.bookId = transactionResponse.bookId || '';
+        transaction.discountAmount = transactionResponse.discountAmount || '0';
         transaction.excludeFromStatistics = !!transactionResponse.excludeFromStatistics;
         transaction.reimbursementAccountId = transactionResponse.reimbursementAccountId || '0';
         transaction.reimbursementReceiptId = transactionResponse.reimbursementReceiptId || '';
@@ -428,6 +433,7 @@ export class Transaction implements TransactionInfoResponse {
         );
 
         transaction.bookId = transactionDraft.bookId || '';
+        transaction.discountAmount = transactionDraft.discountAmount || '0';
         transaction.excludeFromStatistics = !!transactionDraft.excludeFromStatistics;
         transaction.reimbursementAccountId = transactionDraft.reimbursementAccountId || '0';
         transaction.reimbursementReceiptId = transactionDraft.reimbursementReceiptId || '';
@@ -539,6 +545,7 @@ export class TransactionTagFilter {
 }
 
 export interface TransactionDraft {
+    readonly discountAmount?: string;
     readonly excludeFromStatistics?: boolean;
     readonly reimbursementAccountId?: string;
     readonly reimbursementReceiptId?: string;
@@ -562,6 +569,7 @@ export interface TransactionGeoLocationRequest {
 }
 
 export interface TransactionCreateRequest {
+    readonly discountAmount?: string;
     readonly excludeFromStatistics?: boolean;
     readonly reimbursementAccountId?: string;
     readonly reimbursementReceiptId?: string;
@@ -584,6 +592,7 @@ export interface TransactionCreateRequest {
 }
 
 export interface TransactionModifyRequest {
+    readonly discountAmount?: string;
     readonly excludeFromStatistics?: boolean;
     readonly reimbursementAccountId?: string;
     readonly reimbursementReceiptId?: string;
@@ -699,6 +708,7 @@ export interface TransactionReconciliationStatementRequest {
 export type TransactionGeoLocationResponse = Coordinate;
 
 export interface TransactionInfoResponse {
+    readonly discountAmount?: string;
     readonly excludeFromStatistics?: boolean;
     readonly reimbursementAccountId?: string;
     readonly reimbursementReceiptId?: string;
