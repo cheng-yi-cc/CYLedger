@@ -187,6 +187,16 @@ export const useSettingsStore = defineStore('settings', () => {
         updateUserApplicationCloudSettingValue('chartColors', value);
     }
 
+    function setCalendarPreference(key: 'calendarWeekStart' | 'calendarShowLunar' | 'calendarShowRepayments' | 'calendarShowDeposits' | 'calendarHeatmap', value: number | boolean): void {
+        if (key === 'calendarWeekStart') {
+            if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 6) return;
+            appSettings.value[key] = value;
+        } else {
+            if (typeof value !== 'boolean') return;
+            appSettings.value[key] = value;
+        }
+        updateApplicationSettingsValue(key, value);
+    }
     function setEnableSwipeBack(value: boolean): void {
         updateApplicationSettingsValue('swipeBack', value);
         appSettings.value.swipeBack = value;
@@ -612,6 +622,7 @@ export const useSettingsStore = defineStore('settings', () => {
         setAccountCategoryOrders,
         setChartColors,
         setEnableSwipeBack,
+        setCalendarPreference,
         setEnableAnimate,
         // -- Application Lock
         setEnableApplicationLock,

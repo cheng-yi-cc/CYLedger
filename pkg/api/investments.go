@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/mayswind/ezbookkeeping/pkg/core"
 	"github.com/mayswind/ezbookkeeping/pkg/errs"
+	"github.com/mayswind/ezbookkeeping/pkg/marketquotes"
 	"github.com/mayswind/ezbookkeeping/pkg/models"
 	"github.com/mayswind/ezbookkeeping/pkg/services"
 	"net/http"
@@ -45,6 +46,26 @@ func (a *InvestmentsApi) Accounts(c *core.WebContext) (any, *errs.Error) {
 	}
 	return investmentResponse(services.Investments.CreateAccount(c, c.GetCurrentUid(), v))
 }
+func (a *InvestmentsApi) PreviewAccountDeletion(c *core.WebContext) (any, *errs.Error) {
+	return a.deleteAccount(c, true)
+}
+func (a *InvestmentsApi) UpdateAccount(c *core.WebContext) (any, *errs.Error) {
+	var input models.PortfolioAccount
+	if err := investmentBind(c, &input); err != nil {
+		return nil, err
+	}
+	return investmentResponse(services.Investments.UpdatePortfolioAccount(c, c.GetCurrentUid(), input))
+}
+func (a *InvestmentsApi) DeleteAccount(c *core.WebContext) (any, *errs.Error) {
+	return a.deleteAccount(c, false)
+}
+func (a *InvestmentsApi) deleteAccount(c *core.WebContext, preview bool) (any, *errs.Error) {
+	var input services.AccountDeletionInput
+	if err := investmentBind(c, &input); err != nil {
+		return nil, err
+	}
+	return investmentResponse(services.Investments.DeleteAssetAccount(c, c.GetCurrentUid(), input, preview))
+}
 func (a *InvestmentsApi) Instruments(c *core.WebContext) (any, *errs.Error) {
 	if c.Request.Method == "GET" {
 		return investmentResponse(services.Investments.Instruments(c, c.GetCurrentUid()))
@@ -54,6 +75,34 @@ func (a *InvestmentsApi) Instruments(c *core.WebContext) (any, *errs.Error) {
 		return nil, err
 	}
 	return investmentResponse(services.Investments.CreateInstrument(c, c.GetCurrentUid(), v))
+}
+
+func (a *InvestmentsApi) CryptoAccount(c *core.WebContext) (any, *errs.Error) {
+	var input services.CryptoAccountInput
+	if err := investmentBind(c, &input); err != nil {
+		return nil, err
+	}
+	return investmentResponse(services.Investments.CreateCryptoAccount(c, c.GetCurrentUid(), input, c.GetHeader("Idempotency-Key")))
+}
+func (a *InvestmentsApi) Conversion(c *core.WebContext) (any, *errs.Error) {
+	var input services.ConversionInput
+	if err := investmentBind(c, &input); err != nil {
+		return nil, err
+	}
+	return investmentResponse(services.Investments.Conversion(c, c.GetCurrentUid(), input))
+}
+func (a *InvestmentsApi) SearchInstruments(c *core.WebContext) (any, *errs.Error) {
+	return investmentResponse(services.Investments.SearchInstruments(c, c.Query("q"), c.Query("market")))
+}
+func (a *InvestmentsApi) BindInstrument(c *core.WebContext) (any, *errs.Error) {
+	var input struct {
+		InstrumentID string `json:"instrumentId"`
+		marketquotes.Binding
+	}
+	if err := investmentBind(c, &input); err != nil {
+		return nil, err
+	}
+	return investmentResponse(services.Investments.BindInstrument(c, c.GetCurrentUid(), input.InstrumentID, input.Binding))
 }
 func (a *InvestmentsApi) Events(c *core.WebContext) (any, *errs.Error) {
 	if c.Request.Method == "GET" {

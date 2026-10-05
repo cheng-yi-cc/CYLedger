@@ -1,5 +1,5 @@
 <template>
-    <f7-page @page:afterin="onPageAfterIn">
+    <f7-page class="cy-mobile-surface" @page:afterin="onPageAfterIn">
         <f7-navbar>
             <f7-nav-left :class="{ 'disabled': loading }" :back-link="tt('Back')"></f7-nav-left>
             <f7-nav-title :title="tt(title)"></f7-nav-title>
@@ -136,6 +136,15 @@
                 </template>
             </f7-list-item>
 
+            <f7-list-item title="可见账本" class="cy-category-scope-item">
+                <template #footer>
+                    <label class="cy-category-scope-option"><input type="checkbox" :checked="!category.bookIds.length" @change="setGlobalScope(($event.target as HTMLInputElement).checked)" />所有账本通用</label>
+                    <div class="cy-category-scope-options"><label v-for="book in booksStore.allBooks" :key="book.id" class="cy-category-scope-option"><input type="checkbox" :checked="category.bookIds.includes(book.id)" @change="toggleBook(book.id, ($event.target as HTMLInputElement).checked)" />{{ book.name }}{{ book.archived ? '（已归档）' : '' }}</label></div>
+                    <p>只影响记账时的分类选择，已记录账单和历史统计保留。二级分类还需在一级分类的可见范围内。</p>
+                    <p v-if="scopeError" role="alert">{{ scopeError }}</p>
+                </template>
+            </f7-list-item>
+
             <f7-list-input
                 type="textarea"
                 style="height: auto"
@@ -157,6 +166,7 @@ import { useI18nUIComponents, showLoading, hideLoading } from '@/lib/ui/mobile.t
 import { useCategoryEditPageBase } from '@/views/base/categories/CategoryEditPageBase.ts';
 
 import { useTransactionCategoriesStore } from '@/stores/transactionCategory.ts';
+import { useBooksStore } from '@/stores/books.ts';
 
 import type { ColorValue } from '@/core/color.ts';
 import { CategoryType } from '@/core/category.ts';
@@ -189,6 +199,13 @@ const {
 } = useCategoryEditPageBase(query['type'] ? parseInt(query['type']) as CategoryType : undefined, query['parentId']);
 
 const transactionCategoriesStore = useTransactionCategoriesStore();
+const booksStore = useBooksStore();
+const scopeError = ref('');
+function setGlobalScope(global: boolean): void { category.value.bookIds = global ? [] : booksStore.defaultBookId ? [booksStore.defaultBookId] : []; }
+function toggleBook(id: string, checked: boolean): void {
+    category.value.bookIds = checked ? [...new Set([...category.value.bookIds, id])] : category.value.bookIds.filter(bookId => bookId !== id);
+}
+void booksStore.loadBooks().catch(() => { scopeError.value = '账本列表加载失败，请返回后重试。'; });
 
 const loadingError = ref<unknown | null>(null);
 const showPrimaryCategorySheet = ref<boolean>(false);
@@ -290,3 +307,7 @@ function onPageAfterIn(): void {
 
 init();
 </script>
+
+<style scoped>
+.cy-category-scope-option{display:flex;align-items:center;gap:8px;padding:9px 0;font-size:13px;color:var(--cy-ink)}.cy-category-scope-option input{width:17px;height:17px;accent-color:var(--cy-accent)}.cy-category-scope-options{display:flex;flex-wrap:wrap;column-gap:18px}.cy-category-scope-item p{font-size:11px;line-height:1.7;color:var(--cy-muted);margin:7px 0}.cy-category-scope-item p[role=alert]{color:var(--cy-expense)}
+</style>

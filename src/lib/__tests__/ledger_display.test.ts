@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ledgerMoney, ledgerSignedAmount, ledgerTotals } from '../ledger-display.ts';
+import { ledgerCategoryTotals, ledgerMoney, ledgerSignedAmount, ledgerTotals } from '../ledger-display.ts';
 
 describe('mobile ledger financial display', () => {
     it('excludes transfers and opening balances, nets expense refunds without floating point loss', () => {
@@ -15,5 +15,13 @@ describe('mobile ledger financial display', () => {
         expect(ledgerSignedAmount('-0.10',2)).toBe('-0.10');
         expect(ledgerSignedAmount('12.34',3)).toBe('-12.34');
         expect(ledgerMoney('9007199254740993.01',false)).toBe('9,007,199,254,740,993.01');
+    });
+    it('keeps equally named categories distinct and nets refunds by category identity', () => {
+        const base = {type:3,title:'餐饮',primaryCategory:'生活',primaryCategoryId:'p1'};
+        const entries = [{...base,categoryId:'c1',cny:'100'}, {...base,categoryId:'c1',cny:'-20'}, {...base,primaryCategoryId:'p2',categoryId:'c2',cny:'30'}, {...base,categoryId:'c3',cny:null}];
+        expect(ledgerCategoryTotals(entries,false,3).map(({id,amount})=>({id,amount}))).toEqual([{id:'c1',amount:'80'},{id:'c2',amount:'30'}]);
+        expect(ledgerCategoryTotals(entries,true,3).map(({id,amount})=>({id,amount}))).toEqual([{id:'p1',amount:'80'},{id:'p2',amount:'30'}]);
+        expect(ledgerTotals(entries).expense).toBe('110');
+        expect(ledgerTotals(entries).complete).toBe(false);
     });
 });

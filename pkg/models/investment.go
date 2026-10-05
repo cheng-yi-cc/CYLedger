@@ -2,19 +2,25 @@ package models
 
 // Investment tables keep decimal values in JSON/text, never SQLite floating point.
 type PortfolioAccount struct {
-	Id   string `xorm:"VARCHAR(64) PK" json:"id"`
-	Uid  int64  `xorm:"INDEX NOT NULL" json:"-"`
-	Name string `xorm:"VARCHAR(64) NOT NULL" json:"name"`
-	Kind string `xorm:"VARCHAR(32) NOT NULL" json:"kind"`
+	Id          string   `xorm:"VARCHAR(64) PK" json:"id"`
+	Uid         int64    `xorm:"INDEX NOT NULL" json:"-"`
+	Name        string   `xorm:"VARCHAR(64) NOT NULL" json:"name"`
+	Kind        string   `xorm:"VARCHAR(32) NOT NULL" json:"kind"`
+	Platform    string   `xorm:"VARCHAR(32)" json:"platform,omitempty"`
+	Instruments []string `xorm:"TEXT" json:"instruments,omitempty"`
 }
 
 type InvestmentInstrument struct {
-	Id        string `xorm:"VARCHAR(64) PK" json:"id"`
-	Uid       int64  `xorm:"INDEX NOT NULL" json:"-"`
-	Type      string `xorm:"VARCHAR(16) NOT NULL" json:"type"`
-	Symbol    string `xorm:"VARCHAR(24) NOT NULL" json:"symbol"`
-	Name      string `xorm:"VARCHAR(64) NOT NULL" json:"name"`
-	Precision int    `json:"precision"`
+	Id         string `xorm:"VARCHAR(64) PK" json:"id"`
+	Uid        int64  `xorm:"INDEX NOT NULL" json:"-"`
+	Type       string `xorm:"VARCHAR(16) NOT NULL" json:"type"`
+	Symbol     string `xorm:"VARCHAR(24) NOT NULL" json:"symbol"`
+	Name       string `xorm:"VARCHAR(64) NOT NULL" json:"name"`
+	Precision  int    `json:"precision"`
+	Market     string `xorm:"VARCHAR(16)" json:"market,omitempty"`
+	Provider   string `xorm:"VARCHAR(24)" json:"provider,omitempty"`
+	ProviderID string `xorm:"VARCHAR(80)" json:"providerId,omitempty"`
+	Currency   string `xorm:"VARCHAR(3)" json:"currency,omitempty"`
 }
 
 type InvestmentSettings struct {

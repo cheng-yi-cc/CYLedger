@@ -73,6 +73,10 @@ func (a *TransactionsApi) TransactionCountHandler(c *core.WebContext) (any, *err
 	}
 
 	uid := c.GetCurrentUid()
+	queryContext, bookErr := services.Books.FilterContext(c, uid, c.Query("book_ids"))
+	if bookErr != nil {
+		return nil, errs.Or(bookErr, errs.ErrOperationFailed)
+	}
 
 	allAccountIds, err := a.accounts.GetAccountOrSubAccountIds(c, transactionCountReq.AccountIds, uid)
 
@@ -100,7 +104,7 @@ func (a *TransactionsApi) TransactionCountHandler(c *core.WebContext) (any, *err
 		}
 	}
 
-	totalCount, err := a.transactions.GetTransactionCount(c, uid, transactionCountReq.MaxTime, transactionCountReq.MinTime, transactionCountReq.Type, allCategoryIds, allAccountIds, tagFilters, noTags, transactionCountReq.AmountFilter, transactionCountReq.Keyword, transactionCountReq.MatchMode, transactionCountReq.MustHavePictures)
+	totalCount, err := a.transactions.GetTransactionCount(queryContext, uid, transactionCountReq.MaxTime, transactionCountReq.MinTime, transactionCountReq.Type, allCategoryIds, allAccountIds, tagFilters, noTags, transactionCountReq.AmountFilter, transactionCountReq.Keyword, transactionCountReq.MatchMode, transactionCountReq.MustHavePictures)
 
 	if err != nil {
 		log.Errorf(c, "[transactions.TransactionCountHandler] failed to get transaction count for user \"uid:%d\", because %s", uid, err.Error())
@@ -132,6 +136,10 @@ func (a *TransactionsApi) TransactionListHandler(c *core.WebContext) (any, *errs
 	}
 
 	uid := c.GetCurrentUid()
+	queryContext, bookErr := services.Books.FilterContext(c, uid, c.Query("book_ids"))
+	if bookErr != nil {
+		return nil, errs.Or(bookErr, errs.ErrOperationFailed)
+	}
 	user, err := a.users.GetUserById(c, uid)
 
 	if err != nil {
@@ -171,7 +179,7 @@ func (a *TransactionsApi) TransactionListHandler(c *core.WebContext) (any, *errs
 	var totalCount int64
 
 	if transactionListReq.WithCount {
-		totalCount, err = a.transactions.GetTransactionCount(c, uid, transactionListReq.MaxTime, transactionListReq.MinTime, transactionListReq.Type, allCategoryIds, allAccountIds, tagFilters, noTags, transactionListReq.AmountFilter, transactionListReq.Keyword, transactionListReq.MatchMode, transactionListReq.MustHavePictures)
+		totalCount, err = a.transactions.GetTransactionCount(queryContext, uid, transactionListReq.MaxTime, transactionListReq.MinTime, transactionListReq.Type, allCategoryIds, allAccountIds, tagFilters, noTags, transactionListReq.AmountFilter, transactionListReq.Keyword, transactionListReq.MatchMode, transactionListReq.MustHavePictures)
 
 		if err != nil {
 			log.Errorf(c, "[transactions.TransactionListHandler] failed to get transaction count for user \"uid:%d\", because %s", uid, err.Error())
@@ -179,7 +187,7 @@ func (a *TransactionsApi) TransactionListHandler(c *core.WebContext) (any, *errs
 		}
 	}
 
-	transactions, err := a.transactions.GetTransactionsByMaxTime(c, uid, transactionListReq.MaxTime, transactionListReq.MinTime, transactionListReq.Type, allCategoryIds, allAccountIds, tagFilters, noTags, transactionListReq.AmountFilter, transactionListReq.Keyword, transactionListReq.MatchMode, transactionListReq.MustHavePictures, transactionListReq.Page, transactionListReq.Count, true, true)
+	transactions, err := a.transactions.GetTransactionsByMaxTime(queryContext, uid, transactionListReq.MaxTime, transactionListReq.MinTime, transactionListReq.Type, allCategoryIds, allAccountIds, tagFilters, noTags, transactionListReq.AmountFilter, transactionListReq.Keyword, transactionListReq.MatchMode, transactionListReq.MustHavePictures, transactionListReq.Page, transactionListReq.Count, true, true)
 
 	if err != nil {
 		log.Errorf(c, "[transactions.TransactionListHandler] failed to get transactions earlier than \"%d\" for user \"uid:%d\", because %s", transactionListReq.MaxTime, uid, err.Error())
@@ -243,6 +251,10 @@ func (a *TransactionsApi) TransactionMonthListHandler(c *core.WebContext) (any, 
 	}
 
 	uid := c.GetCurrentUid()
+	queryContext, bookErr := services.Books.FilterContext(c, uid, c.Query("book_ids"))
+	if bookErr != nil {
+		return nil, errs.Or(bookErr, errs.ErrOperationFailed)
+	}
 	user, err := a.users.GetUserById(c, uid)
 
 	if err != nil {
@@ -279,7 +291,7 @@ func (a *TransactionsApi) TransactionMonthListHandler(c *core.WebContext) (any, 
 		}
 	}
 
-	transactions, err := a.transactions.GetTransactionsInMonthByPage(c, uid, transactionListReq.Year, transactionListReq.Month, transactionListReq.Type, allCategoryIds, allAccountIds, tagFilters, noTags, transactionListReq.AmountFilter, transactionListReq.Keyword, transactionListReq.MatchMode, transactionListReq.MustHavePictures)
+	transactions, err := a.transactions.GetTransactionsInMonthByPage(queryContext, uid, transactionListReq.Year, transactionListReq.Month, transactionListReq.Type, allCategoryIds, allAccountIds, tagFilters, noTags, transactionListReq.AmountFilter, transactionListReq.Keyword, transactionListReq.MatchMode, transactionListReq.MustHavePictures)
 
 	if err != nil {
 		log.Errorf(c, "[transactions.TransactionMonthListHandler] failed to get transactions in month \"%d-%d\" for user \"uid:%d\", because %s", transactionListReq.Year, transactionListReq.Month, uid, err.Error())
@@ -327,6 +339,10 @@ func (a *TransactionsApi) TransactionListAllHandler(c *core.WebContext) (any, *e
 	}
 
 	uid := c.GetCurrentUid()
+	queryContext, bookErr := services.Books.FilterContext(c, uid, c.Query("book_ids"))
+	if bookErr != nil {
+		return nil, errs.Or(bookErr, errs.ErrOperationFailed)
+	}
 	user, err := a.users.GetUserById(c, uid)
 
 	if err != nil {
@@ -374,7 +390,7 @@ func (a *TransactionsApi) TransactionListAllHandler(c *core.WebContext) (any, *e
 		minTransactionTime = utils.GetMinTransactionTimeFromUnixTime(transactionAllListReq.StartTime)
 	}
 
-	allTransactions, err := a.transactions.GetAllSpecifiedTransactions(c, uid, maxTransactionTime, minTransactionTime, transactionAllListReq.Type, allCategoryIds, allAccountIds, tagFilters, noTags, transactionAllListReq.AmountFilter, transactionAllListReq.Keyword, transactionAllListReq.MatchMode, transactionAllListReq.MustHavePictures, pageCountForDataExport, true)
+	allTransactions, err := a.transactions.GetAllSpecifiedTransactions(queryContext, uid, maxTransactionTime, minTransactionTime, transactionAllListReq.Type, allCategoryIds, allAccountIds, tagFilters, noTags, transactionAllListReq.AmountFilter, transactionAllListReq.Keyword, transactionAllListReq.MatchMode, transactionAllListReq.MustHavePictures, pageCountForDataExport, true)
 
 	if err != nil {
 		log.Errorf(c, "[transactions.TransactionListAllHandler] failed to get all transactions for user \"uid:%d\", because %s", uid, err.Error())
@@ -564,7 +580,11 @@ func (a *TransactionsApi) TransactionStatisticsHandler(c *core.WebContext) (any,
 	}
 
 	uid := c.GetCurrentUid()
-	totalAmounts, err := a.transactions.GetAccountsAndCategoriesTotalInflowAndOutflow(c, uid, statisticReq.StartTime, statisticReq.EndTime, tagFilters, noTags, statisticReq.Keyword, statisticReq.MatchMode, clientTimezone, statisticReq.UseTransactionTimezone)
+	queryContext, bookErr := services.Books.FilterContext(c, uid, c.Query("book_ids"))
+	if bookErr != nil {
+		return nil, errs.Or(bookErr, errs.ErrOperationFailed)
+	}
+	totalAmounts, err := a.transactions.GetAccountsAndCategoriesTotalInflowAndOutflow(queryContext, uid, statisticReq.StartTime, statisticReq.EndTime, tagFilters, noTags, statisticReq.Keyword, statisticReq.MatchMode, clientTimezone, statisticReq.UseTransactionTimezone)
 
 	if err != nil {
 		log.Errorf(c, "[transactions.TransactionStatisticsHandler] failed to get accounts and categories total income and expense for user \"uid:%d\", because %s", uid, err.Error())
@@ -632,7 +652,11 @@ func (a *TransactionsApi) TransactionStatisticsTrendsHandler(c *core.WebContext)
 	}
 
 	uid := c.GetCurrentUid()
-	allMonthlyTotalAmounts, err := a.transactions.GetAccountsAndCategoriesMonthlyInflowAndOutflow(c, uid, startYear, startMonth, endYear, endMonth, tagFilters, noTags, statisticTrendsReq.Keyword, statisticTrendsReq.MatchMode, clientTimezone, statisticTrendsReq.UseTransactionTimezone)
+	queryContext, bookErr := services.Books.FilterContext(c, uid, c.Query("book_ids"))
+	if bookErr != nil {
+		return nil, errs.Or(bookErr, errs.ErrOperationFailed)
+	}
+	allMonthlyTotalAmounts, err := a.transactions.GetAccountsAndCategoriesMonthlyInflowAndOutflow(queryContext, uid, startYear, startMonth, endYear, endMonth, tagFilters, noTags, statisticTrendsReq.Keyword, statisticTrendsReq.MatchMode, clientTimezone, statisticTrendsReq.UseTransactionTimezone)
 
 	if err != nil {
 		log.Errorf(c, "[transactions.TransactionStatisticsTrendsHandler] failed to get accounts and categories total income and expense for user \"uid:%d\", because %s", uid, err.Error())
@@ -789,6 +813,10 @@ func (a *TransactionsApi) TransactionAmountsHandler(c *core.WebContext) (any, *e
 	}
 
 	uid := c.GetCurrentUid()
+	queryContext, bookErr := services.Books.FilterContext(c, uid, c.Query("book_ids"))
+	if bookErr != nil {
+		return nil, errs.Or(bookErr, errs.ErrOperationFailed)
+	}
 
 	accounts, err := a.accounts.GetAllAccountsByUid(c, uid)
 	accountMap := a.accounts.GetAccountMapByList(accounts)
@@ -803,7 +831,7 @@ func (a *TransactionsApi) TransactionAmountsHandler(c *core.WebContext) (any, *e
 	for i := 0; i < len(requestItems); i++ {
 		requestItem := requestItems[i]
 
-		incomeAmounts, expenseAmounts, err := a.transactions.GetAccountsTotalIncomeAndExpense(c, uid, requestItem.StartTime, requestItem.EndTime, excludeAccountIds, excludeCategoryIds, clientTimezone, transactionAmountsReq.UseTransactionTimezone)
+		incomeAmounts, expenseAmounts, err := a.transactions.GetAccountsTotalIncomeAndExpense(queryContext, uid, requestItem.StartTime, requestItem.EndTime, excludeAccountIds, excludeCategoryIds, clientTimezone, transactionAmountsReq.UseTransactionTimezone)
 
 		if err != nil {
 			log.Errorf(c, "[transactions.TransactionAmountsHandler] failed to get transaction amounts item for user \"uid:%d\", because %s", uid, err.Error())
@@ -919,6 +947,10 @@ func (a *TransactionsApi) TransactionDailyAmountsHandler(c *core.WebContext) (an
 	}
 
 	uid := c.GetCurrentUid()
+	queryContext, bookErr := services.Books.FilterContext(c, uid, c.Query("book_ids"))
+	if bookErr != nil {
+		return nil, errs.Or(bookErr, errs.ErrOperationFailed)
+	}
 	accounts, err := a.accounts.GetAllAccountsByUid(c, uid)
 	accountMap := a.accounts.GetAccountMapByList(accounts)
 
@@ -927,7 +959,7 @@ func (a *TransactionsApi) TransactionDailyAmountsHandler(c *core.WebContext) (an
 		return nil, errs.Or(err, errs.ErrOperationFailed)
 	}
 
-	incomeAmounts, expenseAmounts, err := a.transactions.GetAccountsDailyIncomeAndExpense(c, uid, transactionAmountsReq.StartTime, transactionAmountsReq.EndTime, excludeAccountIds, excludeCategoryIds, clientTimezone, transactionAmountsReq.UseTransactionTimezone)
+	incomeAmounts, expenseAmounts, err := a.transactions.GetAccountsDailyIncomeAndExpense(queryContext, uid, transactionAmountsReq.StartTime, transactionAmountsReq.EndTime, excludeAccountIds, excludeCategoryIds, clientTimezone, transactionAmountsReq.UseTransactionTimezone)
 
 	if err != nil {
 		log.Errorf(c, "[transactions.TransactionDailyAmountsHandler] failed to get daily amounts for user \"uid:%d\", because %s", uid, err.Error())
@@ -1404,18 +1436,28 @@ func (a *TransactionsApi) TransactionModifyHandler(c *core.WebContext) (any, *er
 	transactionPictureIds := a.transactionPictures.GetTransactionPictureIds(transactionPictureInfos)
 
 	newTransaction := &models.Transaction{
-		TransactionId:     transaction.TransactionId,
-		Uid:               uid,
-		Type:              newTransactionType,
-		CategoryId:        transactionModifyReq.CategoryId,
-		TransactionTime:   utils.GetMinTransactionTimeFromUnixTime(transactionModifyReq.Time),
-		TimezoneUtcOffset: transactionModifyReq.UtcOffset,
-		AccountId:         transactionModifyReq.SourceAccountId,
-		Amount:            transactionModifyReq.SourceAmount,
-		HideAmount:        transactionModifyReq.HideAmount,
-		Comment:           transactionModifyReq.Comment,
+		BookId: transactionModifyReq.BookId, TransactionId: transaction.TransactionId,
+		ExcludeFromStatistics:  transaction.ExcludeFromStatistics,
+		ReimbursementAccountId: transaction.ReimbursementAccountId,
+		ReimbursementClosedAt:  transaction.ReimbursementClosedAt,
+		ReimbursementReceiptId: transaction.ReimbursementReceiptId,
+		Uid:                    uid,
+		Type:                   newTransactionType,
+		CategoryId:             transactionModifyReq.CategoryId,
+		TransactionTime:        utils.GetMinTransactionTimeFromUnixTime(transactionModifyReq.Time),
+		TimezoneUtcOffset:      transactionModifyReq.UtcOffset,
+		AccountId:              transactionModifyReq.SourceAccountId,
+		Amount:                 transactionModifyReq.SourceAmount,
+		HideAmount:             transactionModifyReq.HideAmount,
+		Comment:                transactionModifyReq.Comment,
 	}
 
+	if transactionModifyReq.ExcludeFromStatistics != nil {
+		newTransaction.ExcludeFromStatistics = *transactionModifyReq.ExcludeFromStatistics
+	}
+	if transactionModifyReq.ReimbursementAccountId != nil {
+		newTransaction.ReimbursementAccountId = *transactionModifyReq.ReimbursementAccountId
+	}
 	if newTransaction.Type == models.TRANSACTION_DB_TYPE_TRANSFER_OUT {
 		newTransaction.RelatedAccountId = transactionModifyReq.DestinationAccountId
 		newTransaction.RelatedAccountAmount = transactionModifyReq.DestinationAmount
@@ -1426,7 +1468,13 @@ func (a *TransactionsApi) TransactionModifyHandler(c *core.WebContext) (any, *er
 		newTransaction.GeoLatitude = transactionModifyReq.GeoLocation.Latitude
 	}
 
-	if newTransaction.Type == transaction.Type &&
+	if newTransaction.BookId == "" {
+		newTransaction.BookId = transaction.BookId
+	}
+	if newTransaction.BookId == transaction.BookId &&
+		newTransaction.ExcludeFromStatistics == transaction.ExcludeFromStatistics &&
+		newTransaction.ReimbursementAccountId == transaction.ReimbursementAccountId &&
+		newTransaction.Type == transaction.Type &&
 		newTransaction.CategoryId == transaction.CategoryId &&
 		utils.GetUnixTimeFromTransactionTime(newTransaction.TransactionTime) == utils.GetUnixTimeFromTransactionTime(transaction.TransactionTime) &&
 		newTransaction.TimezoneUtcOffset == transaction.TimezoneUtcOffset &&
@@ -2795,6 +2843,9 @@ func (a *TransactionsApi) TransactionImportHandler(c *core.WebContext) (any, *er
 	for i := 0; i < len(transactionImportReq.Transactions); i++ {
 		transactionCreateReq := transactionImportReq.Transactions[i]
 		transaction := a.createNewTransactionModel(uid, transactionCreateReq, c.ClientIP())
+		if transaction.BookId == "" {
+			transaction.BookId = transactionImportReq.BookId
+		}
 		newTransactions[i] = transaction
 	}
 
@@ -3141,16 +3192,19 @@ func (a *TransactionsApi) createNewTransactionModel(uid int64, transactionCreate
 	}
 
 	transaction := &models.Transaction{
-		Uid:               uid,
-		Type:              transactionDbType,
-		CategoryId:        transactionCreateReq.CategoryId,
-		TransactionTime:   utils.GetMinTransactionTimeFromUnixTime(transactionCreateReq.Time),
-		TimezoneUtcOffset: transactionCreateReq.UtcOffset,
-		AccountId:         transactionCreateReq.SourceAccountId,
-		Amount:            transactionCreateReq.SourceAmount,
-		HideAmount:        transactionCreateReq.HideAmount,
-		Comment:           transactionCreateReq.Comment,
-		CreatedIp:         clientIp,
+		BookId:                 transactionCreateReq.BookId,
+		Uid:                    uid,
+		Type:                   transactionDbType,
+		CategoryId:             transactionCreateReq.CategoryId,
+		TransactionTime:        utils.GetMinTransactionTimeFromUnixTime(transactionCreateReq.Time),
+		TimezoneUtcOffset:      transactionCreateReq.UtcOffset,
+		AccountId:              transactionCreateReq.SourceAccountId,
+		Amount:                 transactionCreateReq.SourceAmount,
+		HideAmount:             transactionCreateReq.HideAmount,
+		ExcludeFromStatistics:  transactionCreateReq.ExcludeFromStatistics,
+		ReimbursementAccountId: transactionCreateReq.ReimbursementAccountId,
+		Comment:                transactionCreateReq.Comment,
+		CreatedIp:              clientIp,
 	}
 
 	if transactionCreateReq.Type == models.TRANSACTION_TYPE_TRANSFER {

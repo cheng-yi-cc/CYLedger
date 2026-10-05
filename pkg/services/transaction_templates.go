@@ -123,6 +123,11 @@ func (s *TransactionTemplateService) CreateTemplate(c core.Context, template *mo
 	template.UpdatedUnixTime = time.Now().Unix()
 
 	return s.UserDataDB(template.Uid).DoTransaction(c, func(sess *xorm.Session) error {
+		bookID, bookErr := Books.ResolveInSession(sess, template.Uid, template.BookId, false)
+		if bookErr != nil {
+			return bookErr
+		}
+		template.BookId = bookID
 		err := s.isTemplateValid(sess, template)
 
 		if err != nil {
@@ -143,13 +148,29 @@ func (s *TransactionTemplateService) ModifyTemplate(c core.Context, template *mo
 	template.UpdatedUnixTime = time.Now().Unix()
 
 	return s.UserDataDB(template.Uid).DoTransaction(c, func(sess *xorm.Session) error {
+		if template.BookId == "" {
+			var old models.TransactionTemplate
+			has, err := sess.ID(template.TemplateId).Where("uid=? AND deleted=?", template.Uid, false).Get(&old)
+			if err != nil {
+				return err
+			}
+			if !has {
+				return errs.ErrTransactionTemplateNotFound
+			}
+			template.BookId = old.BookId
+		}
+		bookID, bookErr := Books.ResolveInSession(sess, template.Uid, template.BookId, false)
+		if bookErr != nil {
+			return bookErr
+		}
+		template.BookId = bookID
 		err := s.isTemplateValid(sess, template)
 
 		if err != nil {
 			return err
 		}
 
-		updatedRows, err := sess.ID(template.TemplateId).Cols("name", "type", "category_id", "account_id", "scheduled_frequency_type", "scheduled_frequency", "scheduled_start_time", "scheduled_end_time", "scheduled_at", "scheduled_timezone_utc_offset", "tag_ids", "amount", "related_account_id", "related_account_amount", "hide_amount", "comment", "updated_unix_time").Where("uid=? AND deleted=?", template.Uid, false).Update(template)
+		updatedRows, err := sess.ID(template.TemplateId).Cols("book_id", "name", "type", "category_id", "account_id", "scheduled_frequency_type", "scheduled_frequency", "scheduled_start_time", "scheduled_end_time", "scheduled_at", "scheduled_timezone_utc_offset", "tag_ids", "amount", "related_account_id", "related_account_amount", "hide_amount", "comment", "updated_unix_time").Where("uid=? AND deleted=?", template.Uid, false).Update(template)
 
 		if err != nil {
 			return err

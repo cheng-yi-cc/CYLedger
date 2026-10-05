@@ -5,7 +5,17 @@ import { AccountType, AccountCategory } from '@/core/account.ts';
 import { ACCOUNT_CURRENCY_NOT_SET_VALUE } from '@/consts/currency.ts';
 import { DEFAULT_ACCOUNT_COLOR } from '@/consts/color.ts';
 
+export interface AccountAssetProfile {
+    kind?: '' | 'prepaid' | 'secondhand' | 'insurance' | 'reimbursement';
+    debtDueDate?: string; group?: string; shortName?: string; cardNumber?: string;
+    nightIcon?: string; nightIconType?: number; nightColor?: string;
+    excludeFromTotal?: boolean; repaymentDay?: number; repaymentAfterDays?: number;
+    statementNextCycle?: boolean; sharedLimitAccount?: string;
+    annualFee?: string; annualFeeDate?: string; annualWaiverAmount?: string; annualWaiverCount?: number;
+}
+
 export class Account implements AccountInfoResponse {
+    public assetProfile: AccountAssetProfile;
     public id: string;
     public name: string;
     public parentId: string;
@@ -31,7 +41,8 @@ export class Account implements AccountInfoResponse {
     private readonly _isAsset?: boolean;
     private readonly _isLiability?: boolean;
 
-    protected constructor(id: string, name: string, parentId: string, category: number, type: number, icon: string, iconType: number, color: string, currency: string, initialBalance: string, comment: string, displayOrder: number, visible: boolean, balanceTime?: number, lastReconciledTime?: number, creditCardStatementDate?: number, initialCreditCardLimit?: string, isAsset?: boolean, isLiability?: boolean, subAccounts?: Account[]) {
+    protected constructor(id: string, name: string, parentId: string, category: number, type: number, icon: string, iconType: number, color: string, currency: string, initialBalance: string, comment: string, displayOrder: number, visible: boolean, balanceTime?: number, lastReconciledTime?: number, creditCardStatementDate?: number, initialCreditCardLimit?: string, isAsset?: boolean, isLiability?: boolean, subAccounts?: Account[], assetProfile?: AccountAssetProfile) {
+        this.assetProfile = JSON.parse(JSON.stringify(assetProfile || {}));
         this.id = id;
         this.name = name;
         this.parentId = parentId;
@@ -178,7 +189,8 @@ export class Account implements AccountInfoResponse {
             this.visible === other.visible &&
             this.creditCardStatementDate === other.creditCardStatementDate &&
             this.creditCardLimit === other.creditCardLimit &&
-            this.numericCreditCardLimit === other.numericCreditCardLimit;
+            this.numericCreditCardLimit === other.numericCreditCardLimit &&
+            JSON.stringify(this.assetProfile) === JSON.stringify(other.assetProfile);
 
         if (!isEqual) {
             return false;
@@ -202,6 +214,7 @@ export class Account implements AccountInfoResponse {
     }
 
     public fillFrom(other: Account): void {
+        this.assetProfile = JSON.parse(JSON.stringify(other.assetProfile || {}));
         this.id = other.id;
         this.category = other.category;
         this.type = other.type;
@@ -261,6 +274,7 @@ export class Account implements AccountInfoResponse {
         }
 
         return {
+            assetProfile: this.assetProfile,
             name: this.name,
             category: parentAccount ? parentAccount.category : this.category,
             type: parentAccount ? AccountType.SingleAccount.type : this.type,
@@ -296,6 +310,7 @@ export class Account implements AccountInfoResponse {
         }
 
         return {
+            assetProfile: this.assetProfile,
             id: this.id || '0',
             name: this.name,
             category: parentAccount ? parentAccount.category : this.category,
@@ -463,7 +478,9 @@ export class Account implements AccountInfoResponse {
             this.creditCardStatementDate,
             this.creditCardLimit,
             this.isAsset,
-            this.isLiability
+            this.isLiability,
+            undefined,
+            this.assetProfile
         );
     }
 
@@ -488,7 +505,8 @@ export class Account implements AccountInfoResponse {
             this.creditCardLimit,
             this.isAsset,
             this.isLiability,
-            typeof(this.subAccounts) !== 'undefined' ? Account.cloneAccounts(this.subAccounts) : undefined);
+            typeof(this.subAccounts) !== 'undefined' ? Account.cloneAccounts(this.subAccounts) : undefined,
+            this.assetProfile);
     }
 
     public createNewSubAccount(currency: string, balanceTime: number): Account {
@@ -556,7 +574,8 @@ export class Account implements AccountInfoResponse {
             accountResponse.creditCardLimit,
             accountResponse.isAsset,
             accountResponse.isLiability,
-            accountResponse.subAccounts ? Account.ofMulti(accountResponse.subAccounts) : undefined
+            accountResponse.subAccounts ? Account.ofMulti(accountResponse.subAccounts) : undefined,
+            accountResponse.assetProfile
         );
     }
 
@@ -685,6 +704,7 @@ export class AccountWithDisplayBalance extends Account {
 }
 
 export interface AccountCreateRequest {
+    assetProfile?: AccountAssetProfile;
     readonly name: string;
     readonly category: number;
     readonly type: number;
@@ -702,6 +722,7 @@ export interface AccountCreateRequest {
 }
 
 export interface AccountModifyRequest {
+    assetProfile?: AccountAssetProfile;
     readonly id: string;
     readonly name: string;
     readonly category: number;
@@ -726,6 +747,7 @@ export interface AccountUpdateLastReconciledTimeRequest {
 }
 
 export interface AccountInfoResponse {
+    assetProfile?: AccountAssetProfile;
     readonly id: string;
     readonly name: string;
     readonly parentId: string;

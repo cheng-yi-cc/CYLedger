@@ -1,25 +1,26 @@
 <template>
     <div class="cy-wealth">
-        <header class="cy-heading">
+        <header v-if="!editorOnly" class="cy-heading">
             <div><p class="cy-eyebrow">CYLEDGER · 资产账本</p><h1>我的资产</h1><p class="cy-muted">日常账户与投资持仓，统一以人民币查看。</p></div>
             <button class="cy-button cy-primary" @click="openEvent()">＋ 记录投资</button>
         </header>
-        <p v-if="error" class="cy-message cy-error" role="alert">{{ error }} <button @click="load()">重试加载</button></p>
+        <p v-if="error" class="cy-message cy-error" role="alert">{{ error }} <button @click="retryLoad">重试加载</button></p>
         <p v-if="notice" class="cy-message" role="status">{{ notice }}</p>
         <p v-if="hasLocalDraft && !editor" class="cy-message cy-warning">此浏览器有一份尚未同步的投资草稿。<button @click="restoreLocalDraft">继续填写</button><button @click="discardLocalDraft">丢弃草稿</button></p>
-        <nav class="cy-tabs" aria-label="资产页面">
+        <nav v-if="!editorOnly" class="cy-tabs" aria-label="资产页面">
             <button v-for="item in tabs" :key="item.key" :aria-current="tab === item.key ? 'page' : undefined" @click="tab = item.key; closeEditor()">{{ item.name }}</button>
             <button class="cy-refresh" :disabled="loading" @click="load()">{{ loading ? '更新中…' : '刷新' }}</button>
         </nav>
 
         <section v-if="editor" ref="editorElement" class="cy-panel cy-editor" tabindex="-1">
-            <div class="cy-section-heading"><h2>{{ editorTitle }}</h2><button class="cy-button" :disabled="saving" @click="closeEditor()">关闭</button></div>
+            <div class="cy-section-heading"><h2>{{ editorTitle }}</h2><button class="cy-button" :disabled="saving" @click="closeEditor(); editorOnly && emit('close')">关闭</button></div>
             <p v-if="editorError" class="cy-message cy-error" role="alert">{{ editorError }}</p>
             <form v-if="editor === 'event'" @submit.prevent="previewEvent">
                 <fieldset :disabled="saving || !!preview" class="cy-fields">
                     <label>操作类型<select v-model="draft.type" @change="draft.exchangeRate = draft.type === 'TRANSFER' ? '' : '1'"><option v-for="(name, key) in eventNames" :key="key" :value="key">{{ name }}</option></select></label>
+                    <BookPicker v-model="draft.bookId" />
                     <label>投资账户<select v-model="draft.accountId" required><option disabled value="">选择账户</option><option v-for="account in accounts" :key="account.id" :value="account.id">{{ account.name }}</option></select></label>
-                    <label>资产<select v-model="draft.instrumentId" required><option disabled value="">选择资产</option><option v-for="instrument in instrumentsList" :key="instrument.id" :value="instrument.id">{{ instrument.name }} · {{ instrument.symbol }}{{ instrument.type !== 'CRYPTO' ? '（手动估值）' : '' }}</option></select></label>
+                    <label>资产<select v-model="draft.instrumentId" required><option disabled value="">选择资产</option><option v-for="instrument in instrumentsList" :key="instrument.id" :value="instrument.id">{{ instrument.name }} · {{ instrument.symbol }}{{ !instrument.provider && !['crypto:bitcoin','crypto:ethereum','crypto:solana','crypto:tether','crypto:usd-coin'].includes(instrument.id) ? '（手动估值）' : '' }}</option></select></label>
                     <label>数量（{{ selectedInstrument?.symbol || '份额' }}）<input v-model="draft.quantity" inputmode="decimal" required placeholder="0.00000000" autocomplete="off" /></label>
                     <label v-if="draft.type === 'TRANSFER'">转入投资账户<select v-model="draft.toAccountId" required><option disabled value="">选择转入账户</option><option v-for="account in accounts.filter(a => a.id !== draft.accountId)" :key="account.id" :value="account.id">{{ account.name }}</option></select></label>
                     <label v-if="draft.type === 'OPENING'">持仓总成本（CNY，可留空）<input v-model="costInput" inputmode="decimal" placeholder="不填写则保留为成本未知" /><span class="cy-field-note">录入已有持仓，不扣日常账户余额。</span></label>
@@ -52,14 +53,14 @@
                     <div class="cy-actions"><button type="button" class="cy-button" :disabled="saving" @click="preview = null; idempotencyKey = generateRandomUUID()">返回修改</button><button type="button" class="cy-button cy-primary" :disabled="saving" @click="saveEvent">{{ saving ? '正在保存…' : draft.id ? '确认修订' : '确认入账' }}</button></div>
                 </section>
             </form>
-            <form v-else-if="editor === 'account'" @submit.prevent="createAccount"><div class="cy-fields"><label>账户名称<input v-model="accountDraft.name" required maxlength="64" placeholder="例如：我的交易所账户" /></label><label>账户类型<select v-model="accountDraft.kind"><option value="EXCHANGE">交易所</option><option value="WALLET">个人钱包</option><option value="BROKER">证券账户</option><option value="OTHER">其他</option></select></label></div><div class="cy-actions"><button class="cy-button cy-primary" :disabled="saving">创建账户</button></div></form>
-            <form v-else-if="editor === 'instrument'" @submit.prevent="createInstrument"><div class="cy-fields"><label>资产名称<input v-model="instrumentDraft.name" required maxlength="64" placeholder="基金、股票或资产的完整名称" /></label><label>展示代码<input v-model="instrumentDraft.symbol" required maxlength="24" placeholder="例如 510300" /></label><label>资产类型<select v-model="instrumentDraft.type"><option value="STOCK">股票</option><option value="FUND">基金</option><option value="CRYPTO">加密资产</option><option value="OTHER">其他资产</option></select></label></div><p class="cy-field-note">新建资产仅属于你的账本，使用手动报价。同名代码不会与已有资产自动合并。</p><div class="cy-actions"><button class="cy-button cy-primary" :disabled="saving">创建资产</button></div></form>
+            <form v-else-if="editor === 'account'" @submit.prevent="createAccount"><div class="cy-fields"><label>账户名称<input v-model="accountDraft.name" required maxlength="64" placeholder="例如：我的交易所账户" /></label><label>账户类型<select v-model="accountDraft.kind" :disabled="!!accountDraft.id"><option value="EXCHANGE">交易所</option><option value="WALLET">个人钱包</option><option value="BROKER">证券账户</option><option value="OTHER">其他</option></select></label></div><div class="cy-actions"><button class="cy-button cy-primary" :disabled="saving">{{ accountDraft.id ? '保存账户' : '创建账户' }}</button></div></form>
+            <div v-else-if="editor === 'instrument'"><InstrumentSearch @saved="instrumentSaved" /><details><summary>找不到资产？手动创建</summary><form @submit.prevent="createInstrument"><div class="cy-fields"><label>资产名称<input v-model="instrumentDraft.name" required maxlength="64" placeholder="基金、股票或资产的完整名称" /></label><label>展示代码<input v-model="instrumentDraft.symbol" required maxlength="24" placeholder="例如 510300" /></label><label>资产类型<select v-model="instrumentDraft.type"><option value="STOCK">股票</option><option value="FUND">基金</option><option value="CRYPTO">加密资产</option><option value="OTHER">其他资产</option></select></label></div><p class="cy-field-note">新建资产仅属于你的账本，使用手动报价。同名代码不会与已有资产自动合并。</p><div class="cy-actions"><button class="cy-button cy-primary" :disabled="saving">创建资产</button></div></form></details></div>
             <form v-else-if="editor === 'quote'" @submit.prevent="saveQuote"><div class="cy-fields"><label>资产<select v-model="quoteDraft.instrumentId" required><option v-for="instrument in instrumentsList" :key="instrument.id" :value="instrument.id">{{ instrument.name }} · {{ instrument.symbol }}</option></select></label><label>每份价格（CNY）<input v-model="quoteDraft.price" required inputmode="decimal" placeholder="0.00" /></label><label>价格时间<input v-model="quoteTime" type="datetime-local" required /><span class="cy-field-note">{{ settings.timeZone }}</span></label></div><p class="cy-field-note">此报价明确标为「手动估值」，不会修改持有数量与成本。</p><div class="cy-actions"><button class="cy-button cy-primary" :disabled="saving">保存手动报价</button><button type="button" class="cy-button" :disabled="saving" @click="restoreAutomaticQuote">恢复自动报价</button></div></form>
-            <div v-else-if="editor === 'void' && voidCandidate"><p>撤销 {{ date(voidCandidate.occurredAt) }} 的{{ eventNames[voidCandidate.type] }}：{{ quantity(voidCandidate.quantity) }} {{ instrumentSymbol(voidCandidate.instrumentId) }}。</p><p>相关资金变动将撤回，后续成本与持仓重新计算。若导致后续超卖，撤销会被阻止。版本记录会保留。</p><div class="cy-actions"><button class="cy-button" @click="closeEditor">保留流水</button><button class="cy-button cy-danger" :disabled="saving" @click="voidEvent">确认撤销</button></div></div>
+            <div v-else-if="editor === 'void' && voidCandidate"><p>撤销 {{ date(voidCandidate.occurredAt) }} 的{{ eventNames[voidCandidate.type] }}：{{ quantity(voidCandidate.quantity) }} {{ instrumentSymbol(voidCandidate.instrumentId) }}。</p><p>相关资金变动将撤回，后续成本与持仓重新计算。若导致后续超卖，撤销会被阻止。版本记录会保留。</p><div class="cy-actions"><button class="cy-button" @click="closeEditor(); editorOnly && emit('close')">保留流水</button><button class="cy-button cy-danger" :disabled="saving" @click="voidEvent">确认撤销</button></div></div>
         </section>
 
         <div v-if="loading && !summary" class="cy-panel cy-empty" role="status">正在读取真实账户与持仓…</div>
-        <template v-if="tab === 'overview' && summary">
+        <template v-if="!editorOnly && tab === 'overview' && summary">
             <section class="cy-overview cy-panel">
                 <div class="cy-net"><p class="cy-muted">{{ summary.netAssets === null ? '已估值部分' : '净资产' }} <span class="cy-currency">CNY</span></p><p class="cy-total">{{ money(summary.netAssets ?? summary.valuedAssets) }}</p><p class="cy-field-note">{{ summary.netAssets === null ? `另有 ${summary.missingPrices} 项暂未估值` : '日常账户净余额 + 投资参考市值' }}</p></div>
                 <dl class="cy-summary-grid"><div><dt>现金与日常资产</dt><dd>{{ money(summary.cashAssets) }}</dd></div><div><dt>投资参考市值</dt><dd>{{ money(summary.investmentValue) }}</dd></div><div><dt>负债</dt><dd>{{ money(summary.liabilities) }}</dd></div><div><dt>{{ summary.costComplete ? '未实现盈亏' : '未实现盈亏（成本不完整）' }}</dt><dd>{{ signedMoney(summary.unrealizedPnl) }}</dd></div></dl>
@@ -76,17 +77,21 @@
             <section class="cy-panel"><div class="cy-section-heading"><h2>日常账户</h2><button class="cy-button" @click="emit('navigate', 'accounts')">管理账户</button></div><p v-if="!cashAccounts.length" class="cy-empty">还没有日常账户。添加银行卡、现金或支付账户后，这里会显示实际余额。</p><div v-for="account in cashAccounts" :key="account.id" class="cy-cash-row"><div><strong>{{ account.name }}</strong><p class="cy-muted">{{ account.liability ? '负债账户' : '资金账户' }} · {{ account.currency }}</p></div><div class="cy-align-end"><strong>{{ money(account.value) }}</strong><small v-if="account.currency !== 'CNY'">原币 {{ account.balance }}</small></div></div></section>
         </template>
 
-        <section v-if="tab === 'history'" class="cy-panel"><div class="cy-section-heading"><h2>投资流水</h2><button class="cy-button" :disabled="saving" @click="downloadCSV">导出 CSV</button></div><p class="cy-field-note">记录交易事实；修订与撤销均使用当前版本校验。</p><div v-if="!events.length" class="cy-empty">还没有投资流水。录入期初持仓或记录第一笔买入后，会在这里保留记录。</div><article v-for="event in sortedEvents" :key="event.id" class="cy-event" :class="{ 'cy-voided': event.voided }"><div class="cy-position-top"><div><strong>{{ eventNames[event.type] }} · {{ instrumentName(event.instrumentId) }}</strong><p class="cy-muted">{{ date(event.occurredAt) }} · {{ accountName(event.accountId) }}</p></div><span>{{ quantity(event.quantity) }} {{ instrumentSymbol(event.instrumentId) }}</span></div><p v-if="event.type === 'BUY' || event.type === 'SELL'" class="cy-field-note">成交金额 {{ event.amount }} · 手续费 {{ event.fee }} · 交易折算率 {{ event.exchangeRate }}</p><p v-if="event.note">{{ event.note }}</p><div class="cy-event-footer"><span class="cy-muted">版本 {{ event.version }}{{ event.voided ? ' · 已撤销' : '' }}</span><div v-if="!event.voided"><button class="cy-button" @click="reviseEvent(event)">修订</button><button class="cy-button" @click="askVoid(event)">撤销</button></div></div></article></section>
+        <section v-if="!editorOnly && tab === 'history'" class="cy-panel"><div class="cy-section-heading"><h2>投资流水</h2><button class="cy-button" :disabled="saving" @click="downloadCSV">导出 CSV</button></div><p class="cy-field-note">记录交易事实；修订与撤销均使用当前版本校验。</p><div v-if="!events.length" class="cy-empty">还没有投资流水。录入期初持仓或记录第一笔买入后，会在这里保留记录。</div><article v-for="event in sortedEvents" :key="event.id" class="cy-event" :class="{ 'cy-voided': event.voided }"><div class="cy-position-top"><div><strong>{{ eventNames[event.type] }} · {{ instrumentName(event.instrumentId) }}</strong><p class="cy-muted">{{ date(event.occurredAt) }} · {{ accountName(event.accountId) }}</p></div><span>{{ quantity(event.quantity) }} {{ instrumentSymbol(event.instrumentId) }}</span></div><p v-if="event.type === 'BUY' || event.type === 'SELL'" class="cy-field-note">成交金额 {{ event.amount }} · 手续费 {{ event.fee }} · 交易折算率 {{ event.exchangeRate }}</p><p v-if="event.note">{{ event.note }}</p><div class="cy-event-footer"><span class="cy-muted">版本 {{ event.version }}{{ event.voided ? ' · 已撤销' : '' }}</span><div v-if="!event.voided"><button class="cy-button" @click="reviseEvent(event)">修订</button><button class="cy-button" @click="askVoid(event)">撤销</button></div></div></article></section>
 
-        <template v-if="tab === 'accounts'"><section class="cy-panel"><div class="cy-section-heading"><h2>投资账户</h2><button class="cy-button cy-primary" @click="openEditor('account')">＋ 创建账户</button></div><p v-if="!accounts.length" class="cy-empty">用账户区分交易所、个人钱包或证券账户。</p><div v-for="account in accounts" :key="account.id" class="cy-cash-row"><strong>{{ account.name }}</strong><span class="cy-muted">{{ accountKinds[account.kind] || account.kind }}</span></div></section><section class="cy-panel"><div class="cy-section-heading"><h2>资产目录</h2><button class="cy-button" @click="openEditor('instrument')">＋ 创建资产</button></div><p class="cy-field-note">自动行情仅用于已验证映射的资产；其他资产可录入手动报价。</p><div v-for="instrument in instrumentsList" :key="instrument.id" class="cy-cash-row"><div><strong>{{ instrument.name }}</strong><p class="cy-muted">{{ instrument.symbol }} · {{ typeNames[instrument.type] }}</p></div><button class="cy-button" @click="openQuote(instrument.id)">手动报价</button></div></section></template>
+        <template v-if="!editorOnly && tab === 'accounts'"><section class="cy-panel"><div class="cy-section-heading"><h2>投资账户</h2><button class="cy-button cy-primary" @click="openEditor('account')">＋ 创建账户</button></div><p v-if="!accounts.length" class="cy-empty">用账户区分交易所、个人钱包或证券账户。</p><div v-for="account in accounts" :key="account.id" class="cy-cash-row"><strong>{{ account.name }}</strong><span class="cy-muted">{{ accountKinds[account.kind] || account.kind }}</span></div></section><section class="cy-panel"><div class="cy-section-heading"><h2>资产目录</h2><button class="cy-button" @click="openEditor('instrument')">＋ 创建资产</button></div><p class="cy-field-note">自动行情仅用于已验证映射的资产；其他资产可录入手动报价。</p><div v-for="instrument in instrumentsList" :key="instrument.id" class="cy-cash-row"><div><strong>{{ instrument.name }}</strong><p class="cy-muted">{{ instrument.symbol }} · {{ typeNames[instrument.type] }}</p></div><button class="cy-button" @click="openQuote(instrument.id)">手动报价</button></div></section></template>
 
-        <template v-if="tab === 'settings'"><section class="cy-panel"><h2>投资设置</h2><form @submit.prevent="saveSettings"><div class="cy-fields"><label>本位币<input value="人民币 CNY" readonly /></label><label>会计时区<input v-model="settings.timeZone" required list="cy-timezones" placeholder="Asia/Shanghai" /><datalist id="cy-timezones"><option v-for="zone in timezones" :key="zone" :value="zone" /></datalist><span class="cy-field-note">日期按此时区记录与展示，初始值来自你的设备。</span></label></div><div class="cy-actions"><button class="cy-button cy-primary" :disabled="saving">保存设置</button></div></form></section><section class="cy-panel"><h2>数据管理</h2><p class="cy-muted">分别导出投资流水（含费用）与当前持仓。完整恢复请使用服务端备份工具。</p><div class="cy-actions"><button class="cy-button" :disabled="saving" @click="downloadCSV">导出投资流水 CSV</button><button class="cy-button" @click="downloadPositions">导出当前持仓 CSV</button><button class="cy-button" @click="emit('navigate', 'data')">日常流水导入与导出</button></div></section><section class="cy-panel"><h2>使用后的资产变化</h2><p class="cy-field-note">仅显示当时实际保存的估值。修订交易后失效的记录保留缺口，不用今天的持仓补造历史。</p><p v-if="!snapshots.length" class="cy-empty">尚无历史估值记录，开始使用后逐步积累。</p><div v-for="snapshot in recentSnapshots" :key="snapshot.id" class="cy-cash-row"><span>{{ date(snapshot.recordedAt) }}</span><div class="cy-align-end"><strong>{{ snapshot.invalidated ? '待重建 / 缺少历史价格' : money(snapshot.netAssets ?? snapshot.valuedAssets) }}</strong><small>{{ snapshot.invalidated ? '历史修订后失效' : snapshot.complete ? '完整估值' : '部分估值' }}</small></div></div></section></template>
+        <template v-if="!editorOnly && tab === 'settings'"><section class="cy-panel"><h2>投资设置</h2><form @submit.prevent="saveSettings"><div class="cy-fields"><label>本位币<input value="人民币 CNY" readonly /></label><label>会计时区<input v-model="settings.timeZone" required list="cy-timezones" placeholder="Asia/Shanghai" /><datalist id="cy-timezones"><option v-for="zone in timezones" :key="zone" :value="zone" /></datalist><span class="cy-field-note">日期按此时区记录与展示，初始值来自你的设备。</span></label></div><div class="cy-actions"><button class="cy-button cy-primary" :disabled="saving">保存设置</button></div></form></section><section class="cy-panel"><h2>数据管理</h2><p class="cy-muted">分别导出投资流水（含费用）与当前持仓。完整恢复请使用服务端备份工具。</p><div class="cy-actions"><button class="cy-button" :disabled="saving" @click="downloadCSV">导出投资流水 CSV</button><button class="cy-button" @click="downloadPositions">导出当前持仓 CSV</button><button class="cy-button" @click="emit('navigate', 'data')">日常流水导入与导出</button></div></section><section class="cy-panel"><h2>使用后的资产变化</h2><p class="cy-field-note">仅显示当时实际保存的估值。修订交易后失效的记录保留缺口，不用今天的持仓补造历史。</p><p v-if="!snapshots.length" class="cy-empty">尚无历史估值记录，开始使用后逐步积累。</p><div v-for="snapshot in recentSnapshots" :key="snapshot.id" class="cy-cash-row"><span>{{ date(snapshot.recordedAt) }}</span><div class="cy-align-end"><strong>{{ snapshot.invalidated ? '待重建 / 缺少历史价格' : money(snapshot.netAssets ?? snapshot.valuedAssets) }}</strong><small>{{ snapshot.invalidated ? '历史修订后失效' : snapshot.complete ? '完整估值' : '部分估值' }}</small></div></div></section></template>
     </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, useTemplateRef, watch } from 'vue';
 import Decimal from 'decimal.js';
+import BookPicker from '@/components/mobile/BookPicker.vue';
+import InstrumentSearch from '@/components/InstrumentSearch.vue';
+import { useBooksStore } from '@/stores/books.ts';
+import { useLedgerScopeStore } from '@/stores/ledgerScope.ts';
 import moment from 'moment-timezone';
 import { investments, investmentError } from '@/lib/investments.ts';
 import { generateRandomUUID } from '@/lib/misc.ts';
@@ -102,9 +107,11 @@ const dailyAccountsStore = useAccountsStore();
 const dailyTransactionsStore = useTransactionsStore();
 const dailyOverviewStore = useOverviewStore();
 const dailyStatisticsStore = useStatisticsStore();
-const emit = defineEmits<{ navigate: [destination: 'accounts' | 'data'] }>();
+const props = defineProps<{ editorOnly?: boolean; initialTab?: 'overview' | 'history' }>();
+const emit = defineEmits<{ navigate: [destination: 'accounts' | 'data']; changed: []; close: [] }>();
+const books = useBooksStore(), ledgerScope = useLedgerScopeStore();
 const tabs = [{ key: 'overview', name: '资产总览' }, { key: 'history', name: '投资流水' }, { key: 'accounts', name: '账户与资产' }, { key: 'settings', name: '设置与数据' }];
-const tab = ref('overview');
+const tab = ref<string>(props.initialTab || 'overview');
 const groupBy = ref('account');
 const summary = ref<WealthSummary | null>(null);
 const accounts = ref<InvestmentAccount[]>([]);
@@ -120,23 +127,23 @@ const editorElement = useTemplateRef<HTMLElement>('editorElement');
 const eventNames: Record<InvestmentEventType, string> = { OPENING: '期初持仓', BUY: '买入', SELL: '卖出', TRANSFER: '账户间转移' };
 const typeNames: Record<string, string> = { CRYPTO: '加密资产', STOCK: '股票', FUND: '基金', OTHER: '其他资产' };
 const accountKinds: Record<string, string> = { EXCHANGE: '交易所', WALLET: '个人钱包', BROKER: '证券账户', OTHER: '其他' };
-const editorTitle = computed(() => ({ event: draft.id ? '修订投资流水' : '记录投资', account: '创建投资账户', instrument: '创建私人资产', quote: '填写手动报价', void: '撤销投资流水' }[editor.value] || ''));
-async function initializeSettings(initial?: InvestmentSettings): Promise<void> { const stored = initial || await investments.settings(); if (stored.timeZone) Object.assign(settings, stored); else Object.assign(settings, await investments.saveSettings({ ...settings })); settingsInitialized = true; }
-function freshEvent(): InvestmentEvent { return { id: '', type: 'OPENING', accountId: '', instrumentId: '', toAccountId: '', quantity: '', amount: '0', fee: '0', cost: null, settlementInstrumentId: '', settlementAccountId: '', cashAccountId: '', exchangeRate: '1', occurredAt: 0, note: '', version: 0, voided: false }; }
-const draft = reactive<InvestmentEvent>(freshEvent());
+const editorTitle = computed(() => ({ event: draft.id ? '修订投资流水' : '记录投资', account: accountDraft.id ? '编辑投资账户' : '创建投资账户', instrument: '创建私人资产', quote: '填写手动报价', void: '撤销投资流水' }[editor.value] || ''));
+async function initializeSettings(initial?: InvestmentSettings): Promise<void> { const stored = initial || await investments.settings(); if (stored.timeZone) Object.assign(settings, stored); else Object.assign(settings, await investments.saveSettings({ ...settings, timeZone: ledgerScope.timeZone })); settingsInitialized = true; }
+function freshEvent(): InvestmentEvent { return { id: '', bookId: books.defaultBookId, type: 'OPENING', accountId: '', instrumentId: '', toAccountId: '', quantity: '', amount: '0', fee: '0', cost: null, settlementInstrumentId: '', settlementAccountId: '', cashAccountId: '', exchangeRate: '1', occurredAt: 0, note: '', version: 0, voided: false }; }
+const draft = reactive<InvestmentEvent & {bookId: string}>({...freshEvent(), bookId: books.defaultBookId});
 const costInput = ref(''), eventTime = ref(''), settlementMode = ref('cash');
 const preview = ref<InvestmentPreview | null>(null);
 const idempotencyKey = ref('');
 const localDraftKey = `cyledger_investment_draft:${getCurrentUserInfo()?.username || ''}`;
 const hasLocalDraft = ref(!!localStorage.getItem(localDraftKey));
 const voidCandidate = ref<InvestmentEvent | null>(null);
-const accountDraft = reactive({ name: '', kind: 'EXCHANGE' });
+const accountDraft = reactive({ id:'', name: '', kind: 'EXCHANGE' });
 const instrumentDraft = reactive({ name: '', symbol: '', type: 'STOCK' });
 const quoteDraft = reactive({ instrumentId: '', price: '' });
 const quoteTime = ref('');
 const cashAccounts = computed(() => summary.value?.cashAccounts || []);
 const positions = computed(() => (summary.value?.positions || []).filter(position => new DecimalValue(position.quantity).gt(0)));
-const sortedEvents = computed(() => [...events.value].sort((a, b) => b.occurredAt - a.occurredAt));
+const sortedEvents = computed(() => events.value.filter(event => !books.selectedBookIds.length || books.selectedBookIds.includes(event.bookId || '')).sort((a, b) => b.occurredAt - a.occurredAt));
 const recentSnapshots = computed(() => [...snapshots.value].sort((a, b) => b.recordedAt - a.recordedAt).slice(0, 30));
 const selectedInstrument = computed(() => instrumentsList.value.find(item => item.id === draft.instrumentId));
 const settlementUnit = computed(() => settlementMode.value === 'asset' ? instrumentSymbol(draft.settlementInstrumentId) : cashAccounts.value.find(item => item.id === draft.cashAccountId)?.currency || 'CNY');
@@ -196,9 +203,9 @@ function accountName(id: string): string { return accounts.value.find(item => it
 function instrumentName(id: string): string { return instrumentsList.value.find(item => item.id === id)?.name || id; }
 function instrumentSymbol(id: string): string { return instrumentsList.value.find(item => item.id === id)?.symbol || '资产'; }
 function quoteState(position: InvestmentPosition): string { if (!position.quote) return '暂时无法估值'; if (position.quote.fxState === 'stale') return '估值汇率过期'; if (!position.quote.fxRate) return '缺少估值汇率'; const state = position.quote.state.toUpperCase(); return ({ LIVE: '实时参考报价', REALTIME: '实时参考报价', FRESH: '实时参考报价', DELAYED: '延迟参考报价', MANUAL: '手动估值', STALE: '行情过期', UNAVAILABLE: '暂时无法估值', MISSING: '暂时无法估值' } as Record<string, string>)[state] || '参考报价'; }
-function validDecimal(value: string, label: string, allowZero = true): void { if (!/^\d+(\.\d{1,18})?$/.test(value) || (!allowZero && new DecimalValue(value).lte(0))) throw new Error(`${label}应为${allowZero ? '非负' : '大于零的'}十进制数字，最多 18 位小数`); }
+function validDecimal(value: string, label: string, allowZero = true): void { if (value.length > 80) throw new Error(`${label}过长`); if (!/^\d+(\.\d{1,18})?$/.test(value) || (!allowZero && new DecimalValue(value).lte(0))) throw new Error(`${label}应为${allowZero ? '非负' : '大于零的'}十进制数字，最多 18 位小数`); }
 function parseTime(value: string): number { const parsed = moment.tz(value, 'YYYY-MM-DDTHH:mm', true, settings.timeZone); if (!parsed.isValid()) throw new Error('请选择有效的发生时间'); return parsed.unix(); }
-async function load(): Promise<void> { if (loading.value) return; loading.value = true; error.value = ''; try { const result = await Promise.all([investments.summary(), investments.accounts(), investments.instruments(), investments.events(), investments.settings(), investments.history()]); summary.value = result[0]; accounts.value = result[1]; instrumentsList.value = result[2]; events.value = result[3]; await initializeSettings(result[4]); snapshots.value = result[5]; } catch (cause) { error.value = investmentError(cause); } finally { loading.value = false; } }
+async function load(): Promise<void> { if (loading.value) return; loading.value = true; error.value = ''; try { const result = await Promise.all([investments.summary(), investments.accounts(), investments.instruments(), investments.events(), investments.settings(), investments.history(), books.loadBooks()]); summary.value = result[0]; accounts.value = result[1]; instrumentsList.value = result[2]; events.value = result[3]; await initializeSettings(result[4]); snapshots.value = result[5]; } catch (cause) { error.value = investmentError(cause); } finally { loading.value = false; } }
 async function openEditor(value: string): Promise<void> { editor.value = value; editorError.value = ''; notice.value = ''; await nextTick(); editorElement.value?.focus({ preventScroll: true }); editorElement.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 function closeEditor(): void { if (saving.value) return; editor.value = ''; preview.value = null; editorError.value = ''; }
 function openEvent(type: InvestmentEventType = 'OPENING', position?: InvestmentPosition): void { Object.assign(draft, freshEvent(), { type, exchangeRate: type === 'TRANSFER' ? '' : '1', accountId: position?.accountId || accounts.value[0]?.id || '', instrumentId: position?.instrumentId || instrumentsList.value[0]?.id || '' }); costInput.value = ''; eventTime.value = nowLocal(); settlementMode.value = 'cash'; preview.value = null; idempotencyKey.value = generateRandomUUID(); void openEditor('event'); }
@@ -206,10 +213,10 @@ function reviseEvent(event: InvestmentEvent): void { Object.assign(draft, freshE
 function openQuote(instrumentId?: string): void { quoteDraft.instrumentId = instrumentId || instrumentsList.value[0]?.id || ''; quoteDraft.price = ''; quoteTime.value = nowLocal(); void openEditor('quote'); }
 function askVoid(event: InvestmentEvent): void { voidCandidate.value = event; void openEditor('void'); }
 async function previewEvent(): Promise<void> { saving.value = true; editorError.value = ''; try { if (!settingsInitialized) await initializeSettings(); validDecimal(draft.quantity, '数量', false); if (draft.type === 'TRANSFER' && draft.exchangeRate) validDecimal(draft.exchangeRate, '参考单价', false); validDecimal(draft.fee, '手续费'); if (['BUY', 'SELL'].includes(draft.type)) { validDecimal(draft.amount, '成交金额', false); validDecimal(draft.exchangeRate, '折算率', false); } if (draft.type === 'OPENING' && costInput.value) validDecimal(costInput.value, '成本'); draft.cost = draft.type === 'OPENING' && costInput.value ? costInput.value : null; draft.occurredAt = parseTime(eventTime.value); if (!['BUY', 'SELL'].includes(draft.type)) { draft.cashAccountId = ''; draft.settlementAccountId = ''; draft.settlementInstrumentId = ''; draft.amount = '0'; if (draft.type === 'OPENING') draft.exchangeRate = '1'; } else if (settlementMode.value === 'cash') { draft.settlementAccountId = ''; draft.settlementInstrumentId = ''; } else { draft.cashAccountId = ''; } if (draft.type !== 'TRANSFER') draft.toAccountId = ''; if (draft.type === 'OPENING') draft.fee = '0'; preview.value = await investments.preview({ ...draft }); } catch (cause) { editorError.value = investmentError(cause); } finally { saving.value = false; } }
-async function mutation(action: () => Promise<unknown>, message: string): Promise<void> { if (saving.value) return; saving.value = true; editorError.value = ''; error.value = ''; try { await action(); notice.value = message; saving.value = false; closeEditor(); await load(); } catch (cause) { if (editor.value) editorError.value = investmentError(cause); else error.value = investmentError(cause); } finally { saving.value = false; } }
+async function mutation(action: () => Promise<unknown>, message: string): Promise<void> { if (saving.value) return; saving.value = true; editorError.value = ''; error.value = ''; try { await action(); notice.value = message; saving.value = false; closeEditor(); await load(); emit('changed'); } catch (cause) { if (editor.value) editorError.value = investmentError(cause); else error.value = investmentError(cause); } finally { saving.value = false; } }
 function invalidateDailyData(): void { dailyAccountsStore.updateAccountListInvalidState(true); dailyTransactionsStore.updateTransactionListInvalidState(true); dailyTransactionsStore.updateTransactionReconciliationStatementInvalidState(true); dailyOverviewStore.updateTransactionOverviewInvalidState(true); dailyStatisticsStore.updateTransactionStatisticsInvalidState(true); }
 function saveEvent(): Promise<void> { return mutation(async () => { await investments.saveEvent({ ...draft }, idempotencyKey.value); invalidateDailyData(); discardLocalDraft(); }, draft.id ? '投资流水已修订，持仓与成本已重新计算。' : '投资流水已入账。'); }
-function createAccount(): Promise<void> { return mutation(async () => { await investments.createAccount(accountDraft.name.trim(), accountDraft.kind); accountDraft.name = ''; }, '投资账户已创建。'); }
+function createAccount(): Promise<void> { return mutation(async () => { if(accountDraft.id)await investments.updateAccount({...accountDraft});else await investments.createAccount(accountDraft.name.trim(), accountDraft.kind); accountDraft.name = ''; }, accountDraft.id?'账户已保存。':'投资账户已创建。'); }
 function createInstrument(): Promise<void> { return mutation(async () => { await investments.createInstrument({ ...instrumentDraft, name: instrumentDraft.name.trim(), symbol: instrumentDraft.symbol.trim() }); instrumentDraft.name = ''; instrumentDraft.symbol = ''; }, '私人资产已创建，可录入持仓与手动报价。'); }
 function saveQuote(): Promise<void> { return mutation(async () => { validDecimal(quoteDraft.price, '价格', false); await investments.manualQuote(quoteDraft.instrumentId, quoteDraft.price, parseTime(quoteTime.value)); }, '手动报价已保存。'); }
 function restoreAutomaticQuote(): Promise<void> { return mutation(() => investments.automaticQuote(quoteDraft.instrumentId), '已移除手动报价。支持的资产将使用自动行情；不支持的资产显示为暂未估值。'); }
@@ -244,9 +251,32 @@ function downloadPositions(): void {
 }
 watch(() => draft.type, () => { preview.value = null; });
 let timer: ReturnType<typeof setInterval> | undefined;
-onMounted(() => { void load(); timer = setInterval(async () => { if (document.hidden || saving.value || loading.value || editor.value) return; try { summary.value = await investments.summary(); } catch (cause) { error.value = investmentError(cause); } }, 10000); });
+onMounted(() => { if (props.editorOnly) return; void load(); timer = setInterval(async () => { if (document.hidden || saving.value || loading.value || editor.value) return; try { summary.value = await investments.summary(); } catch (cause) { error.value = investmentError(cause); } }, 10000); });
 onUnmounted(() => { if (timer) clearInterval(timer); });
-defineExpose({ reload: load });
+async function instrumentSaved(): Promise<void> { await load(); closeEditor(); emit('changed'); }
+let requestedEditor: [string,string?,string?,string?,string?] | null = null;
+async function retryLoad(): Promise<void> { if (props.editorOnly && requestedEditor) await startEditor(...requestedEditor); else await load(); }
+async function startEditor(action: string, instrumentId?: string, accountId?: string, eventId?: string, accountKind?: string): Promise<void> {
+    requestedEditor = [action,instrumentId,accountId,eventId,accountKind];
+    if (action === 'account' && accountKind && accountKinds[accountKind]) accountDraft.kind = accountKind;
+    await load();
+    if (error.value) return;
+    if(action==='account' && accountId){const account=accounts.value.find(a=>a.id===accountId);if(!account){error.value='找不到这个投资账户';return;}Object.assign(accountDraft,{id:account.id,name:account.name,kind:account.kind});}
+    if (action === 'quote') { openQuote(instrumentId); return; }
+    if (action === 'account' || action === 'instrument') { await openEditor(action); return; }
+    if (action === 'revise' || action === 'void') {
+        const event = events.value.find(item => item.id === eventId);
+        if (!event) { error.value = '找不到这条投资流水，请返回刷新。'; return; }
+        if (action === 'revise') reviseEvent(event); else askVoid(event);
+        return;
+    }
+    if (!['OPENING','BUY','SELL','TRANSFER'].includes(action)) { error.value='不支持的投资操作。'; return; }
+    const position = positions.value.find(item => item.instrumentId === instrumentId && item.accountId === accountId);
+    openEvent(action as InvestmentEventType, position);
+    if (instrumentId && instrumentsList.value.some(item => item.id === instrumentId)) draft.instrumentId = instrumentId;
+    if (accountId && accounts.value.some(item => item.id === accountId)) draft.accountId = accountId;
+}
+defineExpose({ reload: load, startEditor });
 </script>
 
 <style scoped>

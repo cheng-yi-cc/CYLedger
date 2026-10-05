@@ -233,6 +233,9 @@ func (a *DataManagementsApi) ClearAllDataHandler(c *core.WebContext) (any, *errs
 		return nil, errs.Or(err, errs.ErrOperationFailed)
 	}
 
+	if err = services.Calendar.DeleteAll(c, uid); err != nil {
+		return nil, errs.Or(err, errs.ErrOperationFailed)
+	}
 	log.Infof(c, "[data_managements.ClearAllDataHandler] user \"uid:%d\" has cleared all data", uid)
 	return true, nil
 }
@@ -353,6 +356,10 @@ func (a *DataManagementsApi) getExportedFileContent(c *core.WebContext, fileType
 	}
 
 	uid := c.GetCurrentUid()
+	queryContext, bookErr := services.Books.FilterContext(c, uid, c.Query("book_ids"))
+	if bookErr != nil {
+		return nil, "", errs.Or(bookErr, errs.ErrOperationFailed)
+	}
 	user, err := a.users.GetUserById(c, uid)
 
 	if err != nil {
@@ -436,7 +443,7 @@ func (a *DataManagementsApi) getExportedFileContent(c *core.WebContext, fileType
 		minTransactionTime = utils.GetMinTransactionTimeFromUnixTime(exportTransactionDataReq.MinTime)
 	}
 
-	allTransactions, err := a.transactions.GetAllSpecifiedTransactions(c, uid, maxTransactionTime, minTransactionTime, exportTransactionDataReq.Type, allCategoryIds, allAccountIds, tagFilters, noTags, exportTransactionDataReq.AmountFilter, exportTransactionDataReq.Keyword, exportTransactionDataReq.MatchMode, false, pageCountForDataExport, true)
+	allTransactions, err := a.transactions.GetAllSpecifiedTransactions(queryContext, uid, maxTransactionTime, minTransactionTime, exportTransactionDataReq.Type, allCategoryIds, allAccountIds, tagFilters, noTags, exportTransactionDataReq.AmountFilter, exportTransactionDataReq.Keyword, exportTransactionDataReq.MatchMode, false, pageCountForDataExport, true)
 
 	if err != nil {
 		log.Errorf(c, "[data_managements.getExportedFileContent] failed to all transactions user \"uid:%d\", because %s", uid, err.Error())

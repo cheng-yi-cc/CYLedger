@@ -1,6 +1,8 @@
 <template>
     <main-page-layout>
         <template #nav-items>
+            <BookScopeControl :disabled="loading" @change="currentPage = 1; reload(true, false)" />
+            <BookMoveControl :transactions="currentPageTransactions" :disabled="loading" @moved="currentPage = 1; reload(false, false)" />
             <div class="mb-2">
                 <btn-vertical-group :disabled="loading" :buttons="TransactionListPageType.values().map(item => {
                     return {
@@ -578,7 +580,7 @@
                                         </div>
                                     </td>
                                     <td class="transaction-table-column-amount" :class="{ 'text-expense': transaction.type === TransactionType.Expense, 'text-income': transaction.type === TransactionType.Income }">
-                                        <div v-if="transaction.sourceAccount">
+                                        <div v-if="transaction.sourceAccount || (transaction.investmentEventId && transaction.destinationAccount)">
                                             <span>{{ getDisplayAmount(transaction) }}</span>
                                             <v-tooltip activator="parent" v-if="!transaction.hideAmount && getDisplayAmountCurrency(transaction) !== userDefaultCurrency">
                                                 {{ getDisplayAmount(transaction, true) }}
@@ -588,6 +590,7 @@
                                     <td class="transaction-table-column-account">
                                         <div class="d-flex align-center">
                                             <span v-if="transaction.sourceAccount">{{ transaction.sourceAccount.name }}</span>
+                                            <span v-else-if="transaction.investmentEventId && transaction.destinationAccount">{{ transaction.destinationAccount.name }}</span>
                                             <v-icon class="icon-with-direction mx-1" size="13" :icon="mdiArrowRight" v-if="transaction.sourceAccount && transaction.type === TransactionType.Transfer && transaction.destinationAccount && transaction.sourceAccount.id !== transaction.destinationAccount.id"></v-icon>
                                             <span v-if="transaction.sourceAccount && transaction.type === TransactionType.Transfer && transaction.destinationAccount && transaction.sourceAccount.id !== transaction.destinationAccount.id">{{ transaction.destinationAccount.name }}</span>
                                         </div>
@@ -702,6 +705,8 @@
 <script setup lang="ts">
 import { VMenu } from 'vuetify/components/VMenu';
 import PaginationButtons from '@/components/desktop/PaginationButtons.vue';
+import BookScopeControl from '@/components/common/BookScopeControl.vue';
+import BookMoveControl from '@/components/common/BookMoveControl.vue';
 import ConfirmDialog from '@/components/desktop/ConfirmDialog.vue';
 import SnackBar from '@/components/desktop/SnackBar.vue';
 import EditDialog from './list/dialogs/EditDialog.vue';
@@ -1307,6 +1312,7 @@ function reload(force: boolean, init: boolean): void {
         }
     }).catch(error => {
         loading.value = false;
+        if (error.isStaleScope) return;
         currentPageTransactions.value = [];
         totalCount.value = 1;
 
@@ -1750,6 +1756,11 @@ function exportTransactions(fileExtension: string): void {
 }
 
 function show(transaction: Transaction): void {
+    if (transaction.investmentEventId) {
+        void router.push({ path: '/investments', query: { view: 'history', fromTransaction: '1' } });
+        return;
+    }
+
     editDialog.value?.open({
         id: transaction.id,
         currentTransaction: transaction

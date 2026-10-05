@@ -21,6 +21,7 @@ import {
 } from './category.ts';
 
 export interface SetTransactionOptions {
+    bookId?: string;
     time?: number;
     type?: number;
     categoryId?: string;
@@ -43,6 +44,7 @@ export function* allTransactionPictures(transactions: Transaction[]): Iterable<[
 }
 
 export function setTransactionModelByTransaction(transaction: Transaction, transaction2: Transaction | null | undefined, allCategories: Record<number, TransactionCategory[]>, allCategoriesMap: Record<string, TransactionCategory>, allVisibleAccounts: Account[], allAccountsMap: Record<string, Account>, allTagsMap: Record<string, TransactionTag>, defaultAccountId: string, options: SetTransactionOptions, setContextData: boolean): void {
+    if (options.bookId) transaction.bookId = options.bookId;
     if (isDefined(options.time)) {
         transaction.time = options.time;
         transaction.utcOffset = getTimezoneOffsetMinutes(transaction.time, transaction.timeZone);
@@ -169,6 +171,11 @@ export function setTransactionModelByTransaction(transaction: Transaction, trans
     }
 
     if (transaction2) {
+        transaction.bookId = transaction2.bookId || transaction.bookId;
+        transaction.excludeFromStatistics = transaction2.excludeFromStatistics;
+        transaction.reimbursementAccountId = transaction2.reimbursementAccountId;
+        transaction.reimbursementReceiptId = setContextData ? transaction2.reimbursementReceiptId : '';
+        transaction.reimbursementClosedAt = setContextData ? transaction2.reimbursementClosedAt : 0;
         if (setContextData) {
             transaction.id = transaction2.id;
         }

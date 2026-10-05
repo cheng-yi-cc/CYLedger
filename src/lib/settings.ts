@@ -1,4 +1,5 @@
 import { keys } from '@/core/base.ts';
+import { isNativePersonalMode } from './native.ts';
 
 import type {
     ApplicationSettingKey,
@@ -36,7 +37,12 @@ export function getApplicationSettings(): ApplicationSettings {
         }
     }
 
-    return Object.assign({}, DEFAULT_APPLICATION_SETTINGS, storedApplicationSettings);
+    const settings = Object.assign({}, DEFAULT_APPLICATION_SETTINGS, storedApplicationSettings);
+    if (isNativePersonalMode()) {
+        settings.applicationLock = false;
+        settings.applicationLockWebAuthn = false;
+    }
+    return settings;
 }
 
 export function getLocaleDefaultSettings(): LocaleDefaultSettings {

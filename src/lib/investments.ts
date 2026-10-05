@@ -1,24 +1,33 @@
 import axios from 'axios';
+import type { AccountDeletionTarget, AccountDeletionPreview } from '@/models/investment.ts';
 import '@/lib/services.ts'; // Reuse the application's authentication, API root and token refresh.
 import type { ApiResponse } from '@/core/api.ts';
-import type { InvestmentAccount, Instrument, InvestmentEvent, InvestmentSettings, InvestmentPosition, InvestmentPreview, WealthSummary, WealthSnapshot } from '@/models/investment.ts';
+import type { InvestmentAccount, Instrument, InstrumentBinding, InstrumentCandidate, InvestmentEvent, InvestmentSettings, InvestmentPosition, InvestmentPreview, InvestmentQuote, WealthSummary, WealthSnapshot, ConversionInput, InvestmentConversion } from '@/models/investment.ts';
 
-async function request<T>(method: 'get' | 'post', path: string, data?: unknown, key?: string): Promise<T> {
+async function request<T>(method: 'get' | 'post', path: string, data?: unknown, key?: string, timeout?: number): Promise<T> {
     const response = await axios.request<ApiResponse<T> & { errorMessage?: string; error?: string }>({
-        method, url: `v1/${path}`, data, headers: key ? { 'Idempotency-Key': key } : undefined
+        method, url: `v1/${path}`, data, headers: key ? { 'Idempotency-Key': key } : undefined, ...(timeout ? { timeout } : {})
     });
     if (!response.data.success) throw new Error(response.data.errorMessage || response.data.error || '请求失败，请稍后重试');
     return response.data.result;
 }
 
 export const investments = {
+    previewAccountDeletion: (target: AccountDeletionTarget) => request<AccountDeletionPreview>('post', 'wealth/accounts/delete/preview', target),
+    deleteAccount: (target: AccountDeletionTarget, token: string, deleteRelated: boolean) => request<AccountDeletionPreview>('post', 'wealth/accounts/delete', { ...target, token, deleteRelated }),
     accounts: () => request<InvestmentAccount[]>('get', 'investments/accounts'),
     createAccount: (name: string, kind: string) => request<InvestmentAccount>('post', 'investments/accounts', { name, kind }),
+    updateAccount: (data:InvestmentAccount) => request<InvestmentAccount>('post','investments/accounts/update',data),
+    createCryptoAccount: (data: { name:string; kind:string; platform:string; bookId:string; holdings:{instrumentId:string;quantity:string}[] }, key:string) => request<InvestmentAccount>('post', 'investments/accounts/crypto',data,key),
+    conversion: (data:ConversionInput) => request<InvestmentConversion>('post','investments/conversion',data,undefined,45000),
     instruments: () => request<Instrument[]>('get', 'investments/instruments'),
-    createInstrument: (data: { name: string; symbol: string; type: string }) => request<Instrument>('post', 'investments/instruments', data),
+    createInstrument: (data: { name: string; symbol: string; type: string } & Partial<InstrumentBinding>) => request<Instrument>('post', 'investments/instruments', data),
+    searchInstruments: (query: string, market = '') => request<InstrumentCandidate[]>('get', `investments/instruments/search?q=${encodeURIComponent(query)}&market=${encodeURIComponent(market)}`),
+    bindInstrument: (instrumentId: string, binding: InstrumentBinding) => request<Instrument>('post', 'investments/instruments/bind', { instrumentId, ...binding }),
     settings: () => request<InvestmentSettings>('get', 'investments/settings'),
     saveSettings: (data: InvestmentSettings) => request<InvestmentSettings>('post', 'investments/settings', data),
     positions: () => request<InvestmentPosition[]>('get', 'investments/positions'),
+    quotes: () => request<InvestmentQuote[]>('get', 'investments/quotes'),
     events: () => request<InvestmentEvent[]>('get', 'investments/events'),
     preview: (data: InvestmentEvent) => request<InvestmentPreview>('post', 'investments/events/preview', data),
     saveEvent: (data: InvestmentEvent, key: string) => data.id

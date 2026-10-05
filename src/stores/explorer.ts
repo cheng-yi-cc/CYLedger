@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
+import { useBooksStore } from './books.ts';
 
 import { useSettingsStore } from './setting.ts';
 import { useUserStore } from './user.ts';
@@ -1648,12 +1649,18 @@ export const useExplorersStore = defineStore('explorers', () => {
     }
 
     function loadAllTransactions({ force }: { force: boolean }): Promise<TransactionInfoResponse[]> {
+        const isCurrentBookScope = useBooksStore().captureReportScope();
         return new Promise((resolve, reject) => {
             services.getAllTransactions({
                 startTime: transactionExplorerFilter.value.startTime,
                 endTime: transactionExplorerFilter.value.endTime,
                 withPictures: true
             }).then(response => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 const data = response.data;
 
                 if (!data || !data.success || !data.result) {
@@ -1674,6 +1681,11 @@ export const useExplorersStore = defineStore('explorers', () => {
 
                 resolve(data.result);
             }).catch(error => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 logger.error('failed to load all transactions', error);
 
                 if (error.response && error.response.data && error.response.data.errorMessage) {

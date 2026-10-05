@@ -1,11 +1,25 @@
 import type { Router } from 'framework7/types';
 
 import { isUserLogined, isUserUnlocked } from '@/lib/userstate.ts';
+import { isNativePersonalMode } from '@/lib/native.ts';
 
 import HomePage from '@/views/mobile/HomePage.vue';
 import InvestmentPage from '@/views/mobile/InvestmentPage.vue';
+import AssetToolsPage from '@/views/mobile/AssetToolsPage.vue';
+import DebtPage from '@/views/mobile/DebtPage.vue';
+import ReimbursementPage from '@/views/mobile/ReimbursementPage.vue';
+import InvestmentManagePage from '@/views/mobile/InvestmentManagePage.vue';
+import InvestmentPositionPage from '@/views/mobile/InvestmentPositionPage.vue';
+import InvestmentRecordPage from '@/views/mobile/InvestmentRecordPage.vue';
+import CryptoAccountPage from '@/views/mobile/CryptoAccountPage.vue';
+import CryptoAccountDetailPage from '@/views/mobile/CryptoAccountDetailPage.vue';
+import CryptoConvertPage from '@/views/mobile/CryptoConvertPage.vue';
 import InvestmentDetailPage from '@/views/mobile/InvestmentDetailPage.vue';
 import LedgerMonthPage from '@/views/mobile/LedgerMonthPage.vue';
+import CalendarSettingsPage from '@/views/mobile/CalendarSettingsPage.vue';
+import CalendarDuePage from '@/views/mobile/CalendarDuePage.vue';
+import LedgerDetailsPage from '@/views/mobile/LedgerDetailsPage.vue';
+import BooksPage from '@/views/mobile/BooksPage.vue';
 import StatisticsOverviewPage from '@/views/mobile/StatisticsOverviewPage.vue';
 import LoginPage from '@/views/mobile/LoginPage.vue';
 import SignUpPage from '@/views/mobile/SignupPage.vue';
@@ -17,6 +31,11 @@ import TransactionAmountFilterPage from '@/views/mobile/transactions/AmountFilte
 
 import AccountListPage from '@/views/mobile/accounts/ListPage.vue';
 import AccountEditPage from '@/views/mobile/accounts/EditPage.vue';
+import AccountDetailPage from '@/views/mobile/accounts/DetailPage.vue';
+import CreditPage from '@/views/mobile/accounts/CreditPage.vue';
+import InstallmentPage from '@/views/mobile/accounts/InstallmentPage.vue';
+import AccountActivityPage from '@/views/mobile/accounts/ActivityPage.vue';
+import MonetaryIncomePage from '@/views/mobile/accounts/MonetaryIncomePage.vue';
 import AccountReconciliationStatementPage from '@/views/mobile/accounts/ReconciliationStatementPage.vue';
 import AccountMoveAllTransactionsPage from '@/views/mobile/accounts/MoveAllTransactionsPage.vue';
 
@@ -108,6 +127,11 @@ function checkLocked({ router, resolve, reject }: { router: Router.Router, resol
 }
 
 function checkNotLogin({ router, resolve, reject }: { router: Router.Router, resolve: () => void, reject: () => void }): void {
+    if (isNativePersonalMode()) {
+        reject();
+        window.location.replace('/personal');
+        return;
+    }
     if (isUserLogined() && !isUserUnlocked()) {
         reject();
         router.navigate('/unlock', {
@@ -130,23 +154,44 @@ function checkNotLogin({ router, resolve, reject }: { router: Router.Router, res
 }
 
 const routes: Router.RouteParameters[] = [
+    { path: '/assets/debts', async: asyncResolve(DebtPage), beforeEnter: [checkLogin] },
+    { path: '/account/debt', async: asyncResolve(DebtPage), beforeEnter: [checkLogin] },
+    { path: '/assets/reimbursements', async: asyncResolve(ReimbursementPage), beforeEnter: [checkLogin] },
+    { path: '/account/detail', async: asyncResolve(AccountDetailPage), beforeEnter: [checkLogin] },
+    { path: '/account/credit', async: asyncResolve(CreditPage), beforeEnter: [checkLogin] },
+    { path: '/account/installments', async: asyncResolve(InstallmentPage), beforeEnter: [checkLogin] },
+    { path: '/account/activity', async: asyncResolve(AccountActivityPage), beforeEnter: [checkLogin] },
+    { path: '/investments/manage', async: asyncResolve(InvestmentManagePage), beforeEnter: [checkLogin] },
+    { path: '/investments/position', async: asyncResolve(InvestmentPositionPage), beforeEnter: [checkLogin] },
+    { path: '/crypto/add', async: asyncResolve(CryptoAccountPage), beforeEnter: [checkLogin] },
+    { path: '/crypto/account', async: asyncResolve(CryptoAccountDetailPage), beforeEnter: [checkLogin] },
+    { path: '/crypto/convert', async: asyncResolve(CryptoConvertPage), beforeEnter: [checkLogin] },
+    { path: '/investments/record', async: asyncResolve(InvestmentRecordPage), beforeEnter: [checkLogin] },
+    { path: '/ledger/details', async: asyncResolve(LedgerDetailsPage), beforeEnter: [checkLogin] },
+    { path: '/books', async: asyncResolve(BooksPage), beforeEnter: [checkLogin] },
+    { path: '/calendar/settings', async: asyncResolve(CalendarSettingsPage), beforeEnter: [checkLogin] },
+    { path: '/calendar/due', async: asyncResolve(CalendarDuePage), beforeEnter: [checkLogin] },
+    { path: '/assets/tool', async: asyncResolve(AssetToolsPage), beforeEnter: [checkLogin] },
     {
         path: '/',
         async: asyncResolve(LedgerMonthPage),
         beforeEnter: [checkLogin],
         options: {
             animate: false,
+            clearPreviousHistory: true,
         }
     },
     {
         path: '/calendar',
         async: asyncResolve(LedgerMonthPage),
-        beforeEnter: [checkLogin]
+        beforeEnter: [checkLogin],
+        options: { animate: false, clearPreviousHistory: true }
     },
     {
         path: '/statistics',
         async: asyncResolve(StatisticsOverviewPage),
-        beforeEnter: [checkLogin]
+        beforeEnter: [checkLogin],
+        options: { animate: false, clearPreviousHistory: true }
     },
     {
         path: '/investments/ledger',
@@ -156,7 +201,8 @@ const routes: Router.RouteParameters[] = [
     {
         path: '/investments',
         async: asyncResolve(InvestmentPage),
-        beforeEnter: [checkLogin]
+        beforeEnter: [checkLogin],
+        options: { animate: false, clearPreviousHistory: true }
     },
     {
         path: '/overview',
@@ -225,6 +271,11 @@ const routes: Router.RouteParameters[] = [
     {
         path: '/account/edit',
         async: asyncResolve(AccountEditPage),
+        beforeEnter: [checkLogin]
+    },
+    {
+        path: '/account/income',
+        async: asyncResolve(MonetaryIncomePage),
         beforeEnter: [checkLogin]
     },
     {
@@ -300,7 +351,8 @@ const routes: Router.RouteParameters[] = [
     {
         path: '/settings',
         async: asyncResolve(SettingsPage),
-        beforeEnter: [checkLogin]
+        beforeEnter: [checkLogin],
+        options: { animate: false, clearPreviousHistory: true }
     },
     {
         path: '/app_lock',
@@ -403,4 +455,4 @@ const routes: Router.RouteParameters[] = [
     }
 ];
 
-export default routes;
+export default isNativePersonalMode() ? routes.filter(route => route.path !== '/signup') : routes;

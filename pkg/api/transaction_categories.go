@@ -1,7 +1,9 @@
 package api
 
 import (
+	"slices"
 	"sort"
+	"strings"
 
 	"github.com/gin-gonic/gin/binding"
 
@@ -97,6 +99,10 @@ func (a *TransactionCategoriesApi) CategoryCreateHandler(c *core.WebContext) (an
 	if categoryCreateReq.Type < models.CATEGORY_TYPE_INCOME || categoryCreateReq.Type > models.CATEGORY_TYPE_TRANSFER {
 		log.Warnf(c, "[transaction_categories.CategoryCreateHandler] category type invalid, type is %d", categoryCreateReq.Type)
 		return nil, errs.ErrTransactionCategoryTypeInvalid
+	}
+	categoryCreateReq.BookIds, err = normalizeCategoryBookIds(c, c.GetCurrentUid(), categoryCreateReq.BookIds)
+	if err != nil {
+		return nil, errs.Or(err, errs.ErrOperationFailed)
 	}
 
 	uid := c.GetCurrentUid()
@@ -228,6 +234,14 @@ func (a *TransactionCategoriesApi) CategoryModifyHandler(c *core.WebContext) (an
 		Color:            categoryModifyReq.Color,
 		Comment:          categoryModifyReq.Comment,
 		Hidden:           categoryModifyReq.Hidden,
+		BookIds:          append([]string{}, category.BookIds...),
+	}
+	// Legacy clients omit this field; only an explicit array changes visibility.
+	if categoryModifyReq.BookIds != nil {
+		newCategory.BookIds, err = normalizeCategoryBookIds(c, uid, categoryModifyReq.BookIds)
+		if err != nil {
+			return nil, errs.Or(err, errs.ErrOperationFailed)
+		}
 	}
 
 	if newCategory.ParentCategoryId == category.ParentCategoryId &&
@@ -236,7 +250,7 @@ func (a *TransactionCategoriesApi) CategoryModifyHandler(c *core.WebContext) (an
 		newCategory.IconType == category.IconType &&
 		newCategory.Color == category.Color &&
 		newCategory.Comment == category.Comment &&
-		newCategory.Hidden == category.Hidden {
+		newCategory.Hidden == category.Hidden && slices.Equal(newCategory.BookIds, category.BookIds) {
 		return nil, errs.ErrNothingWillBeUpdated
 	}
 
@@ -392,6 +406,10 @@ func (a *TransactionCategoriesApi) createBatchCategories(c *core.WebContext, uid
 
 	for i := 0; i < len(categoryCreateBatchReq.Categories); i++ {
 		categoryCreateReq := categoryCreateBatchReq.Categories[i]
+		categoryCreateReq.BookIds, err = normalizeCategoryBookIds(c, uid, categoryCreateReq.BookIds)
+		if err != nil {
+			return nil, err
+		}
 		var maxOrderId, exists = categoryTypeMaxOrderMap[categoryCreateReq.Type]
 
 		if !exists {
@@ -409,12 +427,17 @@ func (a *TransactionCategoriesApi) createBatchCategories(c *core.WebContext, uid
 			Icon:     categoryCreateReq.Icon,
 			IconType: categoryCreateReq.IconType,
 			Color:    categoryCreateReq.Color,
+			BookIds:  categoryCreateReq.BookIds,
 		}, maxOrderId+1)
 
 		categories = append(categories, category)
 		categoriesMap[category] = make([]*models.TransactionCategory, len(categoryCreateReq.SubCategories))
 
 		for j := int32(0); j < int32(len(categoryCreateReq.SubCategories)); j++ {
+			categoryCreateReq.SubCategories[j].BookIds, err = normalizeCategoryBookIds(c, uid, categoryCreateReq.SubCategories[j].BookIds)
+			if err != nil {
+				return nil, err
+			}
 			subCategory := a.createNewCategoryModel(uid, categoryCreateReq.SubCategories[j], j+1)
 
 			categories = append(categories, subCategory)
@@ -457,7 +480,25 @@ func (a *TransactionCategoriesApi) createNewCategoryModel(uid int64, categoryCre
 		IconType:         categoryCreateReq.IconType,
 		Color:            categoryCreateReq.Color,
 		Comment:          categoryCreateReq.Comment,
+		BookIds:          append([]string{}, categoryCreateReq.BookIds...),
 	}
+}
+
+func normalizeCategoryBookIds(c core.Context, uid int64, ids []string) ([]string, error) {
+	if len(ids) > 100 {
+		return nil, services.ErrBookInvalid
+	}
+	for _, id := range ids {
+		if id == "" || len(id) > 64 || strings.TrimSpace(id) != id || strings.Contains(id, ",") {
+			return nil, services.ErrBookInvalid
+		}
+	}
+	if _, err := services.Books.FilterContext(c, uid, strings.Join(ids, ",")); err != nil {
+		return nil, err
+	}
+	result := append([]string{}, ids...)
+	sort.Strings(result)
+	return slices.Compact(result), nil
 }
 
 func (a *TransactionCategoriesApi) getTransactionCategoryListByTypeResponse(categories []*models.TransactionCategory, parentId int64) (map[models.TransactionCategoryType]models.TransactionCategoryInfoResponseSlice, *errs.Error) {

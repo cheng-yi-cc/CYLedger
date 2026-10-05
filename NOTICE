@@ -16,3 +16,7 @@ Upstream contributors are listed in contributors.json and the Git history.
 Other third-party components retain their own licenses. See
 third-party-dependencies.json, licenses/, and notices included with those
 components. These notices do not change the terms of any license.
+
+Selected exchange and wallet logos are from Web3 Icons (0xa3k5 and contributors).
+See licenses/web3icons-NOTICE and third-party-dependencies.json for source and
+license metadata. Brand trademarks remain with their respective owners.

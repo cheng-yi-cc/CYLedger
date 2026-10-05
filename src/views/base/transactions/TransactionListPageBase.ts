@@ -372,6 +372,9 @@ export function useTransactionListPageBase() {
     }
 
     function getDisplayAmount(transaction: Transaction, inUserDefaultCurrency?: boolean): string {
+        if (transaction.investmentEventId && !transaction.sourceAccount && transaction.destinationAccount) {
+            return formatAmount(parseBigDecimal(transaction.destinationAmount), transaction.hideAmount, transaction.destinationAccount.currency, inUserDefaultCurrency);
+        }
         if (queryAllFilterAccountIdsCount.value < 1) {
             if (transaction.sourceAccount) {
                 return formatAmount(parseBigDecimal(transaction.sourceAmount), transaction.hideAmount, transaction.sourceAccount.currency, inUserDefaultCurrency);
@@ -402,6 +405,9 @@ export function useTransactionListPageBase() {
     }
 
     function getDisplayAmountCurrency(transaction: Transaction): string {
+        if (transaction.investmentEventId && !transaction.sourceAccount && transaction.destinationAccount) {
+            return transaction.destinationAccount.currency;
+        }
         if (queryAllFilterAccountIdsCount.value < 1) {
             if (transaction.sourceAccount) {
                 return transaction.sourceAccount.currency;

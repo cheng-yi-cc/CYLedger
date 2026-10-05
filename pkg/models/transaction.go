@@ -125,28 +125,33 @@ const (
 
 // Transaction represents transaction data stored in database
 type Transaction struct {
-	InvestmentEventId    string            `xorm:"VARCHAR(64) NOT NULL DEFAULT ''"`
-	TransactionId        int64             `xorm:"PK"`
-	Uid                  int64             `xorm:"UNIQUE(UQE_transaction_uid_time) INDEX(IDX_transaction_uid_deleted_time) INDEX(IDX_transaction_uid_deleted_type_time) INDEX(IDX_transaction_uid_deleted_type_account_id_time) INDEX(IDX_transaction_uid_deleted_category_id_time) INDEX(IDX_transaction_uid_deleted_account_id_time) INDEX(IDX_transaction_uid_deleted_time_longitude_latitude) NOT NULL"`
-	Deleted              bool              `xorm:"INDEX(IDX_transaction_uid_deleted_time) INDEX(IDX_transaction_uid_deleted_type_time) INDEX(IDX_transaction_uid_deleted_type_account_id_time) INDEX(IDX_transaction_uid_deleted_category_id_time) INDEX(IDX_transaction_uid_deleted_account_id_time) INDEX(IDX_transaction_uid_deleted_time_longitude_latitude) NOT NULL"`
-	Type                 TransactionDbType `xorm:"INDEX(IDX_transaction_uid_deleted_type_time) INDEX(IDX_transaction_uid_deleted_type_account_id_time) NOT NULL"`
-	CategoryId           int64             `xorm:"INDEX(IDX_transaction_uid_deleted_category_id_time) NOT NULL"`
-	AccountId            int64             `xorm:"INDEX(IDX_transaction_uid_deleted_account_id_time) INDEX(IDX_transaction_uid_deleted_type_account_id_time) NOT NULL"`
-	TransactionTime      int64             `xorm:"UNIQUE(UQE_transaction_uid_time) INDEX(IDX_transaction_uid_deleted_time) INDEX(IDX_transaction_uid_deleted_type_time) INDEX(IDX_transaction_uid_deleted_type_account_id_time) INDEX(IDX_transaction_uid_deleted_category_id_time) INDEX(IDX_transaction_uid_deleted_account_id_time) NOT NULL"`
-	TimezoneUtcOffset    int16             `xorm:"NOT NULL"`
-	Amount               int64             `xorm:"NOT NULL"`
-	RelatedId            int64             `xorm:"NOT NULL"`
-	RelatedAccountId     int64             `xorm:"NOT NULL"`
-	RelatedAccountAmount int64             `xorm:"NOT NULL"`
-	HideAmount           bool              `xorm:"NOT NULL"`
-	Comment              string            `xorm:"VARCHAR(255) NOT NULL"`
-	GeoLongitude         float64           `xorm:"INDEX(IDX_transaction_uid_deleted_time_longitude_latitude)"`
-	GeoLatitude          float64           `xorm:"INDEX(IDX_transaction_uid_deleted_time_longitude_latitude)"`
-	CreatedIp            string            `xorm:"VARCHAR(39)"`
-	ScheduledCreated     bool
-	CreatedUnixTime      int64
-	UpdatedUnixTime      int64
-	DeletedUnixTime      int64
+	ExcludeFromStatistics  bool              `xorm:"NOT NULL DEFAULT 0"`
+	ReimbursementAccountId int64             `xorm:"NOT NULL DEFAULT 0 INDEX"`
+	ReimbursementClosedAt  int64             `xorm:"NOT NULL DEFAULT 0"`
+	ReimbursementReceiptId string            `xorm:"VARCHAR(64) NOT NULL DEFAULT ''"`
+	BookId                 string            `xorm:"VARCHAR(64) NOT NULL DEFAULT '' INDEX(IDX_transaction_book)"`
+	InvestmentEventId      string            `xorm:"VARCHAR(64) NOT NULL DEFAULT ''"`
+	TransactionId          int64             `xorm:"PK"`
+	Uid                    int64             `xorm:"UNIQUE(UQE_transaction_uid_time) INDEX(IDX_transaction_uid_deleted_time) INDEX(IDX_transaction_uid_deleted_type_time) INDEX(IDX_transaction_uid_deleted_type_account_id_time) INDEX(IDX_transaction_uid_deleted_category_id_time) INDEX(IDX_transaction_uid_deleted_account_id_time) INDEX(IDX_transaction_uid_deleted_time_longitude_latitude) NOT NULL"`
+	Deleted                bool              `xorm:"INDEX(IDX_transaction_uid_deleted_time) INDEX(IDX_transaction_uid_deleted_type_time) INDEX(IDX_transaction_uid_deleted_type_account_id_time) INDEX(IDX_transaction_uid_deleted_category_id_time) INDEX(IDX_transaction_uid_deleted_account_id_time) INDEX(IDX_transaction_uid_deleted_time_longitude_latitude) NOT NULL"`
+	Type                   TransactionDbType `xorm:"INDEX(IDX_transaction_uid_deleted_type_time) INDEX(IDX_transaction_uid_deleted_type_account_id_time) NOT NULL"`
+	CategoryId             int64             `xorm:"INDEX(IDX_transaction_uid_deleted_category_id_time) NOT NULL"`
+	AccountId              int64             `xorm:"INDEX(IDX_transaction_uid_deleted_account_id_time) INDEX(IDX_transaction_uid_deleted_type_account_id_time) NOT NULL"`
+	TransactionTime        int64             `xorm:"UNIQUE(UQE_transaction_uid_time) INDEX(IDX_transaction_uid_deleted_time) INDEX(IDX_transaction_uid_deleted_type_time) INDEX(IDX_transaction_uid_deleted_type_account_id_time) INDEX(IDX_transaction_uid_deleted_category_id_time) INDEX(IDX_transaction_uid_deleted_account_id_time) NOT NULL"`
+	TimezoneUtcOffset      int16             `xorm:"NOT NULL"`
+	Amount                 int64             `xorm:"NOT NULL"`
+	RelatedId              int64             `xorm:"NOT NULL"`
+	RelatedAccountId       int64             `xorm:"NOT NULL"`
+	RelatedAccountAmount   int64             `xorm:"NOT NULL"`
+	HideAmount             bool              `xorm:"NOT NULL"`
+	Comment                string            `xorm:"VARCHAR(255) NOT NULL"`
+	GeoLongitude           float64           `xorm:"INDEX(IDX_transaction_uid_deleted_time_longitude_latitude)"`
+	GeoLatitude            float64           `xorm:"INDEX(IDX_transaction_uid_deleted_time_longitude_latitude)"`
+	CreatedIp              string            `xorm:"VARCHAR(39)"`
+	ScheduledCreated       bool
+	CreatedUnixTime        int64
+	UpdatedUnixTime        int64
+	DeletedUnixTime        int64
 }
 
 // TransactionWithAccountBalance represents a transaction item with account balance
@@ -164,42 +169,49 @@ type TransactionGeoLocationRequest struct {
 
 // TransactionCreateRequest represents all parameters of transaction creation request
 type TransactionCreateRequest struct {
-	Type                 TransactionType                `json:"type" binding:"required"`
-	CategoryId           int64                          `json:"categoryId,string"`
-	Time                 int64                          `json:"time" binding:"required,min=1"`
-	UtcOffset            int16                          `json:"utcOffset" binding:"min=-720,max=840"`
-	SourceAccountId      int64                          `json:"sourceAccountId,string" binding:"required,min=1"`
-	DestinationAccountId int64                          `json:"destinationAccountId,string" binding:"min=0"`
-	SourceAmount         int64                          `json:"sourceAmount" binding:"validTransactionAmount"`
-	DestinationAmount    int64                          `json:"destinationAmount" binding:"validTransactionAmount"`
-	HideAmount           bool                           `json:"hideAmount"`
-	TagIds               []string                       `json:"tagIds"`
-	PictureIds           []string                       `json:"pictureIds"`
-	Comment              string                         `json:"comment" binding:"max=255"`
-	GeoLocation          *TransactionGeoLocationRequest `json:"geoLocation" binding:"omitempty"`
-	ClientSessionId      string                         `json:"clientSessionId"`
+	ExcludeFromStatistics  bool                           `json:"excludeFromStatistics"`
+	ReimbursementAccountId int64                          `json:"reimbursementAccountId,string" binding:"min=0"`
+	BookId                 string                         `json:"bookId" binding:"max=64"`
+	Type                   TransactionType                `json:"type" binding:"required"`
+	CategoryId             int64                          `json:"categoryId,string"`
+	Time                   int64                          `json:"time" binding:"required,min=1"`
+	UtcOffset              int16                          `json:"utcOffset" binding:"min=-720,max=840"`
+	SourceAccountId        int64                          `json:"sourceAccountId,string" binding:"required,min=1"`
+	DestinationAccountId   int64                          `json:"destinationAccountId,string" binding:"min=0"`
+	SourceAmount           int64                          `json:"sourceAmount" binding:"validTransactionAmount"`
+	DestinationAmount      int64                          `json:"destinationAmount" binding:"validTransactionAmount"`
+	HideAmount             bool                           `json:"hideAmount"`
+	TagIds                 []string                       `json:"tagIds"`
+	PictureIds             []string                       `json:"pictureIds"`
+	Comment                string                         `json:"comment" binding:"max=255"`
+	GeoLocation            *TransactionGeoLocationRequest `json:"geoLocation" binding:"omitempty"`
+	ClientSessionId        string                         `json:"clientSessionId"`
 }
 
 // TransactionModifyRequest represents all parameters of transaction modification request
 type TransactionModifyRequest struct {
-	Id                   int64                          `json:"id,string" binding:"required,min=1"`
-	Type                 TransactionType                `json:"type" binding:"required"`
-	CategoryId           int64                          `json:"categoryId,string"`
-	Time                 int64                          `json:"time" binding:"required,min=1"`
-	UtcOffset            int16                          `json:"utcOffset" binding:"min=-720,max=840"`
-	SourceAccountId      int64                          `json:"sourceAccountId,string" binding:"required,min=1"`
-	DestinationAccountId int64                          `json:"destinationAccountId,string" binding:"min=0"`
-	SourceAmount         int64                          `json:"sourceAmount" binding:"validTransactionAmount"`
-	DestinationAmount    int64                          `json:"destinationAmount" binding:"validTransactionAmount"`
-	HideAmount           bool                           `json:"hideAmount"`
-	TagIds               []string                       `json:"tagIds"`
-	PictureIds           []string                       `json:"pictureIds"`
-	Comment              string                         `json:"comment" binding:"max=255"`
-	GeoLocation          *TransactionGeoLocationRequest `json:"geoLocation" binding:"omitempty"`
+	ExcludeFromStatistics  *bool                          `json:"excludeFromStatistics"`
+	ReimbursementAccountId *int64                         `json:"reimbursementAccountId,string" binding:"omitempty,min=0"`
+	BookId                 string                         `json:"bookId" binding:"max=64"`
+	Id                     int64                          `json:"id,string" binding:"required,min=1"`
+	Type                   TransactionType                `json:"type" binding:"required"`
+	CategoryId             int64                          `json:"categoryId,string"`
+	Time                   int64                          `json:"time" binding:"required,min=1"`
+	UtcOffset              int16                          `json:"utcOffset" binding:"min=-720,max=840"`
+	SourceAccountId        int64                          `json:"sourceAccountId,string" binding:"required,min=1"`
+	DestinationAccountId   int64                          `json:"destinationAccountId,string" binding:"min=0"`
+	SourceAmount           int64                          `json:"sourceAmount" binding:"validTransactionAmount"`
+	DestinationAmount      int64                          `json:"destinationAmount" binding:"validTransactionAmount"`
+	HideAmount             bool                           `json:"hideAmount"`
+	TagIds                 []string                       `json:"tagIds"`
+	PictureIds             []string                       `json:"pictureIds"`
+	Comment                string                         `json:"comment" binding:"max=255"`
+	GeoLocation            *TransactionGeoLocationRequest `json:"geoLocation" binding:"omitempty"`
 }
 
 // TransactionImportRequest represents all parameters of transaction import request
 type TransactionImportRequest struct {
+	BookId          string                      `json:"bookId" binding:"max=64"`
 	Transactions    []*TransactionCreateRequest `json:"transactions"`
 	ClientSessionId string                      `json:"clientSessionId"`
 }
@@ -411,26 +423,32 @@ type TransactionGeoLocationResponse struct {
 
 // TransactionInfoResponse represents a view-object of transaction
 type TransactionInfoResponse struct {
-	Id                   int64                                    `json:"id,string"`
-	TimeSequenceId       int64                                    `json:"timeSequenceId,string"`
-	Type                 TransactionType                          `json:"type"`
-	CategoryId           int64                                    `json:"categoryId,string"`
-	Category             *TransactionCategoryInfoResponse         `json:"category,omitempty"`
-	Time                 int64                                    `json:"time"`
-	UtcOffset            int16                                    `json:"utcOffset"`
-	SourceAccountId      int64                                    `json:"sourceAccountId,string"`
-	SourceAccount        *AccountInfoResponse                     `json:"sourceAccount,omitempty"`
-	DestinationAccountId int64                                    `json:"destinationAccountId,string,omitempty"`
-	DestinationAccount   *AccountInfoResponse                     `json:"destinationAccount,omitempty"`
-	SourceAmount         int64                                    `json:"sourceAmount"`
-	DestinationAmount    *int64                                   `json:"destinationAmount,omitempty"`
-	HideAmount           bool                                     `json:"hideAmount"`
-	TagIds               []string                                 `json:"tagIds"`
-	Tags                 []*TransactionTagInfoResponse            `json:"tags,omitempty"`
-	Pictures             TransactionPictureInfoBasicResponseSlice `json:"pictures,omitempty"`
-	Comment              string                                   `json:"comment"`
-	GeoLocation          *TransactionGeoLocationResponse          `json:"geoLocation,omitempty"`
-	Editable             bool                                     `json:"editable"`
+	ExcludeFromStatistics  bool                                     `json:"excludeFromStatistics"`
+	ReimbursementAccountId int64                                    `json:"reimbursementAccountId,string"`
+	ReimbursementClosedAt  int64                                    `json:"reimbursementClosedAt"`
+	ReimbursementReceiptId string                                   `json:"reimbursementReceiptId,omitempty"`
+	BookId                 string                                   `json:"bookId"`
+	InvestmentEventId      string                                   `json:"investmentEventId,omitempty"`
+	Id                     int64                                    `json:"id,string"`
+	TimeSequenceId         int64                                    `json:"timeSequenceId,string"`
+	Type                   TransactionType                          `json:"type"`
+	CategoryId             int64                                    `json:"categoryId,string"`
+	Category               *TransactionCategoryInfoResponse         `json:"category,omitempty"`
+	Time                   int64                                    `json:"time"`
+	UtcOffset              int16                                    `json:"utcOffset"`
+	SourceAccountId        int64                                    `json:"sourceAccountId,string"`
+	SourceAccount          *AccountInfoResponse                     `json:"sourceAccount,omitempty"`
+	DestinationAccountId   int64                                    `json:"destinationAccountId,string,omitempty"`
+	DestinationAccount     *AccountInfoResponse                     `json:"destinationAccount,omitempty"`
+	SourceAmount           int64                                    `json:"sourceAmount"`
+	DestinationAmount      *int64                                   `json:"destinationAmount,omitempty"`
+	HideAmount             bool                                     `json:"hideAmount"`
+	TagIds                 []string                                 `json:"tagIds"`
+	Tags                   []*TransactionTagInfoResponse            `json:"tags,omitempty"`
+	Pictures               TransactionPictureInfoBasicResponseSlice `json:"pictures,omitempty"`
+	Comment                string                                   `json:"comment"`
+	GeoLocation            *TransactionGeoLocationResponse          `json:"geoLocation,omitempty"`
+	Editable               bool                                     `json:"editable"`
 }
 
 // TransactionCountResponse represents transaction count response
@@ -648,21 +666,27 @@ func (t *Transaction) ToTransactionInfoResponse(tagIds []int64, editable bool) *
 	}
 
 	return &TransactionInfoResponse{
-		Id:                   t.TransactionId,
-		TimeSequenceId:       t.TransactionTime,
-		Type:                 transactionType,
-		CategoryId:           t.CategoryId,
-		Time:                 utils.GetUnixTimeFromTransactionTime(t.TransactionTime),
-		UtcOffset:            t.TimezoneUtcOffset,
-		SourceAccountId:      sourceAccountId,
-		DestinationAccountId: destinationAccountId,
-		SourceAmount:         sourceAmount,
-		DestinationAmount:    destinationAmount,
-		HideAmount:           t.HideAmount,
-		TagIds:               utils.Int64ArrayToStringArray(tagIds),
-		Comment:              t.Comment,
-		GeoLocation:          geoLocation,
-		Editable:             editable,
+		BookId:                 t.BookId,
+		InvestmentEventId:      t.InvestmentEventId,
+		Id:                     t.TransactionId,
+		TimeSequenceId:         t.TransactionTime,
+		Type:                   transactionType,
+		CategoryId:             t.CategoryId,
+		Time:                   utils.GetUnixTimeFromTransactionTime(t.TransactionTime),
+		UtcOffset:              t.TimezoneUtcOffset,
+		SourceAccountId:        sourceAccountId,
+		DestinationAccountId:   destinationAccountId,
+		SourceAmount:           sourceAmount,
+		DestinationAmount:      destinationAmount,
+		HideAmount:             t.HideAmount,
+		ExcludeFromStatistics:  t.ExcludeFromStatistics,
+		ReimbursementAccountId: t.ReimbursementAccountId,
+		ReimbursementClosedAt:  t.ReimbursementClosedAt,
+		ReimbursementReceiptId: t.ReimbursementReceiptId,
+		TagIds:                 utils.Int64ArrayToStringArray(tagIds),
+		Comment:                t.Comment,
+		GeoLocation:            geoLocation,
+		Editable:               editable,
 	}
 }
 

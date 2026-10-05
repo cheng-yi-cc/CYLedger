@@ -105,6 +105,7 @@
                           v-model="activeTab">
                     <v-window-item value="basicInfo">
                         <v-form class="my-4">
+                            <div class="mb-4"><BookPicker v-model="transaction.bookId" :disabled="loading || submitting || recognizing || mode === TransactionEditPageMode.View" /></div>
                             <v-row>
                                 <v-col cols="12" v-if="type === TransactionEditPageType.Template && transaction instanceof TransactionTemplate">
                                     <v-text-field
@@ -503,6 +504,8 @@
 </template>
 
 <script setup lang="ts">
+import BookPicker from '@/components/mobile/BookPicker.vue';
+import { useBooksStore } from '@/stores/books.ts';
 import MapView from '@/components/common/MapView.vue';
 import ConfirmDialog from '@/components/desktop/ConfirmDialog.vue';
 import SnackBar from '@/components/desktop/SnackBar.vue';
@@ -659,6 +662,7 @@ const {
 } = useTransactionEditPageBase(props.type);
 
 const settingsStore = useSettingsStore();
+const booksStore = useBooksStore();
 const userStore = useUserStore();
 const accountsStore = useAccountsStore();
 const transactionCategoriesStore = useTransactionCategoriesStore();
@@ -723,6 +727,12 @@ const isTransactionModified = computed<boolean>(() => {
     }
 });
 
+// A list request may share a pending forced refresh from the surrounding page.
+function ignoreUnchangedList(error: unknown): void {
+    if (typeof error === 'object' && error !== null && 'isUpToDate' in error && error.isUpToDate === true) return;
+    throw error;
+}
+
 function open(options: TransactionEditOptions): Promise<TransactionEditResponse | undefined> {
     addByTemplateId.value = null;
     duplicateFromId.value = null;
@@ -743,9 +753,9 @@ function open(options: TransactionEditOptions): Promise<TransactionEditResponse 
     initTransaction.value = Transaction.of(transaction.value);
 
     const promises: Promise<unknown>[] = [
-        accountsStore.loadAllAccounts({ force: false }),
-        transactionCategoriesStore.loadAllCategories({ force: false }),
-        transactionTagsStore.loadAllTags({ force: false })
+        accountsStore.loadAllAccounts({ force: false }).catch(ignoreUnchangedList),
+        transactionCategoriesStore.loadAllCategories({ force: false }).catch(ignoreUnchangedList),
+        transactionTagsStore.loadAllTags({ force: false }).catch(ignoreUnchangedList)
     ];
 
     if (props.type === TransactionEditPageType.Transaction) {
@@ -818,7 +828,9 @@ function open(options: TransactionEditOptions): Promise<TransactionEditResponse 
         clientSessionId.value = generateRandomUUID();
     }
 
-    Promise.all(promises).then(function (responses) {
+    Promise.all(promises).then(async function (responses) {
+        await booksStore.loadBooks();
+        if (!transaction.value.bookId) transaction.value.bookId = booksStore.defaultBookId;
         if (editId.value && !responses[3]) {
             if (rejectFunc) {
                 if (props.type === TransactionEditPageType.Transaction) {

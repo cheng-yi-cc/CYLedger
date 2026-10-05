@@ -19,7 +19,7 @@ func TestDefaultTransactionDataCSVFileConverterToExportedContent(t *testing.T) {
 
 	transactions := make([]*models.Transaction, 3)
 	transactions[0] = &models.Transaction{
-		TransactionId:     1,
+		BookId: "book-trip", TransactionId: 1,
 		TransactionTime:   1725165296000,
 		Type:              models.TRANSACTION_DB_TYPE_INCOME,
 		TimezoneUtcOffset: 480,
@@ -117,10 +117,10 @@ func TestDefaultTransactionDataCSVFileConverterToExportedContent(t *testing.T) {
 	allTagIndexes[2] = []int64{3, 1, 4}
 	allTagIndexes[3] = []int64{2, 3}
 
-	expectedContent := "Time,Timezone,Type,Category,Sub Category,Account,Account Currency,Amount,Account2,Account2 Currency,Account2 Amount,Geographic Location,Tags,Description\n" +
-		"2024-09-01 12:34:56,+08:00,Income,Test Category,Test Sub Category,Test Account,CNY,123.45,,,,123.450000 45.670000,Test Tag;Test Tag2,Hello World\n" +
-		"2024-09-01 12:34:56,+00:00,Expense,Test Category2,Test Sub Category2,Test Account,CNY,-0.10,,,,,Test Tag,Foo#Bar\n" +
-		"2024-09-01 12:34:56,-05:00,Transfer,Test Category3,Test Sub Category3,Test Account,CNY,123.45,Test Account2,USD,17.35,,Test Tag2,T\te s t test\n"
+	expectedContent := "Time,Timezone,Type,Category,Sub Category,Account,Account Currency,Amount,Account2,Account2 Currency,Account2 Amount,Geographic Location,Tags,Description,Book ID\n" +
+		"2024-09-01 12:34:56,+08:00,Income,Test Category,Test Sub Category,Test Account,CNY,123.45,,,,123.450000 45.670000,Test Tag;Test Tag2,Hello World,book-trip\n" +
+		"2024-09-01 12:34:56,+00:00,Expense,Test Category2,Test Sub Category2,Test Account,CNY,-0.10,,,,,Test Tag,Foo#Bar,\n" +
+		"2024-09-01 12:34:56,-05:00,Transfer,Test Category3,Test Sub Category3,Test Account,CNY,123.45,Test Account2,USD,17.35,,Test Tag2,T\te s t test,\n"
 	actualContent, err := exporter.ToExportedContent(context, 123, transactions, accountMap, categoryMap, tagMap, allTagIndexes)
 
 	assert.Nil(t, err)
@@ -519,4 +519,13 @@ func TestDefaultTransactionDataCSVFileConverterParseImportedData_MissingRequired
 	_, _, _, _, _, _, err = importer.ParseImportedData(context, user, []byte("Time,Timezone,Type,Category,Sub Category,Account,Account Currency,Amount,Account2 Currency,Account2 Amount,Geographic Location,Tags,Description\n"+
 		"2024-09-01 00:00:00,+08:00,Balance Modification,,Test Sub Category,Test Account,CNY,123.45,,,,,"), time.UTC, converter.DefaultImporterOptions, nil, nil, nil, nil, nil)
 	assert.EqualError(t, err, errs.ErrMissingRequiredFieldInHeaderRow.Message)
+}
+
+func TestDefaultCSVPreservesBookIdOnImport(t *testing.T) {
+	rows, _, _, _, _, _, err := DefaultTransactionDataCSVFileConverter.ParseImportedData(core.NewNullContext(), &models.User{Uid: 1, DefaultCurrency: "CNY"}, []byte("Time,Type,Sub Category,Account,Amount,Account2,Book ID\n2024-09-01 12:00:00,Expense,Food,Bank,1.00,,book-trip"), time.UTC, converter.DefaultImporterOptions, nil, nil, nil, nil, nil)
+	assert.NoError(t, err)
+	if assert.Len(t, rows, 1) {
+		assert.Equal(t, "book-trip", rows[0].BookId)
+		assert.Equal(t, "book-trip", rows[0].ToImportTransactionResponse().BookId)
+	}
 }

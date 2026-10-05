@@ -1,3 +1,5 @@
+import { useBooksStore } from '@/stores/books.ts';
+
 import axios, { type AxiosRequestConfig, type AxiosRequestHeaders, type AxiosResponse } from 'axios';
 
 import type { ApiResponse } from '@/core/api.ts';
@@ -470,7 +472,7 @@ export default {
             const tagFilter = encodeURIComponent(req.tagFilter);
             const amountFilter = encodeURIComponent(req.amountFilter);
             const keyword = encodeURIComponent(req.keyword);
-            params = `max_time=${req.maxTime}&min_time=${req.minTime}&type=${req.type}&category_ids=${req.categoryIds}&account_ids=${req.accountIds}&tag_filter=${tagFilter}&amount_filter=${amountFilter}&keyword=${keyword}&match_mode=${req.matchMode}`;
+            params = `book_ids=${encodeURIComponent(useBooksStore().selectedBookIds.join(','))}&max_time=${req.maxTime}&min_time=${req.minTime}&type=${req.type}&category_ids=${req.categoryIds}&account_ids=${req.accountIds}&tag_filter=${tagFilter}&amount_filter=${amountFilter}&keyword=${keyword}&match_mode=${req.matchMode}`;
         } else {
             params = 'max_time=0&min_time=0&type=0&category_ids=&account_ids=&tag_filter=&amount_filter=&keyword=&match_mode=0';
         }
@@ -533,16 +535,16 @@ export default {
         const tagFilter = encodeURIComponent(req.tagFilter);
         const amountFilter = encodeURIComponent(req.amountFilter);
         const keyword = encodeURIComponent(req.keyword);
-        return axios.get<ApiResponse<TransactionInfoPageWrapperResponse>>(`v1/transactions/list.json?max_time=${req.maxTime}&min_time=${req.minTime}&type=${req.type}&category_ids=${req.categoryIds}&account_ids=${req.accountIds}&tag_filter=${tagFilter}&amount_filter=${amountFilter}&keyword=${keyword}&match_mode=${req.matchMode}&must_have_pictures=${!!req.mustHavePictures}&count=${req.count}&page=${req.page}&with_count=${req.withCount}&with_pictures=${!!req.withPictures}&trim_account=true&trim_category=true&trim_tag=true`);
+        return axios.get<ApiResponse<TransactionInfoPageWrapperResponse>>(`v1/transactions/list.json?book_ids=${encodeURIComponent((req.bookIds ?? useBooksStore().selectedBookIds).join(","))}&max_time=${req.maxTime}&min_time=${req.minTime}&type=${req.type}&category_ids=${req.categoryIds}&account_ids=${req.accountIds}&tag_filter=${tagFilter}&amount_filter=${amountFilter}&keyword=${keyword}&match_mode=${req.matchMode}&must_have_pictures=${!!req.mustHavePictures}&count=${req.count}&page=${req.page}&with_count=${req.withCount}&with_pictures=${!!req.withPictures}&trim_account=true&trim_category=true&trim_tag=true`);
     },
     getAllTransactionsByMonth: (req: TransactionListInMonthByPageRequest): ApiResponsePromise<TransactionInfoPageWrapperResponse2> => {
         const tagFilter = encodeURIComponent(req.tagFilter);
         const amountFilter = encodeURIComponent(req.amountFilter);
         const keyword = encodeURIComponent(req.keyword);
-        return axios.get<ApiResponse<TransactionInfoPageWrapperResponse2>>(`v1/transactions/list/by_month.json?year=${req.year}&month=${req.month}&type=${req.type}&category_ids=${req.categoryIds}&account_ids=${req.accountIds}&tag_filter=${tagFilter}&amount_filter=${amountFilter}&keyword=${keyword}&match_mode=${req.matchMode}&must_have_pictures=${!!req.mustHavePictures}&with_pictures=${!!req.withPictures}&trim_account=true&trim_category=true&trim_tag=true`);
+        return axios.get<ApiResponse<TransactionInfoPageWrapperResponse2>>(`v1/transactions/list/by_month.json?book_ids=${encodeURIComponent(useBooksStore().selectedBookIds.join(","))}&year=${req.year}&month=${req.month}&type=${req.type}&category_ids=${req.categoryIds}&account_ids=${req.accountIds}&tag_filter=${tagFilter}&amount_filter=${amountFilter}&keyword=${keyword}&match_mode=${req.matchMode}&must_have_pictures=${!!req.mustHavePictures}&with_pictures=${!!req.withPictures}&trim_account=true&trim_category=true&trim_tag=true`);
     },
     getAllTransactions: (req: TransactionAllListRequest): ApiResponsePromise<TransactionInfoResponse[]> => {
-        return axios.get<ApiResponse<TransactionInfoResponse[]>>(`v1/transactions/list/all.json?trim_account=true&with_pictures=${!!req.withPictures}&trim_category=true&trim_tag=true&start_time=${req.startTime}&end_time=${req.endTime}`);
+        return axios.get<ApiResponse<TransactionInfoResponse[]>>(`v1/transactions/list/all.json?trim_account=true&with_pictures=${!!req.withPictures}&trim_category=true&trim_tag=true&start_time=${req.startTime}&end_time=${req.endTime}&account_ids=${encodeURIComponent(req.accountIds || "")}&book_ids=${encodeURIComponent((req.bookIds ?? useBooksStore().selectedBookIds).join(","))}`);
     },
     getReconciliationStatements: (req: TransactionReconciliationStatementRequest): ApiResponsePromise<TransactionReconciliationStatementResponse> => {
         return axios.get<ApiResponse<TransactionReconciliationStatementResponse>>(`v1/transactions/reconciliation_statements.json?account_id=${req.accountId}&start_time=${req.startTime}&end_time=${req.endTime}`);
@@ -570,7 +572,7 @@ export default {
             queryParams.push(`match_mode=${req.matchMode}`);
         }
 
-        return axios.get<ApiResponse<TransactionStatisticResponse>>(`v1/transactions/statistics.json?use_transaction_timezone=${req.useTransactionTimezone}` + (queryParams.length ? '&' + queryParams.join('&') : ''));
+        return axios.get<ApiResponse<TransactionStatisticResponse>>(`v1/transactions/statistics.json?book_ids=${encodeURIComponent(useBooksStore().selectedBookIds.join(","))}&use_transaction_timezone=${req.useTransactionTimezone}` + (queryParams.length ? '&' + queryParams.join('&') : ''));
     },
     getTransactionStatisticsTrends: (req: TransactionStatisticTrendsRequest): ApiResponsePromise<TransactionStatisticTrendsResponseItem[]> => {
         const queryParams: string[] = [];
@@ -595,7 +597,7 @@ export default {
             queryParams.push(`match_mode=${req.matchMode}`);
         }
 
-        return axios.get<ApiResponse<TransactionStatisticTrendsResponseItem[]>>(`v1/transactions/statistics/trends.json?use_transaction_timezone=${req.useTransactionTimezone}` + (queryParams.length ? '&' + queryParams.join('&') : ''));
+        return axios.get<ApiResponse<TransactionStatisticTrendsResponseItem[]>>(`v1/transactions/statistics/trends.json?book_ids=${encodeURIComponent(useBooksStore().selectedBookIds.join(","))}&use_transaction_timezone=${req.useTransactionTimezone}` + (queryParams.length ? '&' + queryParams.join('&') : ''));
     },
     getTransactionStatisticsAssetTrends: (req: TransactionStatisticAssetTrendsRequest): ApiResponsePromise<TransactionStatisticAssetTrendsResponseItem[]> => {
         const queryParams: string[] = [];
@@ -622,7 +624,7 @@ export default {
             queryParams = queryParams + `&exclude_category_ids=${excludeCategoryIds.join(',')}`;
         }
 
-        return axios.get<ApiResponse<TransactionAmountsResponse>>(`v1/transactions/amounts.json?${queryParams}`);
+        return axios.get<ApiResponse<TransactionAmountsResponse>>(`v1/transactions/amounts.json?book_ids=${encodeURIComponent(useBooksStore().selectedBookIds.join(','))}&${queryParams}`);
     },
     getTransactionDailyAmounts: (req: TransactionDailyAmountsRequest): ApiResponsePromise<TransactionDailyAmountsResponseItem[]> => {
         const queryParams: string[] = [
@@ -639,7 +641,7 @@ export default {
             queryParams.push(`exclude_category_ids=${req.excludeCategoryIds.join(',')}`);
         }
 
-        return axios.get<ApiResponse<TransactionDailyAmountsResponseItem[]>>(`v1/transactions/amounts/daily.json?${queryParams.join('&')}`);
+        return axios.get<ApiResponse<TransactionDailyAmountsResponseItem[]>>(`v1/transactions/amounts/daily.json?book_ids=${encodeURIComponent(useBooksStore().selectedBookIds.join(','))}&${queryParams.join('&')}`);
     },
     getTransaction: ({ id, withPictures }: { id: string, withPictures: boolean | undefined }): ApiResponsePromise<TransactionInfoResponse> => {
         if (!isDefined(withPictures)) {

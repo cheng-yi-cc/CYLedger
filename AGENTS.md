@@ -6,19 +6,35 @@
 - 用户界面与新增项目文档默认简体中文，本位币固定为人民币；会计时区取用户设置。
 - 投资事实在 `pkg/services/investments.go` 原子提交，成本回放在 `pkg/investments`，公开行情在 `pkg/marketquotes`，统一估值在 `pkg/services/wealth.go`。
 - 新接口所有数量、金额、价格和汇率均为十进制字符串。输入先限制格式和长度，再交给十进制库；禁止浮点参与成本运算。
-- 未知成本、缺失报价或历史汇率保持未知，不能当成零。行情不能生成收入或修改持仓数量。
+- 未知成本、缺失报价或历史汇率保持未知，不能当成零。普通估值行情不能生成收入或修改持仓数量；用户显式绑定的货币基金自动收益由 `pkg/services/monetary_income.go` 独立逐日结算，万份收益不得当作净值。
 - 系统结算账户必须在旧接口、批量操作、账户合并、普通列表和资产汇总中受保护。
 - 不记录密钥或完整财务数据，不把 `.runtime`、`runtime`、备份和测试令牌提交到仓库。
+- 报销到账、债务本金/利息、余额校准、分期费用与定存收益必须在对应服务中原子提交并防重；定存和分期不能再次增加本金，普通行情不能驱动这些入账。
+- `Account.Extend.AssetProfile` 只存展示与账户规则，不维护第二份余额；新增表模型为 `Book`、`CalendarEvent`、`AssetPresentation`、`ReimbursementReceipt`、`AssetAdjustment`、`DebtMovement`、`CreditInstallment`、`FixedDeposit`、`MonetaryIncomeBinding`、`MonetaryIncomeDay`，与投资模型统一在 `cmd/database.go` 注册。
+- 基金解绑、重绑、删除收益不得删除逐日防重记录；账户级联删除须核对预览令牌，保护转账对端余额和历史投资依赖。
+- API 在 `cmd/webserver.go` 注册：`/api/v1/books/*`、`calendar/*`、`assets/*`、`monetary-income/*`、`investments/*`、`wealth/*`；完整方法与字段以接口文档和代码为准。
 
 ## 本地运行与验证
 
 - 本地启动：`powershell -ExecutionPolicy Bypass -File .\scripts\Start-CYLedger.ps1`；打开 `http://localhost:8080/`。
 - 重建加 `-Build -DirectNpm`。本机工具路径和首次创建账户步骤见 `README.CYLEDGER.md`。
 - 账务改动运行相关 Go 核心与 SQLite 集成测试；界面改动做类型检查及适当浏览器验收；备份改动运行 `scripts/test_backup.py`。
+- 手机已连接电脑时，涉及手机界面或手机账务流程的改动默认一步完成：构建 APK、在已连接真机验收、同签名覆盖升级正式版，并给出手机内的预览路径；不以仅浏览器验证或“尚未打包 APK”结束交付。使用独立测试版及虚构数据验证删除等操作，不能删除、清空或覆盖正式账本；正式版升级使用 `adb install -r`，不得先卸载或清除数据。设备未连接或安装授权受阻时明确报告。
 - 不为可逆、影响小、只是复述实现的改动添加测试。必要检查通过后不无故扩大测试范围。
 - 修改历史事实必须使快照失效，并只用快照保存的历史价格重建。金额、数量、成本和关联在备份恢复后必须一致。
 - 默认在原文件直接修改。用户明确结束任务或要求清理时，才清理过程文件与预览；不能删除正式账本。
 - 每次交付项目修改都告诉用户本地预览方法；最终报告区分已实现、已验证、未实现和依赖外部配置的部分。
+- Android 构建用 `python scripts/build_android.py`，测试版加 `--qa`；`.runtime/android-signing/` 是覆盖升级所需的持久材料，清理时必须保留。手机与电脑数据库独立。
+- Compose 参数为 `CYLEDGER_BIND`、`CYLEDGER_PORT`、`CYLEDGER_ROOT_URL`、`CYLEDGER_VOLUME`、`TZ`；可选行情密钥为 `CYLEDGER_COINGECKO_DEMO_API_KEY`，Android SDK 用 `ANDROID_HOME` 或 `--sdk`。不得提交真实密钥或修改全局代理来适配一次构建。
+
+## 深入文档
+
+| 文档 | 用途 |
+|---|---|
+| `README.CYLEDGER.md` | 使用与开发入口 |
+| `docs/CYLEDGER_ARCHITECTURE.md`、`docs/CYLEDGER_API.md` | 数据模型、事务、路由和请求契约 |
+| `docs/CYLEDGER_OPERATIONS.md`、`android/README.md` | 部署、恢复、签名和真机升级 |
+| `docs/CYLEDGER_ACCEPTANCE.md` | 当前交付与已验证范围，替换过期记录而非追加流水账 |
 
 ## 上游归属
 

@@ -1,8 +1,10 @@
 package api
 
 import (
+	"reflect"
 	"slices"
 	"sort"
+	"strconv"
 
 	"github.com/mayswind/ezbookkeeping/pkg/core"
 	"github.com/mayswind/ezbookkeeping/pkg/duplicatechecker"
@@ -901,7 +903,7 @@ func (a *AccountsApi) SubAccountDeleteHandler(c *core.WebContext) (any, *errs.Er
 }
 
 func (a *AccountsApi) createNewAccountModel(uid int64, accountCreateReq *models.AccountCreateRequest, balance int64, creditLimitForCreditCard *int64, isSubAccount bool, order int32) *models.Account {
-	accountExtend := &models.AccountExtend{}
+	accountExtend := &models.AccountExtend{AssetProfile: accountCreateReq.AssetProfile}
 
 	if !isSubAccount && accountCreateReq.Category == models.ACCOUNT_CATEGORY_CREDIT_CARD {
 		accountExtend.CreditCardStatementDate = &accountCreateReq.CreditCardStatementDate
@@ -925,7 +927,7 @@ func (a *AccountsApi) createNewAccountModel(uid int64, accountCreateReq *models.
 }
 
 func (a *AccountsApi) createNewSubAccountModelForModify(uid int64, accountType models.AccountType, accountModifyReq *models.AccountModifyRequest, balance int64, order int32) *models.Account {
-	accountExtend := &models.AccountExtend{}
+	accountExtend := &models.AccountExtend{AssetProfile: accountModifyReq.AssetProfile}
 
 	return &models.Account{
 		Uid:          uid,
@@ -961,6 +963,13 @@ func (a *AccountsApi) createSubAccountModels(uid int64, accountCreateReq *models
 
 func (a *AccountsApi) getToUpdateAccount(user *models.User, accountModifyReq *models.AccountModifyRequest, creditLimitForCreditCard *int64, oldAccount *models.Account, isSubAccount bool) (*models.Account, error) {
 	newAccountExtend := &models.AccountExtend{}
+	// Older clients omit the profile; editing a name must not erase asset data.
+	if oldAccount.Extend != nil {
+		newAccountExtend.AssetProfile = oldAccount.Extend.AssetProfile
+	}
+	if accountModifyReq.AssetProfile != nil {
+		newAccountExtend.AssetProfile = accountModifyReq.AssetProfile
+	}
 	newAccountExtend.LastReconciledTime = accountModifyReq.LastReconciledTime
 
 	if !isSubAccount && accountModifyReq.Category == models.ACCOUNT_CATEGORY_CREDIT_CARD {
@@ -970,6 +979,7 @@ func (a *AccountsApi) getToUpdateAccount(user *models.User, accountModifyReq *mo
 
 	newAccount := &models.Account{
 		AccountId:    oldAccount.AccountId,
+		Type:         oldAccount.Type,
 		Uid:          user.Uid,
 		Name:         accountModifyReq.Name,
 		DisplayOrder: oldAccount.DisplayOrder,
@@ -999,6 +1009,9 @@ func (a *AccountsApi) getToUpdateAccount(user *models.User, accountModifyReq *mo
 	}
 
 	oldAccountExtend := oldAccount.Extend
+	if !reflect.DeepEqual(newAccountExtend.AssetProfile, oldAccount.AssetProfile()) {
+		return newAccount, nil
+	}
 
 	if (newAccountExtend.LastReconciledTime != nil && (oldAccountExtend == nil || oldAccountExtend.LastReconciledTime == nil)) ||
 		(newAccountExtend.LastReconciledTime == nil && oldAccountExtend != nil && oldAccountExtend.LastReconciledTime != nil) ||
@@ -1059,6 +1072,13 @@ func (a *AccountsApi) isAccountsIconTypeValid(c *core.WebContext, uid int64, acc
 
 		if account.IconType == core.ICON_TYPE_USER_CUSTOM {
 			iconIds = append(iconIds, account.Icon)
+		}
+		if p := account.AssetProfile(); p != nil && p.NightIcon != "" && p.NightIconType == int(core.ICON_TYPE_USER_CUSTOM) {
+			id, err := strconv.ParseInt(p.NightIcon, 10, 64)
+			if err != nil || id <= 0 {
+				return false
+			}
+			iconIds = append(iconIds, id)
 		}
 	}
 

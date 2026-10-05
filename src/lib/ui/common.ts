@@ -182,6 +182,7 @@ export function startDownloadFile(fileName: string, fileData: Blob): void {
     const dataLink = document.createElement('a');
 
     dataLink.style.display = 'none';
+    dataLink.classList.add('external');
     dataLink.href = dataObjectUrl;
     dataLink.setAttribute('download', fileName);
 

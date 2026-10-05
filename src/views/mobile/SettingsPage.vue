@@ -5,9 +5,9 @@
         <main class="cy-page-body cy-profile-body">
             <f7-link href="/user/profile" class="cy-panel cy-hero cy-profile-card"><img v-if="userStore.currentUserAvatar" :src="userStore.currentUserAvatar" alt="个人头像" /><span v-else class="cy-avatar"><f7-icon f7="person_fill" /></span><h1>{{ currentNickName }}</h1><p>把每一笔生活，记在心里。</p><div class="cy-profile-counts"><span>已保存 <strong>{{ dataStats?.totalTransactionCount ?? '—' }}</strong> 条账务记录</span><span><strong>{{ dataStats?.totalAccountCount ?? '—' }}</strong> 个日常账户</span></div></f7-link>
             <p v-if="profileError" class="cy-message" role="alert">{{ profileError }} <button @click="refreshProfile">重试</button></p>
-            <nav class="cy-panel cy-feature-grid" aria-label="账本管理"><f7-link href="/template/list"><f7-icon f7="doc_on_doc" />记账模板</f7-link><f7-link v-if="isUserScheduledTransactionEnabled()" href="/schedule/list"><f7-icon f7="clock" />周期记账</f7-link><f7-link href="/account/list"><f7-icon f7="book" />账户管理</f7-link><f7-link href="/investments/ledger"><f7-icon f7="chart_bar" />投资理财</f7-link><f7-link href="/tag/list"><f7-icon f7="tag" />标签管理</f7-link><f7-link href="/category/all"><f7-icon f7="square_grid_2x2" />分类管理</f7-link><f7-link href="/overview"><f7-icon f7="rectangle_grid_1x2" />自定义概览</f7-link><button @click="openMoreSettings"><f7-icon f7="gear_alt" />更多设置</button></nav>
+            <nav class="cy-panel cy-feature-grid" aria-label="账本管理"><f7-link href="/template/list"><f7-icon f7="doc_on_doc" />记账模板</f7-link><f7-link v-if="isUserScheduledTransactionEnabled()" href="/schedule/list"><f7-icon f7="clock" />周期记账</f7-link><f7-link href="/account/list"><f7-icon f7="book" />账户管理</f7-link><f7-link href="/investments/ledger"><f7-icon f7="chart_bar" />投资理财</f7-link><f7-link href="/tag/list"><f7-icon f7="tag" />标签管理</f7-link><f7-link href="/category/all"><f7-icon f7="square_grid_2x2" />分类管理</f7-link><f7-link href="/books"><f7-icon f7="book_closed" />账本管理</f7-link><button @click="openMoreSettings"><f7-icon f7="gear_alt" />更多设置</button></nav>
             <section class="cy-panel cy-profile-links"><h2>数据管理</h2><f7-link href="/user/data/management"><f7-icon f7="tray_arrow_down" /><span>数据管理与导出<small>账单数据、图片与清理</small></span><f7-icon f7="chevron_right" size="14" /></f7-link><f7-link href="/transaction/list?view=pictures"><f7-icon f7="photo_on_rectangle" /><span>账单图片</span><f7-icon f7="chevron_right" size="14" /></f7-link><f7-link href="/settings/sync"><f7-icon f7="cloud" /><span>设置同步<small>同步应用偏好设置</small></span><f7-icon f7="chevron_right" size="14" /></f7-link></section>
-            <section class="cy-panel cy-profile-links"><h2>外观与安全</h2><button @click="showThemePopup = true"><f7-icon f7="paintbrush" /><span>主题外观<small>{{ findNameByValue(allThemes,currentTheme) }}</small></span><f7-icon f7="chevron_right" size="14" /></button><f7-link href="/user/2fa"><f7-icon f7="lock_shield" /><span>双重认证</span><f7-icon f7="chevron_right" size="14" /></f7-link><f7-link href="/user/sessions"><f7-icon f7="device_phone_portrait" /><span>登录设备与会话</span><f7-icon f7="chevron_right" size="14" /></f7-link></section>
+            <section class="cy-panel cy-profile-links"><h2>外观与安全</h2><button @click="showThemePopup = true"><f7-icon f7="paintbrush" /><span>主题外观<small>{{ findNameByValue(allThemes,currentTheme) }}</small></span><f7-icon f7="chevron_right" size="14" /></button><f7-link v-if="!nativePersonal" href="/user/2fa"><f7-icon f7="lock_shield" /><span>双重认证</span><f7-icon f7="chevron_right" size="14" /></f7-link><f7-link v-if="!nativePersonal" href="/user/sessions"><f7-icon f7="device_phone_portrait" /><span>登录设备与会话</span><f7-icon f7="chevron_right" size="14" /></f7-link></section>
         </main>
 
         <div ref="moreSettingsAnchor" /><f7-block-title><f7-link @click="showMoreSettings = !showMoreSettings">更多设置 {{ showMoreSettings ? '⌃' : '⌄' }}</f7-link></f7-block-title>
@@ -59,7 +59,7 @@
                 </list-item-selection-popup>
             </f7-list-item>
 
-            <f7-list-item :title="tt('Application Lock')" :after="isEnableApplicationLock ? tt('Enabled') : tt('Disabled')" link="/app_lock"></f7-list-item>
+            <f7-list-item v-if="!nativePersonal" :title="tt('Application Lock')" :after="isEnableApplicationLock ? tt('Enabled') : tt('Disabled')" link="/app_lock"></f7-list-item>
 
             <f7-list-item :title="tt('Exchange Rates Data')" :after="exchangeRatesLastUpdateDate" link="/exchange_rates"></f7-list-item>
 
@@ -86,17 +86,18 @@
             </f7-list-item>
 
             <f7-list-item :title="tt('Browser Cache Management')" link="/settings/browser_caches"></f7-list-item>
-            <f7-list-item link="#" no-chevron :title="tt('Switch to Desktop Version')" @click="switchToDesktopVersion"></f7-list-item>
+            <f7-list-item v-if="!nativePersonal" link="#" no-chevron :title="tt('Switch to Desktop Version')" @click="switchToDesktopVersion"></f7-list-item>
 
             <f7-list-item :title="tt('About')" link="/about" :after="version"></f7-list-item>
         </f7-list>
-        <f7-list strong inset><f7-list-button :class="{ 'disabled': logouting }" @click="logout">{{ tt('Log Out') }}</f7-list-button></f7-list>
+        <f7-list v-if="!nativePersonal" strong inset><f7-list-button :class="{ 'disabled': logouting }" @click="logout">{{ tt('Log Out') }}</f7-list-button></f7-list>
     <template #fixed><LedgerNavigation active="settings" /></template>
     </f7-page>
 </template>
 
 <script setup lang="ts">
 import LedgerNavigation from '@/components/mobile/LedgerNavigation.vue';
+import { isNativePersonalMode } from '@/lib/native.ts';
 import { ref, computed, nextTick } from 'vue';
 import type { DataStatisticsResponse } from '@/models/data_management.ts';
 import type { Router } from 'framework7/types';
@@ -130,6 +131,7 @@ const userStore = useUserStore();
 const exchangeRatesStore = useExchangeRatesStore();
 
 const version = `${getClientDisplayVersion()}`;
+const nativePersonal = isNativePersonalMode();
 
 const logouting = ref<boolean>(false);
 const showThemePopup = ref<boolean>(false);

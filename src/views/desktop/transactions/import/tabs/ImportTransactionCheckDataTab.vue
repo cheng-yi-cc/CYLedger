@@ -88,6 +88,11 @@
                             v-if="!isSameAsDefaultTimezoneOffsetMinutes(item)">{{ getDisplayTimezone(item) }}</v-chip>
                 </div>
             </template>
+            <template #item.bookId="{ item }">
+                <span v-if="editingTransaction !== item">{{ booksStore.allBooks.find(book => book.id === (item.bookId || defaultBookId))?.name || item.bookId || '待选账本' }}</span>
+                <v-select v-else v-model="item.bookId" label="账本" style="min-width: 160px" :disabled="disabled"
+                          :items="[{ title: '本次导入所选账本', value: '' }, ...booksStore.activeBooks.map(book => ({ title: book.name, value: book.id }))]" />
+            </template>
             <template #item.type="{ value }">
                 <v-chip label color="secondary" variant="outlined" size="x-small" v-if="value === TransactionType.ModifyBalance">{{ tt('Modify Balance') }}</v-chip>
                 <v-chip label class="text-income" variant="outlined" size="x-small" v-else-if="value === TransactionType.Income">{{ tt('Income') }}</v-chip>
@@ -436,6 +441,7 @@ import { useAccountsStore } from '@/stores/account.ts';
 import { useTransactionCategoriesStore } from '@/stores/transactionCategory.ts';
 import { useTransactionTagsStore } from '@/stores/transactionTag.ts';
 import { useExchangeRatesStore } from '@/stores/exchangeRates.ts';
+import { useBooksStore } from '@/stores/books.ts';
 
 import { type NameValue, type NameNumeralValue, itemAndIndex, reversed, keys } from '@/core/base.ts';
 import { AmountFilterType } from '@/core/numeral.ts';
@@ -529,6 +535,7 @@ interface ImportTransactionCheckDataMenu {
 
 const props = defineProps<{
     importTransactions?: ImportTransaction[]
+    defaultBookId?: string;
     disabled?: boolean;
 }>();
 
@@ -547,6 +554,7 @@ const {
 const { allTagsWithGroupHeader } = useTransactionTagSelectionBase({ modelValue: [] }, false);
 
 const settingsStore = useSettingsStore();
+const booksStore = useBooksStore();
 const userStore = useUserStore();
 const accountsStore = useAccountsStore();
 const transactionCategoriesStore = useTransactionCategoriesStore();
@@ -967,6 +975,7 @@ const importTransactionHeaders = computed<object[]>(() => {
         { value: 'valid', sortable: true, nowrap: true, width: 35, fixed: true },
         { value: 'time', title: tt('Transaction Time'), sortable: true, nowrap: true },
         { value: 'type', title: tt('Type'), sortable: true, nowrap: true },
+        { value: 'bookId', title: '账本', sortable: false, nowrap: true },
         { value: 'actualCategoryName', title: tt('Category'), sortable: true, nowrap: true },
         { value: 'sourceAmount', title: tt('Amount'), sortable: true, nowrap: true },
         { value: 'actualSourceAccountName', title: tt('Account'), sortable: true, nowrap: true },
@@ -2134,7 +2143,8 @@ function exportData(fileType: KnownFileType): void {
         tt(ImportTransactionColumnType.RelatedAmount.name),
         tt(ImportTransactionColumnType.GeographicLocation.name),
         tt(ImportTransactionColumnType.Tags.name),
-        tt(ImportTransactionColumnType.Description.name)
+        tt(ImportTransactionColumnType.Description.name),
+        'Book ID'
     ].join(separator) + '\n';
 
     const transactions = props.importTransactions ?? [];
@@ -2191,7 +2201,8 @@ function exportData(fileType: KnownFileType): void {
             relatedAmount ?? '',
             geographicLocation,
             tagNames.join(tagSeparator),
-            replaceAll(transaction.comment || '', separator, ' ')
+            replaceAll(transaction.comment || '', separator, ' '),
+            transaction.bookId || props.defaultBookId || ''
         ].join(separator);
     });
 

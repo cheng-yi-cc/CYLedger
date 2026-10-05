@@ -1,6 +1,7 @@
 <template>
     <main-page-layout>
         <template #nav-items>
+            <BookScopeControl :disabled="loading" @change="reload(true)" />
             <div class="mb-2">
                 <btn-vertical-group :disabled="loading" :buttons="[
                     { name: tt('Categorical Analysis'), value: StatisticsAnalysisType.CategoricalAnalysis },
@@ -475,6 +476,7 @@
 </template>
 
 <script setup lang="ts">
+import BookScopeControl from '@/components/common/BookScopeControl.vue';
 import SnackBar from '@/components/desktop/SnackBar.vue';
 import TrendsChart from '@/components/desktop/TrendsChart.vue';
 import DataExportDialog from '@/components/desktop/DataExportDialog.vue';

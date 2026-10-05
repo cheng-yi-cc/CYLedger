@@ -105,6 +105,7 @@ func (s *TransactionService) GetAllSpecifiedTransactions(c core.Context, uid int
 
 // GetAllTransactionsInOneAccountWithAccountBalanceByMaxTime returns account statement within time range
 func (s *TransactionService) GetAllTransactionsInOneAccountWithAccountBalanceByMaxTime(c core.Context, uid int64, pageCount int32, maxTransactionTime int64, minTransactionTime int64, accountId int64, accountCategory models.AccountCategory) ([]*models.TransactionWithAccountBalance, *big.Int, *big.Int, *big.Int, *big.Int, error) {
+	c = WithoutBookFilter(c)
 	if maxTransactionTime <= 0 {
 		maxTransactionTime = utils.GetMaxTransactionTimeFromUnixTime(time.Now().Unix())
 	}
@@ -195,6 +196,7 @@ func (s *TransactionService) GetAllTransactionsInOneAccountWithAccountBalanceByM
 
 // GetAllAccountsDailyOpeningAndClosingBalance returns daily opening and closing balance of all accounts within time range
 func (s *TransactionService) GetAllAccountsDailyOpeningAndClosingBalance(c core.Context, uid int64, maxTransactionTime int64, minTransactionTime int64, clientTimezone *time.Location) (map[int32][]*models.TransactionWithAccountBalance, error) {
+	c = WithoutBookFilter(c)
 	if maxTransactionTime <= 0 {
 		maxTransactionTime = utils.GetMaxTransactionTimeFromUnixTime(time.Now().Unix())
 	}
@@ -437,7 +439,7 @@ func (s *TransactionService) getTransactionsByMaxTimeWithOffset(c core.Context, 
 
 	var transactions []*models.Transaction
 
-	condition, conditionParams := s.buildTransactionQueryCondition(uid, maxTransactionTime, minTransactionTime, transactionDbType, categoryIds, accountIds, tagFilters, amountFilter, keyword, matchMode, noDuplicated)
+	condition, conditionParams := s.buildTransactionQueryCondition(c, uid, maxTransactionTime, minTransactionTime, transactionDbType, categoryIds, accountIds, tagFilters, amountFilter, keyword, matchMode, noDuplicated)
 	sess := s.UserDataDB(uid).NewSession(c).Where(condition, conditionParams...)
 	sess = s.appendFilterTagIdsConditionToQuery(sess, uid, maxTransactionTime, minTransactionTime, tagFilters, noTags)
 	sess = s.appendFilterPicturesConditionToQuery(sess, uid, mustHavePictures)
@@ -472,7 +474,7 @@ func (s *TransactionService) GetTransactionsInMonthByPage(c core.Context, uid in
 
 	var transactions []*models.Transaction
 
-	condition, conditionParams := s.buildTransactionQueryCondition(uid, maxTransactionTime, minTransactionTime, transactionDbType, categoryIds, accountIds, tagFilters, amountFilter, keyword, matchMode, true)
+	condition, conditionParams := s.buildTransactionQueryCondition(c, uid, maxTransactionTime, minTransactionTime, transactionDbType, categoryIds, accountIds, tagFilters, amountFilter, keyword, matchMode, true)
 	sess := s.UserDataDB(uid).NewSession(c).Where(condition, conditionParams...)
 	sess = s.appendFilterTagIdsConditionToQuery(sess, uid, maxTransactionTime, minTransactionTime, tagFilters, noTags)
 	sess = s.appendFilterPicturesConditionToQuery(sess, uid, mustHavePictures)
@@ -554,7 +556,7 @@ func (s *TransactionService) GetTransactionCount(c core.Context, uid int64, maxT
 		}
 	}
 
-	condition, conditionParams := s.buildTransactionQueryCondition(uid, maxTransactionTime, minTransactionTime, transactionDbType, categoryIds, accountIds, tagFilters, amountFilter, keyword, matchMode, true)
+	condition, conditionParams := s.buildTransactionQueryCondition(c, uid, maxTransactionTime, minTransactionTime, transactionDbType, categoryIds, accountIds, tagFilters, amountFilter, keyword, matchMode, true)
 	sess := s.UserDataDB(uid).NewSession(c).Where(condition, conditionParams...)
 	sess = s.appendFilterTagIdsConditionToQuery(sess, uid, maxTransactionTime, minTransactionTime, tagFilters, noTags)
 	sess = s.appendFilterPicturesConditionToQuery(sess, uid, mustHavePictures)
@@ -920,6 +922,7 @@ func (s *TransactionService) CreateScheduledTransactions(c core.Context, current
 		}
 
 		transaction := &models.Transaction{
+			BookId:            template.BookId,
 			Uid:               template.Uid,
 			Type:              transactionDbType,
 			CategoryId:        template.CategoryId,
@@ -1027,6 +1030,26 @@ func (s *TransactionService) ModifyTransaction(c core.Context, transaction *mode
 			return err
 		} else if !has {
 			return errs.ErrTransactionNotFound
+		}
+
+		if transaction.BookId == "" {
+			transaction.BookId = oldTransaction.BookId
+		}
+		bookID, bookErr := Books.ResolveInSession(sess, transaction.Uid, transaction.BookId, transaction.BookId == oldTransaction.BookId)
+		if bookErr != nil {
+			return bookErr
+		}
+		transaction.BookId = bookID
+		if err := guardCreditInstallmentTransaction(sess, transaction, oldTransaction, false); err != nil {
+			return err
+		}
+		if transaction.ReimbursementAccountId > 0 || oldTransaction.ReimbursementAccountId > 0 || oldTransaction.ReimbursementReceiptId != "" {
+			if err := validateReimbursementTransaction(sess, transaction, oldTransaction); err != nil {
+				return err
+			}
+		}
+		if transaction.BookId != oldTransaction.BookId {
+			updateCols = append(updateCols, "book_id")
 		}
 
 		if oldTransaction.Type != models.TRANSACTION_DB_TYPE_MODIFY_BALANCE &&
@@ -1175,6 +1198,12 @@ func (s *TransactionService) ModifyTransaction(c core.Context, transaction *mode
 
 		if transaction.HideAmount != oldTransaction.HideAmount {
 			updateCols = append(updateCols, "hide_amount")
+		}
+		if transaction.ExcludeFromStatistics != oldTransaction.ExcludeFromStatistics {
+			updateCols = append(updateCols, "exclude_from_statistics")
+		}
+		if transaction.ReimbursementAccountId != oldTransaction.ReimbursementAccountId {
+			updateCols = append(updateCols, "reimbursement_account_id")
 		}
 
 		if transaction.Comment != oldTransaction.Comment {
@@ -1572,6 +1601,9 @@ func (s *TransactionService) ModifyTransaction(c core.Context, transaction *mode
 			return errs.ErrTransactionTypeInvalid
 		}
 
+		if transaction.ReimbursementAccountId > 0 || oldTransaction.ReimbursementAccountId > 0 || transaction.ReimbursementReceiptId != "" {
+			return refreshReimbursementBalances(sess, transaction.Uid)
+		}
 		return nil
 	})
 
@@ -1810,6 +1842,18 @@ func (s *TransactionService) MoveAllTransactionsBetweenAccounts(c core.Context, 
 	}
 
 	return s.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
+		if err := guardMonetaryMove(sess, uid, []int64{fromAccountId, toAccountId}); err != nil {
+			return err
+		}
+		var derived []models.Account
+		if err := sess.Where("uid=?", uid).In("account_id", []int64{fromAccountId, toAccountId}).Find(&derived); err != nil {
+			return err
+		}
+		for _, a := range derived {
+			if a.IsReimbursement() {
+				return investmentError("报销账户的余额由关联账单计算，不能合并普通流水")
+			}
+		}
 		if err := guardSystemAccounts(sess, uid, []int64{fromAccountId, toAccountId}); err != nil {
 			return err
 		}
@@ -2097,6 +2141,19 @@ func (s *TransactionService) DeleteTransaction(c core.Context, uid int64, transa
 			return errs.ErrTransactionNotFound
 		}
 
+		if err := guardCreditInstallmentTransaction(sess, nil, oldTransaction, true); err != nil {
+			return err
+		}
+		if oldTransaction.ReimbursementAccountId > 0 {
+			paid, err := reimbursementPaid(sess, uid, transactionId, 0)
+			if err != nil {
+				return err
+			}
+			if paid > 0 {
+				return investmentError("请先删除该账单的报销到账记录")
+			}
+		}
+
 		// Get and verify source and destination account
 		sourceAccount, destinationAccount, err := s.getAccountModels(sess, oldTransaction)
 
@@ -2210,6 +2267,9 @@ func (s *TransactionService) DeleteTransaction(c core.Context, uid int64, transa
 			return errs.ErrTransactionTypeInvalid
 		}
 
+		if oldTransaction.ReimbursementAccountId > 0 || oldTransaction.ReimbursementReceiptId != "" {
+			return refreshReimbursementBalances(sess, uid)
+		}
 		return err
 	})
 }
@@ -2244,10 +2304,26 @@ func (s *TransactionService) DeleteAllTransactions(c core.Context, uid int64, de
 	}
 
 	return s.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
+		if deleteAccount {
+			if _, err := sess.Where("uid=?", uid).Delete(&models.MonetaryIncomeDay{}); err != nil {
+				return err
+			}
+			if _, err := sess.Where("uid=?", uid).Delete(&models.MonetaryIncomeBinding{}); err != nil {
+				return err
+			}
+		} else if err := pauseMonetaryIncome(sess, uid, nil); err != nil {
+			return err
+		}
 		if err := guardInvestmentTransactions(sess, uid, nil); err != nil {
 			return err
 		}
 		if err := InvalidateWealthSnapshots(sess, uid, 0); err != nil {
+			return err
+		}
+		if _, err := sess.Where("uid=?", uid).Cols("closed").Update(&models.CreditInstallment{Closed: true}); err != nil {
+			return err
+		}
+		if _, err := sess.Where("uid=?", uid).Cols("closed").Update(&models.FixedDeposit{Closed: true}); err != nil {
 			return err
 		}
 		// Update all transactions to deleted
@@ -2290,6 +2366,12 @@ func (s *TransactionService) DeleteAllTransactionsOfAccount(c core.Context, uid 
 
 	if accountId <= 0 {
 		return errs.ErrAccountIdInvalid
+	}
+	// Stop new automatic income before the existing paginated clear begins.
+	if err := s.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
+		return pauseMonetaryIncome(sess, uid, []int64{accountId})
+	}); err != nil {
+		return err
 	}
 
 	transactions, err := s.GetAllSpecifiedTransactions(c, uid, 0, 0, 0, nil, []int64{accountId}, nil, false, "", "", core.MATCH_MODE_DEFAULT, false, pageCount, true)
@@ -2335,26 +2417,28 @@ func (s *TransactionService) GetRelatedTransferTransaction(originalTransaction *
 	}
 
 	relatedTransaction := &models.Transaction{
-		TransactionId:        originalTransaction.RelatedId,
-		InvestmentEventId:    originalTransaction.InvestmentEventId,
-		Uid:                  originalTransaction.Uid,
-		Deleted:              originalTransaction.Deleted,
-		Type:                 relatedType,
-		CategoryId:           originalTransaction.CategoryId,
-		TransactionTime:      relatedTransactionTime,
-		TimezoneUtcOffset:    originalTransaction.TimezoneUtcOffset,
-		AccountId:            originalTransaction.RelatedAccountId,
-		Amount:               originalTransaction.RelatedAccountAmount,
-		RelatedId:            originalTransaction.TransactionId,
-		RelatedAccountId:     originalTransaction.AccountId,
-		RelatedAccountAmount: originalTransaction.Amount,
-		Comment:              originalTransaction.Comment,
-		GeoLongitude:         originalTransaction.GeoLongitude,
-		GeoLatitude:          originalTransaction.GeoLatitude,
-		CreatedIp:            originalTransaction.CreatedIp,
-		CreatedUnixTime:      originalTransaction.CreatedUnixTime,
-		UpdatedUnixTime:      originalTransaction.UpdatedUnixTime,
-		DeletedUnixTime:      originalTransaction.DeletedUnixTime,
+		TransactionId:         originalTransaction.RelatedId,
+		InvestmentEventId:     originalTransaction.InvestmentEventId,
+		ExcludeFromStatistics: originalTransaction.ExcludeFromStatistics,
+		BookId:                originalTransaction.BookId,
+		Uid:                   originalTransaction.Uid,
+		Deleted:               originalTransaction.Deleted,
+		Type:                  relatedType,
+		CategoryId:            originalTransaction.CategoryId,
+		TransactionTime:       relatedTransactionTime,
+		TimezoneUtcOffset:     originalTransaction.TimezoneUtcOffset,
+		AccountId:             originalTransaction.RelatedAccountId,
+		Amount:                originalTransaction.RelatedAccountAmount,
+		RelatedId:             originalTransaction.TransactionId,
+		RelatedAccountId:      originalTransaction.AccountId,
+		RelatedAccountAmount:  originalTransaction.Amount,
+		Comment:               originalTransaction.Comment,
+		GeoLongitude:          originalTransaction.GeoLongitude,
+		GeoLatitude:           originalTransaction.GeoLatitude,
+		CreatedIp:             originalTransaction.CreatedIp,
+		CreatedUnixTime:       originalTransaction.CreatedUnixTime,
+		UpdatedUnixTime:       originalTransaction.UpdatedUnixTime,
+		DeletedUnixTime:       originalTransaction.DeletedUnixTime,
 	}
 
 	return relatedTransaction
@@ -2495,7 +2579,7 @@ func (s *TransactionService) GetAccountsAndCategoriesTotalInflowAndOutflow(c cor
 		endTransactionTime = utils.GetMaxTransactionTimeFromUnixTime(endUnixTime)
 	}
 
-	condition := "uid=? AND deleted=? AND (type=? OR type=? OR type=? OR type=?)"
+	condition := "uid=? AND deleted=? AND exclude_from_statistics=0 AND reimbursement_account_id=0 AND (type=? OR type=? OR type=? OR type=?)"
 	conditionParams := make([]any, 0, 6)
 	conditionParams = append(conditionParams, uid)
 	conditionParams = append(conditionParams, false)
@@ -2504,6 +2588,7 @@ func (s *TransactionService) GetAccountsAndCategoriesTotalInflowAndOutflow(c cor
 	conditionParams = append(conditionParams, models.TRANSACTION_DB_TYPE_TRANSFER_OUT)
 	conditionParams = append(conditionParams, models.TRANSACTION_DB_TYPE_TRANSFER_IN)
 
+	condition, conditionParams = appendBookFilter(c, condition, conditionParams)
 	minTransactionTime := startTransactionTime
 	maxTransactionTime := endTransactionTime
 	var allTransactions []*models.Transaction
@@ -2626,7 +2711,7 @@ func (s *TransactionService) GetAccountsAndCategoriesMonthlyInflowAndOutflow(c c
 		}
 	}
 
-	condition := "uid=? AND deleted=? AND (type=? OR type=? OR type=? OR type=?)"
+	condition := "uid=? AND deleted=? AND exclude_from_statistics=0 AND reimbursement_account_id=0 AND (type=? OR type=? OR type=? OR type=?)"
 	conditionParams := make([]any, 0, 6)
 	conditionParams = append(conditionParams, uid)
 	conditionParams = append(conditionParams, false)
@@ -2635,6 +2720,7 @@ func (s *TransactionService) GetAccountsAndCategoriesMonthlyInflowAndOutflow(c c
 	conditionParams = append(conditionParams, models.TRANSACTION_DB_TYPE_TRANSFER_OUT)
 	conditionParams = append(conditionParams, models.TRANSACTION_DB_TYPE_TRANSFER_IN)
 
+	condition, conditionParams = appendBookFilter(c, condition, conditionParams)
 	minTransactionTime := startTransactionTime
 	maxTransactionTime := endTransactionTime
 	var allTransactions []*models.Transaction
@@ -2766,6 +2852,11 @@ func (s *TransactionService) GetTransactionIds(transactions []*models.Transactio
 }
 
 func (s *TransactionService) doCreateTransaction(c core.Context, database *datastore.Database, sess *xorm.Session, transaction *models.Transaction, transactionTagIndexes []*models.TransactionTagIndex, tagIds []int64, pictureIds []int64, pictureUpdateModel *models.TransactionPictureInfo) error {
+	bookID, bookErr := Books.ResolveInSession(sess, transaction.Uid, transaction.BookId, false)
+	if bookErr != nil {
+		return bookErr
+	}
+	transaction.BookId = bookID
 	if err := InvalidateWealthSnapshots(sess, transaction.Uid, utils.GetUnixTimeFromTransactionTime(transaction.TransactionTime)); err != nil {
 		return err
 	}
@@ -2778,6 +2869,11 @@ func (s *TransactionService) doCreateTransaction(c core.Context, database *datas
 
 	if sourceAccount.Hidden || (destinationAccount != nil && destinationAccount.Hidden) {
 		return errs.ErrCannotAddTransactionToHiddenAccount
+	}
+	if transaction.ReimbursementAccountId > 0 {
+		if err := validateReimbursementTransaction(sess, transaction, nil); err != nil {
+			return err
+		}
 	}
 
 	if sourceAccount.Type == models.ACCOUNT_TYPE_MULTI_SUB_ACCOUNTS || (destinationAccount != nil && destinationAccount.Type == models.ACCOUNT_TYPE_MULTI_SUB_ACCOUNTS) {
@@ -3025,6 +3121,9 @@ func (s *TransactionService) doCreateTransaction(c core.Context, database *datas
 		return errs.ErrTransactionTypeInvalid
 	}
 
+	if err == nil && transaction.ReimbursementAccountId > 0 {
+		return refreshReimbursementBalances(sess, transaction.Uid)
+	}
 	return err
 }
 
@@ -3059,7 +3158,7 @@ func (s *TransactionService) getAllTransactionsInSpecifiedDateRange(c core.Conte
 	startTransactionTime := utils.GetMinTransactionTimeFromUnixTime(startUnixTime)
 	endTransactionTime := utils.GetMaxTransactionTimeFromUnixTime(endUnixTime)
 
-	condition := "uid=? AND deleted=? AND (type=? OR type=?)"
+	condition := "uid=? AND deleted=? AND exclude_from_statistics=0 AND reimbursement_account_id=0 AND (type=? OR type=?)"
 	conditionParams := make([]any, 0, 4+len(excludeAccountIds)+len(excludeCategoryIds))
 	conditionParams = append(conditionParams, uid)
 	conditionParams = append(conditionParams, false)
@@ -3100,8 +3199,8 @@ func (s *TransactionService) getAllTransactionsInSpecifiedDateRange(c core.Conte
 		conditionParams = append(conditionParams, categoryIdConditionParams...)
 	}
 
+	condition, conditionParams = appendBookFilter(c, condition, conditionParams)
 	condition = condition + " AND transaction_time>=? AND transaction_time<=?"
-
 	minTransactionTime := startTransactionTime
 	maxTransactionTime := endTransactionTime
 	var allTransactions []*models.Transaction
@@ -3133,11 +3232,12 @@ func (s *TransactionService) getAllTransactionsInSpecifiedDateRange(c core.Conte
 	return allTransactions, nil
 }
 
-func (s *TransactionService) buildTransactionQueryCondition(uid int64, maxTransactionTime int64, minTransactionTime int64, transactionDbType models.TransactionDbType, categoryIds []int64, accountIds []int64, tagFilters []*models.TransactionTagFilter, amountFilter string, keyword string, matchMode core.MatchMode, noDuplicated bool) (string, []any) {
+func (s *TransactionService) buildTransactionQueryCondition(c core.Context, uid int64, maxTransactionTime int64, minTransactionTime int64, transactionDbType models.TransactionDbType, categoryIds []int64, accountIds []int64, tagFilters []*models.TransactionTagFilter, amountFilter string, keyword string, matchMode core.MatchMode, noDuplicated bool) (string, []any) {
 	condition := "uid=? AND deleted=?"
 	conditionParams := make([]any, 0, 16)
 	conditionParams = append(conditionParams, uid)
 	conditionParams = append(conditionParams, false)
+	condition, conditionParams = appendBookFilter(c, condition, conditionParams)
 
 	if maxTransactionTime > 0 {
 		condition = condition + " AND transaction_time<=?"
@@ -3468,6 +3568,9 @@ func (s *TransactionService) getAccountModels(sess *xorm.Session, transaction *m
 
 	if transaction.InvestmentEventId == "" && (sourceAccount.SystemRole != "" || (destinationAccount != nil && destinationAccount.SystemRole != "")) {
 		return nil, nil, ErrInvestmentLinked
+	}
+	if sourceAccount.IsReimbursement() || (destinationAccount != nil && destinationAccount.IsReimbursement()) {
+		return nil, nil, investmentError("报销账户余额由待报销账单计算，请从报销页面记录到账")
 	}
 	return sourceAccount, destinationAccount, nil
 }

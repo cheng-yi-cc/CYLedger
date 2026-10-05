@@ -77,6 +77,13 @@ func (s *TokenService) CreateToken(c *core.WebContext, user *models.User) (strin
 	return token, claims, err
 }
 
+// CreateNativeLocalToken is used only by the in-process Android host. It is not
+// exposed by an HTTP handler; loopback callers still need normal authorization.
+func (s *TokenService) CreateNativeLocalToken(c core.Context, user *models.User) (string, error) {
+	token, _, _, err := s.createToken(c, user, core.USER_TOKEN_TYPE_NORMAL, "CYLedger Android", "", s.CurrentConfig().TokenExpiredTimeDuration)
+	return token, err
+}
+
 // CreateRequire2FAToken generates a new token requiring user to verify 2fa passcode and saves to database
 func (s *TokenService) CreateRequire2FAToken(c *core.WebContext, user *models.User) (string, *core.UserTokenClaims, error) {
 	token, claims, _, err := s.createToken(c, user, core.USER_TOKEN_TYPE_REQUIRE_2FA, s.getUserAgent(c), "", s.CurrentConfig().TemporaryTokenExpiredTimeDuration)

@@ -14,6 +14,9 @@
     button:focus-visible,a:focus-visible,input:focus-visible { outline: 2px solid var(--cy-accent); outline-offset: 3px; }
     .cy-panel { background: var(--cy-card); border-radius: 18px; padding: 20px; margin-bottom: 18px; border: 1px solid var(--cy-line); }
     .cy-muted { color: var(--cy-muted); font-size: 12px; line-height: 1.7; }
+    .cy-button { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 9px 14px; border: 1px solid var(--cy-line); border-radius: 9px; background: var(--cy-card); color: var(--cy-ink); font-size: 13px; }
+    .cy-primary { background: var(--cy-accent); border-color: var(--cy-accent); color: var(--cy-card); }
+    .cy-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
     .cy-income { color: var(--cy-accent); } .cy-expense { color: var(--cy-expense); }
     .cy-section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
     .cy-section-head a { color: var(--cy-accent); font-size: 13px; }
@@ -52,3 +55,31 @@
 }
 @media(max-width:350px) { .cy-mobile-surface { .cy-page-body { padding-inline: 12px; } .cy-panel { padding: 16px; } .cy-segments button { padding: 7px 8px; } } }
 @media(prefers-reduced-motion:reduce) { .cy-mobile-surface * { scroll-behavior: auto!important; transition: none!important; } }
+
+.dark .cy-assets-page,.dark .cy-fund-binding,.dark .cy-account-edit,.dark .cy-account-detail,.dark .cy-asset-tools,.dark .cy-reimbursement-page,.dark .cy-account-picker,.dark .cy-asset-surface {
+    --cy-bg:#131d26;--cy-card:#212b36;--cy-ink:#d5dbd7;--cy-muted:#8e9897;
+    --cy-line:#303b44;--cy-accent:#6db5a0;--cy-expense:#df7680;
+    --f7-navbar-bg-color:var(--cy-card);
+}
+
+// The Android host already reserves the status, navigation and keyboard insets.
+:root.cy-native { --f7-safe-area-top:0px!important; --f7-safe-area-bottom:0px!important; }
+:is(.cy-assets-page,.cy-fund-binding,.cy-account-edit,.cy-account-detail,.cy-asset-tools,.cy-reimbursement-page,.cy-asset-surface) {
+    --f7-navbar-height:56px;
+    --f7-navbar-title-font-size:18px;
+    --f7-navbar-title-font-weight:500;
+    --f7-navbar-font-size:16px;
+    --f7-navbar-link-color:var(--cy-ink);
+    .navbar-bg { background:var(--cy-card); }
+    .navbar-bg:before,.navbar-bg:after { display:none!important; }
+    .navbar .navbar-inner { padding:var(--f7-safe-area-top) 6px 0; gap:0; }
+    .navbar .left,.navbar .right { background:transparent;box-shadow:none;backdrop-filter:none;border-radius:0;margin:0;height:56px;min-width:44px; }
+    .navbar .left { order:0; }
+    .navbar .title { order:1;flex:1;min-width:0;text-align:left;left:0!important;margin:0 6px; }
+    .navbar .right { order:2;justify-content:flex-end; }
+    .navbar a.link { padding:0 10px;min-height:44px;font-weight:400; }
+    .navbar a:is(.icon-only,:has(i:only-child)) { width:44px;min-width:44px;padding:0;justify-content:center; }
+    .navbar .icon { font-size:24px; }
+    .navbar .left a+a,.navbar .right a+a { margin-left:0; }
+    input[type=date]::-webkit-calendar-picker-indicator { display:none; }
+}

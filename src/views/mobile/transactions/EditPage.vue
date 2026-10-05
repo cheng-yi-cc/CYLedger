@@ -1,6 +1,11 @@
 <template>
-    <f7-page @page:afterin="onPageAfterIn" @page:beforeout="onPageBeforeOut">
-        <f7-navbar>
+    <f7-page :class="{ 'cy-mobile-surface cy-transaction-entry': canUseQuickEntry }" @page:afterin="onPageAfterIn" @page:beforeout="onPageBeforeOut">
+        <f7-navbar v-if="canUseQuickEntry" class="cy-quick-navbar">
+            <f7-nav-left><f7-link back icon-f7="chevron_left" :aria-label="tt('Back')" /></f7-nav-left>
+            <f7-nav-title><nav class="cy-entry-types" aria-label="记账类型"><button v-for="item in entryTypes" :key="item.value" :aria-pressed="activeEntryType === item.value" :disabled="loading || submitting" @click="selectEntryType(item.value)">{{ item.label }}</button></nav></f7-nav-title>
+            <f7-nav-right><BookPicker compact v-model="transaction.bookId" :disabled="loading || submitting" /></f7-nav-right>
+        </f7-navbar>
+        <f7-navbar v-else>
             <f7-nav-left :class="{ 'disabled': loading }" :back-link="tt('Back')"></f7-nav-left>
             <f7-nav-title :title="tt(title)"></f7-nav-title>
             <f7-nav-right :class="{ 'navbar-compact-icons': true, 'disabled': loading }" v-if="mode !== TransactionEditPageMode.View || transaction.type !== TransactionType.ModifyBalance">
@@ -9,7 +14,7 @@
             </f7-nav-right>
         </f7-navbar>
 
-        <f7-block :class="{ 'subnav-segmented-bar': true, 'disabled': loading }">
+        <f7-block v-if="!canUseQuickEntry" :class="{ 'subnav-segmented-bar': true, 'disabled': loading }">
             <f7-segmented strong round :class="{ 'readonly': pageTypeAndMode?.type === TransactionEditPageType.Transaction && mode !== TransactionEditPageMode.Add && mode !== TransactionEditPageMode.Edit }">
                 <f7-button round :text="tt('Expense')" :active="transaction.type === TransactionType.Expense"
                            :disabled="pageTypeAndMode?.type === TransactionEditPageType.Transaction && mode !== TransactionEditPageMode.Add && mode !== TransactionEditPageMode.Edit && transaction.type !== TransactionType.Expense"
@@ -55,7 +60,54 @@
             <f7-list-input type="textarea" label="Description" placeholder="Your transaction description (optional)"></f7-list-input>
         </f7-list>
 
-        <f7-list form strong inset dividers class="margin-vertical-half" v-else-if="!loading">
+        <QuickTransactionEntry ref="quickEntry" v-if="!loading && useQuickEntry"
+                               :book-id="transaction.bookId"
+                               :preserve-category="mode === TransactionEditPageMode.Edit"
+                               :categories="allCategories[quickCategoryType] || []" :category-type="quickCategoryType"
+                               :currency="sourceAccountCurrency" :destination-currency="destinationAccountCurrency"
+                               :transfer="transaction.type === TransactionType.Transfer && !debtMode" :can-save="!inputIsEmpty && transaction.sourceAmount !== 0"
+                               :tags="quickTags" :amount-class="transaction.type === TransactionType.Expense ? 'cy-expense' : transaction.type === TransactionType.Income ? 'cy-income' : ''"
+                               :validation-message="debtMode && transaction.sourceAmount ? debtValidationMessage : ''"
+                               :disabled="submitting || recognizing" :allow-continue="mode === TransactionEditPageMode.Add"
+                               v-model:amount="transaction.sourceAmount" v-model:destination-amount="transaction.destinationAmount"
+                               v-model:category-id="quickCategoryId" v-model:comment="transaction.comment"
+                               @save="save(AfterSaveAction.GoBack)" @continue="save(AfterSaveAction.StayWithNewTransaction)"
+                               @more="showExtendedFields = true" @tags="showTransactionTagSheet = true" @cancel="f7router.back()">
+            <template v-if="debtMode" #selection><DebtEntryFields :accounts="debtAccounts" :categories="debtCategories" :amount="transaction.sourceAmount" :disabled="submitting" :previous-account-id="previousDebtAccountId" :previous-impact="previousDebtImpact" v-model:operation="debtOperation" v-model:source-id="transaction.sourceAccountId" v-model:destination-id="transaction.destinationAccountId" v-model:category-id="transaction.transferCategoryId" /></template>
+            <template #context>
+                <button v-if="transaction.type === TransactionType.Expense && reimbursementAccounts.length" class="cy-entry-chip" @click="showReimbursementSheet=true"><f7-icon f7="doc_text" />{{allAccountsMap[transaction.reimbursementAccountId]?.name||'报销'}}</button>
+                <button class="cy-entry-chip" @click="showDateTimeDialog('date')"><f7-icon f7="calendar" />{{ quickDate }}</button>
+                <template v-if="!debtMode"><button v-if="allVisibleAccounts.length" class="cy-entry-chip" @click="showSourceAccountSheet = true"><f7-icon f7="creditcard" />{{ sourceAccountName || '选择账户' }}</button><f7-link v-else class="cy-entry-chip" href="/account/add">＋ 添加账户</f7-link>
+                <button v-if="transaction.type === TransactionType.Transfer" class="cy-entry-chip" :disabled="!allVisibleAccounts.length" @click="showDestinationAccountSheet = true"><f7-icon f7="arrow_right" />{{ destinationAccountName || '转入账户' }}</button></template>
+                <button v-if="isTransactionPicturesEnabled()" class="cy-entry-chip" :disabled="uploadingPicture || !canAddTransactionPicture" @click="showOpenPictureDialog"><f7-icon f7="paperclip" />{{ uploadingPicture ? '上传中' : '附件' }}</button>
+            </template>
+            <template v-if="transaction.pictures?.length" #attachments><div class="cy-quick-attachments"><button v-for="picture in transaction.pictures" :key="picture.pictureId" aria-label="查看或移除附件" @click="viewOrRemovePicture(picture)"><img :src="getTransactionPictureUrl(picture)" alt="记账附件" /></button></div></template>
+        </QuickTransactionEntry>
+        <template v-if="!loading && useQuickEntry">
+            <two-column-list-item-selection-sheet primary-key-field="id" primary-value-field="category" primary-title-field="name" primary-footer-field="displayBalance"
+                                                  primary-icon-field="icon" primary-icon-type-field="iconType" primary-icon-type="account" primary-sub-items-field="accounts" :primary-title-i18n="true"
+                                                  secondary-key-field="id" secondary-value-field="id" secondary-title-field="name" secondary-footer-field="displayBalance"
+                                                  secondary-icon-field="icon" secondary-icon-type-field="iconType" secondary-icon-type="account" secondary-color-field="color"
+                                                  :enable-filter="true" :filter-placeholder="tt('Find account')" :filter-no-items-text="tt('No available account')"
+                                                  :items="allVisibleCategorizedAccounts" v-model:show="showSourceAccountSheet" v-model="transaction.sourceAccountId" />
+            <two-column-list-item-selection-sheet primary-key-field="id" primary-value-field="category" primary-title-field="name" primary-footer-field="displayBalance"
+                                                  primary-icon-field="icon" primary-icon-type-field="iconType" primary-icon-type="account" primary-sub-items-field="accounts" :primary-title-i18n="true"
+                                                  secondary-key-field="id" secondary-value-field="id" secondary-title-field="name" secondary-footer-field="displayBalance"
+                                                  secondary-icon-field="icon" secondary-icon-type-field="iconType" secondary-icon-type="account" secondary-color-field="color"
+                                                  :enable-filter="true" :filter-placeholder="tt('Find account')" :filter-no-items-text="tt('No available account')"
+                                                  :items="allVisibleCategorizedAccounts" v-model:show="showDestinationAccountSheet" v-model="transaction.destinationAccountId" />
+            <date-time-selection-sheet :init-mode="transactionDateTimeSheetMode" :timezone-utc-offset="transaction.utcOffset" :model-value="transaction.time"
+                                       v-model:show="showTransactionDateTimeSheet" @update:model-value="updateTransactionTime" />
+            <transaction-tag-selection-sheet :allow-add-new-tag="true" :enable-filter="true" v-model:show="showTransactionTagSheet" v-model="transaction.tagIds" />
+        </template>
+        <div v-if="!loading && canUseQuickEntry && showExtendedFields" class="cy-entry-details-heading">
+            <button class="cy-entry-chip" @click="showExtendedFields = false"><f7-icon f7="keyboard" />返回分类与键盘</button>
+            <BookPicker v-model="transaction.bookId" />
+        </div>
+        <f7-list form strong inset dividers class="margin-vertical-half" v-if="!loading && !useQuickEntry">
+            <f7-list-item v-if="pageTypeAndMode?.type === TransactionEditPageType.Transaction && transaction.type === TransactionType.Expense" title="报销账户" :after="allAccountsMap[transaction.reimbursementAccountId]?.name||'不报销'" link="#" @click="mode!==TransactionEditPageMode.View&&(showReimbursementSheet=true)" />
+            <f7-list-item v-if="pageTypeAndMode?.type === TransactionEditPageType.Transaction && [TransactionType.Expense,TransactionType.Income].includes(transaction.type)" title="计入收支与预算"><template #after><f7-toggle :disabled="mode===TransactionEditPageMode.View||!!transaction.reimbursementReceiptId||transaction.reimbursementAccountId!=='0'" :checked="!transaction.excludeFromStatistics&&transaction.reimbursementAccountId==='0'" @toggle:change="transaction.excludeFromStatistics=!$event" /></template></f7-list-item>
+            <f7-list-item v-if="pageTypeAndMode?.type === TransactionEditPageType.Template"><template #default><BookPicker v-model="transaction.bookId" :disabled="submitting || recognizing" /></template></f7-list-item>
             <f7-list-input
                 type="text"
                 clear-button
@@ -471,6 +523,7 @@
                 <f7-actions-button @click="showTransactionPictures = true">{{ tt('Add Picture') }}</f7-actions-button>
             </f7-actions-group>
             <f7-actions-group v-if="pageTypeAndMode?.type === TransactionEditPageType.Transaction && mode === TransactionEditPageMode.View && transaction.type !== TransactionType.ModifyBalance">
+                <f7-actions-button @click="f7router.navigate(`/transaction/edit?id=${transaction.id}&type=${transaction.type}`, { reloadCurrent: true })">编辑</f7-actions-button>
                 <f7-actions-button @click="duplicate(false, false)">{{ tt('Duplicate') }}</f7-actions-button>
                 <f7-actions-button @click="duplicate(true, false)">{{ tt('Duplicate (With Time)') }}</f7-actions-button>
                 <f7-actions-button @click="duplicate(false, true)" v-if="transaction.geoLocation">{{ tt('Duplicate (With Geographic Location)') }}</f7-actions-button>
@@ -481,14 +534,14 @@
             </f7-actions-group>
         </f7-actions>
 
-        <template #fixed v-if="quickSaveButtonStyleType === TransactionQuickSaveButtonStyle.BottomLeftFloating.type || quickSaveButtonStyleType === TransactionQuickSaveButtonStyle.BottomCenterFloating.type || quickSaveButtonStyleType === TransactionQuickSaveButtonStyle.BottomRightFloating.type">
+        <template #fixed v-if="!useQuickEntry && (quickSaveButtonStyleType === TransactionQuickSaveButtonStyle.BottomLeftFloating.type || quickSaveButtonStyleType === TransactionQuickSaveButtonStyle.BottomCenterFloating.type || quickSaveButtonStyleType === TransactionQuickSaveButtonStyle.BottomRightFloating.type)">
             <f7-fab id="quick-save-button" :class="{ 'disabled': inputIsEmpty || submitting || recognizing }" :position="quickSaveButtonFloatingPosition"
                     :text="tt(quickSaveButtonTitle)"
                     @click="quickSave" v-if="mode !== TransactionEditPageMode.View">
             </f7-fab>
         </template>
 
-        <f7-toolbar id="quick-save-button" class="compact-tabbar" tabbar bottom v-if="quickSaveButtonStyleType === TransactionQuickSaveButtonStyle.BottomFixed.type && mode !== TransactionEditPageMode.View">
+        <f7-toolbar id="quick-save-button" class="compact-tabbar" tabbar bottom v-if="!useQuickEntry && quickSaveButtonStyleType === TransactionQuickSaveButtonStyle.BottomFixed.type && mode !== TransactionEditPageMode.View">
             <f7-link :class="{ 'disabled': inputIsEmpty || submitting || recognizing }" @click="quickSave">
                 <span class="tabbar-primary-link">{{ tt(quickSaveButtonTitle) }}</span>
             </f7-link>
@@ -514,11 +567,20 @@
                           :navbar-show-count="true" :exposition="false"
                           :photos="transactionPictures" :thumbs="transactionThumbs" />
         <input ref="pictureInput" type="file" style="display: none" :accept="`${SUPPORTED_IMAGE_EXTENSIONS};capture=camera`" @change="onUploadPicture($event)" />
+        <f7-sheet v-model:opened="showReimbursementSheet" class="cy-mobile-surface cy-reimbursement-picker" backdrop><f7-list><f7-list-item title="不报销" link="#" sheet-close @click="transaction.reimbursementAccountId='0'"/><f7-list-item v-for="a in reimbursementAccounts" :key="a.id" :title="a.name" link="#" sheet-close @click="transaction.reimbursementAccountId=a.id"/><f7-list-item title="添加报销账户" link="/account/add?preset=reimbursement" sheet-close/></f7-list></f7-sheet>
     </f7-page>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, useTemplateRef } from 'vue';
+import { ref, computed, watch, useTemplateRef } from 'vue';
+import { useLedgerScopeStore } from '@/stores/ledgerScope.ts';
+import { getCurrentUnixTime } from '@/lib/datetime.ts';
+import QuickTransactionEntry from '@/components/mobile/QuickTransactionEntry.vue';
+import DebtEntryFields from '@/components/mobile/DebtEntryFields.vue';
+import moment from 'moment-timezone';
+import { DEBT_OPERATIONS, debtImpact, debtIsSource, inferDebtOperation, isDebtCashAccount, validateDebtEntry, type DebtOperation } from '@/lib/ledger-debt.ts';
+import BookPicker from '@/components/mobile/BookPicker.vue';
+import { useBooksStore } from '@/stores/books.ts';
 import type { PhotoBrowser, Router } from 'framework7/types';
 
 import { useI18n } from '@/locales/helpers.ts';
@@ -621,6 +683,7 @@ const {
     imageUploadQualityType,
     allTimezones,
     allVisibleAccounts,
+    allAccountsMap,
     allVisibleCategorizedAccounts,
     allCategories,
     allTagsMap,
@@ -647,16 +710,32 @@ const {
     setTransactionModel,
     updateTransactionModelFromRecognizedResponse,
     updateTransactionModelByAfterSaveAction,
-    updateTransactionTime,
+    updateTransactionTime: updateSelectedTransactionTime,
     updateTransactionTimezone,
     swapTransactionData,
     getDisplayAmount,
     getTransactionPictureUrl
-} = useTransactionEditPageBase(pageTypeAndMode?.type || TransactionEditPageType.Transaction, pageTypeAndMode?.mode, query['type'] ? parseInt(query['type']) : undefined);
+} = useTransactionEditPageBase(pageTypeAndMode?.type || TransactionEditPageType.Transaction, pageTypeAndMode?.mode, query['type'] ? parseInt(query['type']) : undefined, true);
 
 const isSupportClipboard = !!navigator.clipboard;
 
 const settingsStore = useSettingsStore();
+const showReimbursementSheet=ref(false);
+const reimbursementAccounts=computed(()=>Object.values(allAccountsMap.value).filter(a=>a.visible&&a.assetProfile.kind==='reimbursement'&&a.currency===sourceAccountCurrency.value));
+const booksStore = useBooksStore();
+const ledgerScope = useLedgerScopeStore();
+const dateSelectedManually = ref(false);
+watch(transaction, () => { dateSelectedManually.value = false; });
+function updateTransactionTime(time: number): void {
+    dateSelectedManually.value = true;
+    updateSelectedTransactionTime(time);
+}
+watch(() => [ledgerScope.currentDay, ledgerScope.timeZone], () => {
+    if (loading.value || pageTypeAndMode?.type !== TransactionEditPageType.Transaction || mode.value !== TransactionEditPageMode.Add || query['time'] || query['id'] || dateSelectedManually.value) return;
+    transaction.value.time = getCurrentUnixTime();
+    transaction.value.timeZone = ledgerScope.timeZone;
+    transaction.value.utcOffset = getTimezoneOffsetMinutes(transaction.value.time, ledgerScope.timeZone);
+});
 const userStore = useUserStore();
 const accountsStore = useAccountsStore();
 const transactionCategoriesStore = useTransactionCategoriesStore();
@@ -666,6 +745,7 @@ const transactionTemplatesStore = useTransactionTemplatesStore();
 
 const pictureBrowser = useTemplateRef<PhotoBrowser.PhotoBrowser>('pictureBrowser');
 const pictureInput = useTemplateRef<HTMLInputElement>('pictureInput');
+const quickEntry = useTemplateRef<InstanceType<typeof QuickTransactionEntry>>('quickEntry');
 
 const loadingError = ref<unknown | null>(null);
 const removingPictureId = ref<string | null>(null);
@@ -691,6 +771,47 @@ const showTransactionPictures = ref<boolean>(pageTypeAndMode?.type === Transacti
     && (pageTypeAndMode?.mode === TransactionEditPageMode.Add || pageTypeAndMode?.mode === TransactionEditPageMode.Edit)
     && settingsStore.appSettings.alwaysShowTransactionPicturesInMobileTransactionEditPage);
 const showAITextRecognitionSheet = ref<boolean>(false);
+const showExtendedFields = ref(false);
+const debtMode = ref(false), debtOperation = ref<DebtOperation>('borrow');
+const previousDebtAccountId = ref(''), previousDebtImpact = ref('0');
+const entryTypes = [{ value: 'expense', label: '支出' }, { value: 'income', label: '收入' }, { value: 'transfer', label: '转账' }, { value: 'debt', label: '债务' }];
+const activeEntryType = computed(() => debtMode.value ? 'debt' : transaction.value.type === TransactionType.Expense ? 'expense' : transaction.value.type === TransactionType.Income ? 'income' : 'transfer');
+const quickDate = computed(() => {
+    const date = moment.unix(transaction.value.time).utcOffset(transaction.value.utcOffset);
+    return date.format('YYYY-MM-DD') === ledgerScope.currentDay ? '今天' : date.format('YYYY年M月D日');
+});
+const quickTags = computed(() => transaction.value.tagIds.map(id => ({ id, name: allTagsMap.value[id]?.name || '标签' })));
+const debtAccounts = computed(() => Object.values(allAccountsMap.value).filter(account => allVisibleAccounts.value.includes(account) || (mode.value === TransactionEditPageMode.Edit && [transaction.value.sourceAccountId, transaction.value.destinationAccountId].includes(account.id))));
+const debtCategories = computed(() => (allCategories.value[CategoryType.Transfer] || []).map(parent => ({ ...parent,
+    subCategories: parent.subCategories?.filter(child => ((!parent.hidden && (!parent.bookIds.length || parent.bookIds.includes(transaction.value.bookId))) && !child.hidden && (!child.bookIds.length || child.bookIds.includes(transaction.value.bookId))) || (mode.value === TransactionEditPageMode.Edit && child.id === transaction.value.transferCategoryId))
+})).filter(parent => parent.subCategories?.length));
+const debtValidationMessage = computed(() => {
+    const accountId = debtIsSource(debtOperation.value) ? transaction.value.sourceAccountId : transaction.value.destinationAccountId;
+    return validateDebtEntry(debtOperation.value, allAccountsMap.value[transaction.value.sourceAccountId], allAccountsMap.value[transaction.value.destinationAccountId], String(transaction.value.sourceAmount), accountId === previousDebtAccountId.value ? previousDebtImpact.value : '0');
+});
+function selectEntryType(value: string): void {
+    const wasDebt = debtMode.value;
+    const cash = [transaction.value.sourceAccountId, transaction.value.destinationAccountId].map(id => allAccountsMap.value[id]).find(account => account && isDebtCashAccount(account));
+    debtMode.value = value === 'debt';
+    transaction.value.type = value === 'expense' ? TransactionType.Expense : value === 'income' ? TransactionType.Income : TransactionType.Transfer;
+    if (value === 'debt') {
+        const label = DEBT_OPERATIONS.find(item => item.value === debtOperation.value)?.label;
+        transaction.value.transferCategoryId = debtCategories.value.flatMap(parent => parent.subCategories || []).find(child => child.name === label)?.id || debtCategories.value[0]?.subCategories?.[0]?.id || '';
+    } else if (wasDebt) {
+        transaction.value.sourceAccountId = cash?.id || allVisibleAccounts.value.find(isDebtCashAccount)?.id || '';
+        transaction.value.destinationAccountId = transaction.value.sourceAccountId;
+    }
+}
+const canUseQuickEntry = computed(() => pageTypeAndMode?.type === TransactionEditPageType.Transaction && mode.value !== TransactionEditPageMode.View && transaction.value.type !== TransactionType.ModifyBalance);
+const useQuickEntry = computed(() => canUseQuickEntry.value && !showExtendedFields.value);
+const quickCategoryType = computed(() => transaction.value.type === TransactionType.Expense ? CategoryType.Expense : transaction.value.type === TransactionType.Income ? CategoryType.Income : CategoryType.Transfer);
+const quickCategoryId = computed({
+    get: () => transaction.value.type === TransactionType.Expense ? transaction.value.expenseCategoryId : transaction.value.type === TransactionType.Income ? transaction.value.incomeCategoryId : transaction.value.transferCategoryId,
+    set: (value: string) => { if (transaction.value.type === TransactionType.Expense) transaction.value.expenseCategoryId = value; else if (transaction.value.type === TransactionType.Income) transaction.value.incomeCategoryId = value; else transaction.value.transferCategoryId = value; }
+});
+watch(() => transaction.value, () => {
+    if (canUseQuickEntry.value && !transaction.value.bookId) transaction.value.bookId = booksStore.defaultBookId;
+});
 
 const quickSaveButtonStyleType = computed<number>(() => settingsStore.appSettings.quickSaveButtonStyleInMobileTransactionListPage);
 const quickSaveButtonFloatingPosition = computed<string>(() => {
@@ -934,6 +1055,12 @@ function getQueryTransactionOptions(): SetTransactionOptions {
     };
 }
 
+// A list request may share a pending forced refresh from the page we just left.
+function ignoreUnchangedList(error: unknown): void {
+    if (typeof error === 'object' && error !== null && 'isUpToDate' in error && error.isUpToDate === true) return;
+    throw error;
+}
+
 function init(): void {
     if (!pageTypeAndMode) {
         showToast('Parameter Invalid');
@@ -944,10 +1071,10 @@ function init(): void {
     loading.value = true;
 
     const promises: Promise<unknown>[] = [
-        accountsStore.loadAllAccounts({ force: false }),
-        transactionCategoriesStore.loadAllCategories({ force: false }),
-        transactionTagsStore.loadAllTags({ force: false }),
-        transactionTemplatesStore.loadAllTemplates({ force: false, templateType: TemplateType.Normal.type })
+        accountsStore.loadAllAccounts({ force: false }).catch(ignoreUnchangedList),
+        transactionCategoriesStore.loadAllCategories({ force: false }).catch(ignoreUnchangedList),
+        transactionTagsStore.loadAllTags({ force: false }).catch(ignoreUnchangedList),
+        transactionTemplatesStore.loadAllTemplates({ force: false, templateType: TemplateType.Normal.type }).catch(ignoreUnchangedList)
     ];
 
     if (pageTypeAndMode.type === TransactionEditPageType.Transaction) {
@@ -1000,7 +1127,10 @@ function init(): void {
         clientSessionId.value = generateRandomUUID();
     }
 
-    Promise.all(promises).then(function (responses) {
+    Promise.all(promises).then(async function (responses) {
+        if (mode.value !== TransactionEditPageMode.View) {
+            await booksStore.loadBooks();
+        }
         if (query['id'] && !responses[4]) {
             if (pageTypeAndMode.type === TransactionEditPageType.Transaction) {
                 showToast('Unable to retrieve transaction');
@@ -1038,6 +1168,22 @@ function init(): void {
             initOptions,
             pageTypeAndMode.type === TransactionEditPageType.Transaction && (mode.value === TransactionEditPageMode.Edit || mode.value === TransactionEditPageMode.View)
         );
+
+        if (mode.value === TransactionEditPageMode.Add && !transaction.value.bookId) {
+            transaction.value.bookId = booksStore.defaultBookId;
+        }
+        if (mode.value === TransactionEditPageMode.Add && transaction.value.type===TransactionType.Expense && query['reimbursementAccountId']) {
+            transaction.value.reimbursementAccountId=query['reimbursementAccountId'];
+        }
+
+        const existingDebt = transaction.value.type === TransactionType.Transfer ? inferDebtOperation(allAccountsMap.value[transaction.value.sourceAccountId], allAccountsMap.value[transaction.value.destinationAccountId]) : null;
+        if (existingDebt) {
+            debtOperation.value = existingDebt; debtMode.value = true;
+            if (mode.value === TransactionEditPageMode.Edit) {
+                previousDebtAccountId.value = debtIsSource(existingDebt) ? transaction.value.sourceAccountId : transaction.value.destinationAccountId;
+                previousDebtImpact.value = debtImpact(existingDebt, String(transaction.value.sourceAmount));
+            }
+        }
 
         if (pageTypeAndMode.type === TransactionEditPageType.Transaction && query['id'] && responses[4] instanceof Transaction) {
             if (fromTransaction && query['withTime'] && query['withTime'] === 'true') {
@@ -1091,6 +1237,10 @@ function init(): void {
 function save(afterAction: AfterSaveAction): void {
     const router = props.f7router;
 
+    if (useQuickEntry.value && quickEntry.value && !quickEntry.value.prepareSave()) return;
+
+    if (debtMode.value && debtValidationMessage.value) { showAlert(debtValidationMessage.value); return; }
+
     if (mode.value === TransactionEditPageMode.View) {
         return;
     }
@@ -1112,7 +1262,10 @@ function save(afterAction: AfterSaveAction): void {
                 defaultCurrency: defaultCurrency.value,
                 isEdit: mode.value === TransactionEditPageMode.Edit,
                 clientSessionId: clientSessionId.value
-            }).then(() => {
+            }).then(async () => {
+                if (debtMode.value) {
+                    await accountsStore.loadAllAccounts({ force: true }).catch(error => { if (!error?.isUpToDate && !error?.processed) showToast(error.message || error); });
+                }
                 submitting.value = false;
                 submitted.value = true;
                 hideLoading();
@@ -1123,7 +1276,10 @@ function save(afterAction: AfterSaveAction): void {
 
                 if (mode.value === TransactionEditPageMode.Add && (afterAction === AfterSaveAction.StayWithNewTransaction || afterAction === AfterSaveAction.StayWithCurrentTransaction)) {
                     showToast('You have added a new transaction');
-                    updateTransactionModelByAfterSaveAction(afterAction, getQueryTransactionOptions());
+                    const savedBookId = transaction.value.bookId;
+                    const savedType = transaction.value.type;
+                    updateTransactionModelByAfterSaveAction(afterAction, { ...getQueryTransactionOptions(), type: savedType });
+                    transaction.value.bookId = savedBookId;
                     clientSessionId.value = generateRandomUUID();
                 } else {
                     if (mode.value === TransactionEditPageMode.Add) {
@@ -1479,6 +1635,18 @@ function onPageBeforeOut(): void {
 
 init();
 </script>
+
+<style scoped>
+.cy-transaction-entry{--f7-navbar-height:56px}
+.cy-quick-navbar :deep(.navbar-inner){padding-inline:6px;gap:5px}.cy-quick-navbar :deep(.left){margin-right:0}.cy-quick-navbar :deep(.left .link){min-width:28px;padding-inline:0}
+.cy-quick-navbar :deep(.title){position:static!important;left:auto!important;width:auto!important;transform:none!important;flex:1;min-width:0;margin:0!important;overflow:visible}.cy-quick-navbar :deep(.right){margin-left:0;flex:none}
+.cy-entry-types{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--cy-soft);padding:3px;border-radius:10px}.cy-entry-types button{border:0;border-radius:8px;background:transparent;color:var(--cy-muted);font-size:14px;line-height:1.3;min-height:34px;padding:4px 5px;white-space:nowrap}.cy-entry-types button[aria-pressed=true]{background:var(--cy-accent);color:var(--cy-card);font-weight:600}
+.cy-quick-attachments{display:flex;gap:7px;overflow:auto}.cy-quick-attachments button{border:0;padding:0;background:transparent;flex:none}.cy-quick-attachments img{display:block;width:38px;height:38px;object-fit:cover;border-radius:7px}
+.cy-transaction-entry .subnav-segmented-bar{margin-top:8px;margin-bottom:8px}
+.cy-entry-chip{display:inline-flex;align-items:center;gap:5px;border:0;border-radius:8px;background:transparent;color:var(--cy-muted);font:inherit;font-size:13px;min-height:30px;padding:4px 0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cy-entry-chip .f7-icons{font-size:15px;color:var(--cy-accent);flex-shrink:0}
+.cy-entry-details-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 16px 8px}
+</style>
 
 <style>
 .category-separate-icon.icon {

@@ -32,13 +32,14 @@ type ValuedPosition struct {
 	Quote         *InvestmentValuationQuote `json:"quote"`
 }
 type WealthCashAccount struct {
-	ID        string               `json:"id"`
-	Name      string               `json:"name"`
-	Currency  string               `json:"currency"`
-	Balance   string               `json:"balance"`
-	Value     *string              `json:"value"`
-	Liability bool                 `json:"liability"`
-	FX        *marketquotes.FXRate `json:"fx,omitempty"`
+	ExcludedFromTotal bool                 `json:"excludedFromTotal"`
+	ID                string               `json:"id"`
+	Name              string               `json:"name"`
+	Currency          string               `json:"currency"`
+	Balance           string               `json:"balance"`
+	Value             *string              `json:"value"`
+	Liability         bool                 `json:"liability"`
+	FX                *marketquotes.FXRate `json:"fx,omitempty"`
 }
 type WealthSummary struct {
 	BaseCurrency    string              `json:"baseCurrency"`
@@ -65,19 +66,44 @@ type wealthObservation struct {
 func decimalPointer(d decimal.Decimal) *string { v := d.String(); return &v }
 
 func (s *InvestmentService) quotesInSession(sess *xorm.Session, uid int64) ([]InvestmentValuationQuote, error) {
-	quotes := marketquotes.Default.Quotes()
+	quotes := make([]marketquotes.Quote, 0)
+	for _, preset := range investmentPresets {
+		q, ok := marketquotes.Default.Get(preset.Id)
+		if !ok {
+			q = marketquotes.Quote{InstrumentID: preset.Id, Currency: "USD", State: marketquotes.StateUnavailable}
+		}
+		quotes = append(quotes, q)
+	}
+	var own []models.InvestmentInstrument
+	if err := sess.Where("uid=?", uid).Find(&own); err != nil {
+		return nil, err
+	}
+	for _, instrument := range own {
+		if instrument.Provider == "" {
+			continue
+		}
+		binding := instrumentBinding(instrument)
+		if err := marketquotes.Default.Register(binding); err != nil {
+			continue
+		}
+		q, ok := marketquotes.Default.Get(binding.Key())
+		if !ok {
+			q = marketquotes.Quote{Currency: binding.Currency, State: marketquotes.StateUnavailable}
+		}
+		q.InstrumentID = instrument.Id
+		quotes = append(quotes, q)
+	}
 	fxs := marketquotes.Default.FX()
-	var fx marketquotes.FXRate
+	fxByCurrency := make(map[string]marketquotes.FXRate)
 	for _, f := range fxs {
-		if f.Base == "USD" && f.Quote == "CNY" {
-			fx = f
-			break
+		if f.Quote == "CNY" {
+			fxByCurrency[f.Base] = f
 		}
 	}
 	result := make([]InvestmentValuationQuote, 0, len(quotes))
 	for _, q := range quotes {
 		v := InvestmentValuationQuote{Quote: q}
-		if q.Currency == "USD" {
+		if fx, ok := fxByCurrency[q.Currency]; ok {
 			v.FXRate = fx.Rate
 			v.FXDate = fx.Date
 			v.FXSource = fx.Source
@@ -184,16 +210,19 @@ func buildWealth(result *investments.Result, cash []models.Account, quotes []Inv
 			continue
 		}
 		balance := decimal.New(account.Balance, -2)
-		item := WealthCashAccount{ID: fmt.Sprint(account.AccountId), Name: account.Name, Currency: account.Currency, Balance: balance.String(), Liability: account.Category.IsLiability()}
+		included := !account.ExcludedFromTotal()
+		item := WealthCashAccount{ID: fmt.Sprint(account.AccountId), Name: account.Name, Currency: account.Currency, Balance: balance.String(), Liability: account.Category.IsLiability(), ExcludedFromTotal: !included}
 		if fx, ok := fxDetails[account.Currency]; ok {
 			item.FX = &fx
-			if !balance.IsZero() && fx.State == "stale" {
+			if included && !balance.IsZero() && fx.State == "stale" {
 				out.StalePrices++
 			}
 		}
 		rate, ok := fxMap[account.Currency]
 		if !ok && !balance.IsZero() {
-			out.MissingPrices++
+			if included {
+				out.MissingPrices++
+			}
 		} else {
 			f := decimal.NewFromInt(1)
 			if ok {
@@ -201,7 +230,9 @@ func buildWealth(result *investments.Result, cash []models.Account, quotes []Inv
 			}
 			value := balance.Mul(f)
 			item.Value = decimalPointer(value)
-			if value.IsNegative() {
+			if !included {
+				// The balance remains available in the account's own detail page.
+			} else if value.IsNegative() {
 				debts = debts.Sub(value)
 			} else {
 				assets = assets.Add(value)
@@ -428,6 +459,10 @@ func (s *InvestmentService) rebuildHistory(c core.Context, uid int64) error {
 					balances[tx.AccountId] -= tx.Amount
 				}
 			}
+			claims, err := reimbursementBalancesAt(sess, uid, row.RecordedAt)
+			if err != nil {
+				return err
+			}
 			cash := make([]models.Account, 0)
 			for _, a := range allAccounts {
 				balance, exists := balances[a.AccountId]
@@ -439,6 +474,9 @@ func (s *InvestmentService) rebuildHistory(c core.Context, uid int64) error {
 				}
 				a.Deleted = false
 				a.Balance = balance
+				if a.IsReimbursement() {
+					a.Balance = claims[a.AccountId]
+				}
 				cash = append(cash, a)
 			}
 			rebuilt := buildWealth(result, cash, observation.Quotes, observation.FX)
@@ -497,6 +535,12 @@ var marketStart sync.Once
 
 func (s *InvestmentService) StartMarketCache() {
 	marketStart.Do(func() {
+		var bound []models.InvestmentInstrument
+		if s.UserDataDB(0).NewSession(nil).Where("provider<>?", "").Find(&bound) == nil {
+			for _, item := range bound {
+				_ = marketquotes.Default.Register(instrumentBinding(item))
+			}
+		}
 		var rows []models.InvestmentQuote
 		_ = s.UserDataDB(0).NewSession(nil).Where("uid=?", 0).Find(&rows)
 		for _, r := range rows {

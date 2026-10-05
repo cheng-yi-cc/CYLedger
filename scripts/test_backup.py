@@ -31,10 +31,30 @@ class CompleteBackupTest(unittest.TestCase):
                 INSERT INTO investment_events VALUES ('buy', '0.020000000000000001', 1), ('sell', '0.005', 2);
                 CREATE TABLE positions (id TEXT, quantity TEXT, cost TEXT, cost_known INTEGER);
                 INSERT INTO positions VALUES ('btc', '0.015000000000000001', '9759.750000000000000001000000000000000001', 1);
+                CREATE TABLE books (id TEXT PRIMARY KEY, name TEXT, is_default INTEGER);
+                INSERT INTO books VALUES ('daily', '日常', 1), ('trip', '旅行', 0);
+                CREATE TABLE transactions (id INTEGER PRIMARY KEY, book_id TEXT, related_id INTEGER, investment_event_id TEXT, amount INTEGER);
+                INSERT INTO transactions VALUES (320, 'trip', 321, 'sell', 100), (321, 'trip', 320, 'sell', 100);
                 CREATE TABLE investment_transaction_links (event_id TEXT, transaction_id INTEGER);
                 INSERT INTO investment_transaction_links VALUES ('sell', 321);
                 CREATE TABLE valuation_snapshots (total TEXT, complete INTEGER);
                 INSERT INTO valuation_snapshots VALUES ('22983.0000000000000008', 1);
+                CREATE TABLE calendar_event (id TEXT PRIMARY KEY, book_id TEXT, account_id TEXT, date TEXT, amount TEXT, currency TEXT, completed INTEGER);
+                INSERT INTO calendar_event VALUES ('due-1', 'daily', '1', '2026-10-20', '123.40', 'CNY', 0);
+                CREATE TABLE monetary_income_binding (id TEXT PRIMARY KEY, account_id INTEGER, code TEXT, next_date TEXT, last_transaction_id INTEGER, enabled INTEGER);
+                INSERT INTO monetary_income_binding VALUES ('income-1', 1, '000198', '2026-10-02', 400, 1);
+                CREATE TABLE monetary_income_day (id TEXT PRIMARY KEY, date TEXT, principal TEXT, per_ten_thousand TEXT, amount TEXT, transaction_id INTEGER);
+                INSERT INTO monetary_income_day VALUES ('1:1:2026-10-01', '2026-10-01', '10000.00', '0.2253', '0.23', 400);
+                CREATE TABLE reimbursement_receipt (id TEXT PRIMARY KEY, expense_id INTEGER, income_id INTEGER, request_digest TEXT);
+                INSERT INTO reimbursement_receipt VALUES ('receipt-1', 500, 501, 'idem-receipt');
+                CREATE TABLE asset_adjustment (id TEXT PRIMARY KEY, transaction_id INTEGER, digest TEXT);
+                INSERT INTO asset_adjustment VALUES ('adjustment-1', 502, 'idem-adjustment');
+                CREATE TABLE credit_installment (id TEXT PRIMARY KEY, expense_id INTEGER, version INTEGER, data BLOB);
+                INSERT INTO credit_installment VALUES ('plan-1', 503, 2, '{"principal":"100.01","payments":[{"principal":"33.35","fee":"1.00","feeTransactionId":"504","accrued":true}]}');
+                CREATE TABLE fixed_deposit (id TEXT PRIMARY KEY, principal TEXT, start_date TEXT, maturity_date TEXT, closed_date TEXT, transaction_id INTEGER);
+                INSERT INTO fixed_deposit VALUES ('deposit-1', '5000.00', '2026-09-01', '2027-09-01', '2026-10-01', 505);
+                CREATE TABLE debt_movement (id TEXT PRIMARY KEY, debt_account_id INTEGER, principal_transaction_id INTEGER, interest_transaction_id INTEGER, digest TEXT);
+                INSERT INTO debt_movement VALUES ('repay-1', 2, 506, 507, 'idem-debt');
                 PRAGMA user_version = 1;
             """)
         attachment = self.runtime / "storage" / "user-1" / "receipt.bin"
@@ -59,6 +79,15 @@ class CompleteBackupTest(unittest.TestCase):
             self.assertEqual(copy.execute("SELECT balance FROM accounts WHERE id=1").fetchone()[0], 1098300)
             self.assertEqual(copy.execute("SELECT quantity,cost FROM positions").fetchone(), ("0.015000000000000001", "9759.750000000000000001000000000000000001"))
             self.assertEqual(copy.execute("SELECT total FROM valuation_snapshots").fetchone()[0], "22983.0000000000000008")
+            self.assertEqual(copy.execute("SELECT name FROM books WHERE id='trip'").fetchone()[0], "旅行")
+            self.assertEqual(copy.execute("SELECT book_id, related_id, investment_event_id FROM transactions ORDER BY id").fetchall(), [("trip", 321, "sell"), ("trip", 320, "sell")])
+            self.assertEqual(copy.execute("SELECT code,next_date,last_transaction_id,enabled FROM monetary_income_binding").fetchone(), ('000198', '2026-10-02', 400, 1))
+            self.assertEqual(copy.execute("SELECT principal,per_ten_thousand,amount,transaction_id FROM monetary_income_day").fetchone(), ('10000.00', '0.2253', '0.23', 400))
+            self.assertEqual(copy.execute("SELECT expense_id,income_id FROM reimbursement_receipt").fetchone(), (500,501))
+            self.assertEqual(copy.execute("SELECT transaction_id,digest FROM asset_adjustment").fetchone(), (502,'idem-adjustment'))
+            self.assertEqual(json.loads(copy.execute("SELECT data FROM credit_installment").fetchone()[0])["payments"][0]["feeTransactionId"], '504')
+            self.assertEqual(copy.execute("SELECT closed_date FROM fixed_deposit").fetchone()[0], '2026-10-01')
+            self.assertEqual(copy.execute("SELECT debt_account_id,principal_transaction_id,interest_transaction_id,digest FROM debt_movement").fetchone(), (2,506,507,'idem-debt'))
         self.assertEqual((self.runtime / "storage/user-1/receipt.bin").read_bytes(), (restored / "storage/user-1/receipt.bin").read_bytes())
         before, after = configparser.ConfigParser(interpolation=None), configparser.ConfigParser(interpolation=None)
         before.read(self.config, encoding="utf-8")

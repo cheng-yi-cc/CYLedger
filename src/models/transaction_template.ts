@@ -29,6 +29,7 @@ export class TransactionTemplate extends Transaction implements TransactionTempl
     }
 
     public fillFrom(other: TransactionTemplate): void {
+        this.bookId = other.bookId;
         this.templateType = other.templateType;
         this.name = other.name;
 
@@ -44,6 +45,7 @@ export class TransactionTemplate extends Transaction implements TransactionTempl
 
     public toTemplateCreateRequest(clientSessionId: string): TransactionTemplateCreateRequest {
         return {
+            bookId: this.bookId,
             templateType: this.templateType,
             name: this.name,
             type: this.type,
@@ -66,6 +68,7 @@ export class TransactionTemplate extends Transaction implements TransactionTempl
 
     public toTemplateModifyRequest(): TransactionTemplateModifyRequest {
         return {
+            bookId: this.bookId,
             id: this.id,
             name: this.name,
             type: this.type,
@@ -86,7 +89,7 @@ export class TransactionTemplate extends Transaction implements TransactionTempl
     }
 
     public static createNewTransactionTemplate(transaction: Transaction): TransactionTemplate {
-        return new TransactionTemplate(
+        const result = new TransactionTemplate(
             transaction.id,
             0, // templateType
             '', // name
@@ -110,10 +113,12 @@ export class TransactionTemplate extends Transaction implements TransactionTempl
             0,
             false
         );
+        result.bookId = transaction.bookId || "";
+        return result;
     }
 
     public static ofTemplate(templateResponse: TransactionTemplateInfoResponse): TransactionTemplate {
-        return new TransactionTemplate(
+        const result = new TransactionTemplate(
             templateResponse.id,
             templateResponse.templateType,
             templateResponse.name,
@@ -137,6 +142,8 @@ export class TransactionTemplate extends Transaction implements TransactionTempl
             templateResponse.displayOrder,
             templateResponse.hidden
         );
+        result.bookId = templateResponse.bookId || "";
+        return result;
     }
 
     public static ofMultiTemplates(templateResponses: TransactionTemplateInfoResponse[]): TransactionTemplate[] {
@@ -151,6 +158,7 @@ export class TransactionTemplate extends Transaction implements TransactionTempl
 }
 
 export interface TransactionTemplateCreateRequest {
+    readonly bookId?: string;
     readonly templateType: number;
     readonly name: string;
     readonly type: number;
@@ -171,6 +179,7 @@ export interface TransactionTemplateCreateRequest {
 }
 
 export interface TransactionTemplateModifyRequest {
+    readonly bookId?: string;
     readonly id: string;
     readonly name: string;
     readonly type: number;

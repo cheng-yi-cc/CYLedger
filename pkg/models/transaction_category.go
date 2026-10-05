@@ -26,9 +26,10 @@ type TransactionCategory struct {
 	DisplayOrder     int32                   `xorm:"INDEX(IDX_category_uid_deleted_type_parent_category_id_order) NOT NULL"`
 	Icon             int64                   `xorm:"NOT NULL"`
 	IconType         core.IconType
-	Color            string `xorm:"VARCHAR(6) NOT NULL"`
-	Hidden           bool   `xorm:"NOT NULL"`
-	Comment          string `xorm:"VARCHAR(255) NOT NULL"`
+	Color            string   `xorm:"VARCHAR(6) NOT NULL"`
+	Hidden           bool     `xorm:"NOT NULL"`
+	Comment          string   `xorm:"VARCHAR(255) NOT NULL"`
+	BookIds          []string `xorm:"TEXT JSON"`
 	CreatedUnixTime  int64
 	UpdatedUnixTime  int64
 	DeletedUnixTime  int64
@@ -55,6 +56,7 @@ type TransactionCategoryCreateRequest struct {
 	Color           string                  `json:"color" binding:"required,len=6,validHexRGBColor"`
 	Comment         string                  `json:"comment" binding:"max=255"`
 	ClientSessionId string                  `json:"clientSessionId"`
+	BookIds         []string                `json:"bookIds" binding:"max=100,dive,required,max=64"`
 }
 
 // TransactionCategoryCreateBatchRequest represents all parameters of transaction category batch creation request
@@ -71,6 +73,7 @@ type TransactionCategoryCreateWithSubCategories struct {
 	Color         string                              `json:"color" binding:"required,len=6,validHexRGBColor"`
 	Comment       string                              `json:"comment" binding:"max=255"`
 	SubCategories []*TransactionCategoryCreateRequest `json:"subCategories" binding:"required"`
+	BookIds       []string                            `json:"bookIds" binding:"max=100,dive,required,max=64"`
 }
 
 // TransactionCategoryModifyRequest represents all parameters of transaction category modification request
@@ -83,6 +86,7 @@ type TransactionCategoryModifyRequest struct {
 	Color    string        `json:"color" binding:"required,len=6,validHexRGBColor"`
 	Comment  string        `json:"comment" binding:"max=255"`
 	Hidden   bool          `json:"hidden"`
+	BookIds  []string      `json:"bookIds" binding:"max=100,dive,required,max=64"`
 }
 
 // TransactionCategoryHideRequest represents all parameters of transaction category hiding request
@@ -119,11 +123,13 @@ type TransactionCategoryInfoResponse struct {
 	Comment       string                               `json:"comment"`
 	DisplayOrder  int32                                `json:"displayOrder"`
 	Hidden        bool                                 `json:"hidden"`
+	BookIds       []string                             `json:"bookIds"`
 	SubCategories TransactionCategoryInfoResponseSlice `json:"subCategories,omitempty"`
 }
 
 // ToTransactionCategoryInfoResponse returns a view-object according to database model
 func (c *TransactionCategory) ToTransactionCategoryInfoResponse() *TransactionCategoryInfoResponse {
+	bookIds := append([]string{}, c.BookIds...)
 	return &TransactionCategoryInfoResponse{
 		Id:           c.CategoryId,
 		Name:         c.Name,
@@ -135,6 +141,7 @@ func (c *TransactionCategory) ToTransactionCategoryInfoResponse() *TransactionCa
 		Comment:      c.Comment,
 		DisplayOrder: c.DisplayOrder,
 		Hidden:       c.Hidden,
+		BookIds:      bookIds,
 	}
 }
 

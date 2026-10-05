@@ -1,0 +1,65 @@
+<template>
+ <f7-page class="cy-mobile-surface cy-asset-surface cy-debt-page" @page:afterin="load">
+  <f7-navbar :title="hiddenMode?'债务隐藏':account?`${account.name} · ${account.category===5?'借入':'借出'}`:'债务'" back-link="资产"><f7-nav-right>
+   <template v-if="!account"><f7-link v-if="!hiddenMode" icon-f7="eye_slash" aria-label="债务隐藏设置" href="/assets/debts?hidden=1"/><f7-link v-if="!hiddenMode" @click="showAdd=true">新增</f7-link></template>
+   <AccountOptionsMenu v-else :edit-href="`/account/edit?id=${id}`" edit-title="编辑债务" delete-title="删除债务" :items="menu" :target="{id,name:account.name,kind:'cash',href:`/account/activity?id=${id}`}" @action="menuAction" @deleted="f7router.back()"/>
+  </f7-nav-right></f7-navbar>
+  <main class="cy-page-body">
+   <p v-if="error" class="cy-message" role="alert">{{error}}</p>
+   <template v-if="account">
+    <section class="debt-summary"><div><span>{{account.category===5?'剩余待还':'剩余待收'}}</span><strong>{{ledgerMoney(principal,false)}}</strong></div><div><span>{{account.category===5?'已还金额':'已收金额'}}</span><strong>{{ledgerMoney(report?.paidPrincipal||'0',false)}}</strong></div><p>{{account.category===5?'已还利息':'已收利息'}}：{{ledgerMoney(report?.interest||'0',false)}}</p><f7-link :href="`/account/edit?id=${id}`">{{account.category===5?'下次还款':'下次收款'}}：{{report?.nextDate||'未设置'}}</f7-link></section>
+    <nav class="debt-actions"><button @click="openMovement(account.category===5?'borrow':'lend')"><f7-icon f7="doc_badge_plus"/>{{account.category===5?'追加借入':'追加借出'}}</button><button @click="openMovement(account.category===5?'repay':'collect')"><f7-icon f7="wallet"/>{{account.category===5?'还款':'收回'}}</button></nav>
+    <LedgerDayList :entries="entries" account-view :partial-last-day="hasMore"/>
+    <button v-if="hasMore" class="debt-load" @click="loadAccount(true)">查看更多记录</button>
+    <p v-if="!entries.length&&!loading" class="cy-empty">暂无借还款记录</p>
+   </template>
+   <template v-else>
+    <p v-if="hiddenMode" class="debt-hint">关闭显示后，债务与流水会保留，可随时恢复。</p>
+    <section v-if="!hiddenMode" class="debt-summary"><div><span>应付款 / 借入</span><strong>{{ledgerMoney(total(5),false)}}</strong></div><div><span>应收款 / 借出</span><strong>{{ledgerMoney(total(6),false)}}</strong></div></section>
+    <details v-for="group in groups" :key="group.category" class="debt-group" open><summary><strong>{{group.name}}</strong><span :class="group.category===5?'cy-expense':'cy-income'">{{ledgerMoney(total(group.category),false)}}</span><f7-icon f7="chevron_down"/></summary><div v-for="a in group.accounts" :key="a.id" class="debt-account"><f7-link :href="`/account/debt?id=${a.id}`"><item-icon icon-type="account" :icon-id="a.icon" :color="a.color"/><span>{{a.name}}</span><strong :class="a.category===5?'cy-expense':'cy-income'">{{a.currency==='CNY'?'¥':a.currency+' '}}{{ledgerMoney(new LedgerDecimal(a.balance).div(100).toString(),false)}}</strong></f7-link><input v-if="hiddenMode" type="checkbox" :aria-label="`显示${a.name}`" :checked="!preferences.preferences.rules[`cash:${a.id}`]?.hidden" @change="setHidden(a.id,!($event.target as HTMLInputElement).checked)"/></div></details>
+    <p v-if="!groups.length&&!loading" class="cy-empty">还没有债务账户<br/><f7-link @click="showAdd=true">添加借入或借出</f7-link></p>
+   </template>
+  </main>
+  <f7-sheet v-model:opened="showAdd" class="cy-mobile-surface debt-kind-sheet" backdrop><div class="debt-sheet-heading"><strong>新增债务</strong><f7-link sheet-close>取消</f7-link></div><f7-list><f7-list-item title="应付款 / 借入" link="/account/add?preset=payable" sheet-close/><f7-list-item title="应收款 / 借出" link="/account/add?preset=receivable" sheet-close/></f7-list></f7-sheet>
+  <f7-popup v-model:opened="showMovement" class="cy-mobile-surface"><f7-page class="cy-mobile-surface cy-asset-surface"><f7-navbar :title="movementTitle"><f7-nav-left><f7-link icon-f7="xmark" :disabled="busy" @click="showMovement=false"/></f7-nav-left><f7-nav-right><f7-link icon-f7="checkmark" aria-label="保存借还款" :disabled="busy" @click="saveMovement"/></f7-nav-right></f7-navbar><main class="cy-page-body"><p v-if="movementError" class="cy-message" role="alert">{{movementError}}</p><section class="debt-fields"><label>债务<span>{{account?.name}}</span></label><label>金额<input v-model="amount" inputmode="decimal" maxlength="16" aria-label="借还款本金" placeholder="输入金额"/></label><label v-if="isSettlement">利息<input v-model="interest" inputmode="decimal" maxlength="16" aria-label="借还款利息" placeholder="可填负数表示优惠"/></label><label>备注<input v-model="note" maxlength="200" aria-label="借还款备注" placeholder="请输入备注"/></label></section><section class="debt-fields"><label>{{movementTitle}}日期<input v-model="date" type="date" :max="today" aria-label="借还款日期"/></label><label>资金账户<select v-model="cashId" aria-label="借还款资金账户"><option value="">无账户（仅更新往来）</option><option v-for="a in cashAccounts" :key="a.id" :value="a.id">{{a.name}}</option></select></label><label>账本<select v-model="bookId" aria-label="借还款账本"><option v-for="b in books.allBooks" :key="b.id" :value="b.id">{{b.name}}</option></select></label></section><p class="debt-hint">{{cashId?'本金只改变往来与资金账户余额，利息单独计入收支。':'未选择资金账户，仅更新这笔往来，不计入收入或支出。'}}保存后可在流水中补充附件。</p></main></f7-page></f7-popup>
+ </f7-page>
+</template>
+<script setup lang="ts">
+import {computed,ref} from 'vue';
+import {f7} from 'framework7-vue';
+import type {Router} from 'framework7/types';
+import moment from 'moment-timezone';
+import {debtAccounts,type DebtReport,type DebtMovementInput} from '@/lib/debt-accounts.ts';
+import {investments,investmentError} from '@/lib/investments.ts';
+import {useMobileLedger,LedgerDecimal,ledgerMoney,keepUpToDate} from '@/lib/mobile-ledger.ts';
+import {decimalSum} from '@/lib/asset-tools.ts';
+import {useAccountsStore} from '@/stores/account.ts';
+import {useAssetToolsStore} from '@/stores/assetTools.ts';
+import {useLedgerScopeStore} from '@/stores/ledgerScope.ts';
+import {useBooksStore} from '@/stores/books.ts';
+import type {WealthSummary} from '@/models/investment.ts';
+import LedgerDayList from '@/components/mobile/LedgerDayList.vue';
+import AccountOptionsMenu from '@/components/mobile/AccountOptionsMenu.vue';
+const props=defineProps<{f7route:Router.Route;f7router:Router.Router}>(),accounts=useAccountsStore(),preferences=useAssetToolsStore(),scope=useLedgerScopeStore(),books=useBooksStore();
+const id=computed(()=>props.f7route.query['id']||''),hiddenMode=computed(()=>props.f7route.query['hidden']==='1'),account=computed(()=>accounts.allAccountsMap[id.value]),reports=ref<DebtReport[]>([]),summary=ref<WealthSummary>(),loading=ref(false),error=ref('');
+const report=computed(()=>reports.value.find(r=>r.accountId===id.value));
+const principal=computed(()=>new LedgerDecimal(account.value?.balance||0).div(100).mul(account.value?.category===5?-1:1).toString());
+const debtList=computed(()=>accounts.allPlainAccounts.filter(a=>[5,6].includes(a.category)&&a.assetProfile.kind!=='reimbursement'&&(hiddenMode.value||!preferences.preferences.rules[`cash:${a.id}`]?.hidden)));
+const groups=computed(()=>[{category:5,name:'应付款 / 借入'},{category:6,name:'应收款 / 借出'}].map(g=>({...g,accounts:debtList.value.filter(a=>a.category===g.category)})).filter(g=>g.accounts.length));
+function total(category:number):string|null{return decimalSum(debtList.value.filter(a=>a.category===category).map(a=>summary.value?.cashAccounts.find(c=>c.id===a.id)?.value));}
+const {entries,loadAccount,hasMore}=useMobileLedger({applyFilters:()=>false,accountId:()=>id.value});
+const menu=computed(()=>[{title:'流水导出',href:`/account/activity?id=${id.value}&mode=export`},{title:'流水对账',href:`/account/reconciliation_statements?accountId=${id.value}`},{title:'债务明细',href:`/account/activity?id=${id.value}&mode=balance`},...(account.value?.category===5?[{title:'分期管理',href:`/account/installments?id=${id.value}`}]:[]),{title:account.value?.category===5?'转为借出':'转为借入',action:'convert'},{title:'结清隐藏',action:'hide'}]);
+async function load():Promise<void>{loading.value=true;error.value='';try{const[r,w]=await Promise.all([debtAccounts.reports(),investments.summary(),accounts.loadAllAccounts({force:true}).catch(keepUpToDate),preferences.load(true),books.loadBooks()]);reports.value=r;summary.value=w;if(id.value)await loadAccount();}catch(e){error.value=investmentError(e);}finally{loading.value=false;}}
+async function setHidden(accountId:string,hidden:boolean):Promise<void>{try{const p=JSON.parse(JSON.stringify(preferences.preferences));p.rules[`cash:${accountId}`]={disabledBooks:p.rules[`cash:${accountId}`]?.disabledBooks||[],hidden};await preferences.save(p);}catch(e){error.value=investmentError(e);}}
+function menuAction(action:string):void{if(!account.value)return;if(action==='convert'){f7.dialog.confirm('转换后按另一种往来方向显示，现有余额与历史流水保留。','转换债务类型',async()=>{try{const a=account.value!.cloneSelf();a.category=a.category===5?6:5;if(['应付款 / 借入','应收款 / 借出'].includes(a.assetProfile.group||''))a.assetProfile.group=a.category===5?'应付款 / 借入':'应收款 / 借出';await accounts.saveAccount({account:a,subAccounts:[],isEdit:true,clientSessionId:''});await load();}catch(e){error.value=investmentError(e);}});return;}if(action!=='hide')return;if(!new LedgerDecimal(account.value.balance).isZero()){error.value='请先还清或收回本金，再结清隐藏。';return;}void setHidden(id.value,true).then(()=>props.f7router.back());}
+const showAdd=ref(false),showMovement=ref(false),busy=ref(false),movementError=ref(''),operation=ref<DebtMovementInput['action']>('repay'),amount=ref(''),interest=ref(''),note=ref(''),date=ref(''),cashId=ref(''),bookId=ref('');let requestId='';
+const today=computed(()=>moment().tz(scope.timeZone).format('YYYY-MM-DD'));
+const movementTitle=computed(()=>({borrow:'追加借入',lend:'追加借出',repay:'还款',collect:'收回'}[operation.value]));
+const isSettlement=computed(()=>['repay','collect'].includes(operation.value));
+const cashAccounts=computed(()=>accounts.allVisiblePlainAccounts.filter(a=>[1,2,4,8].includes(a.category)&&a.assetProfile.kind!=='reimbursement'&&a.currency===account.value?.currency));
+function openMovement(action:DebtMovementInput['action']):void{operation.value=action;amount.value=isSettlement.value?LedgerDecimal.max(0,principal.value).toString():'';interest.value='';note.value='';date.value=today.value;cashId.value=cashAccounts.value[0]?.id||'';bookId.value=books.defaultBookId;movementError.value='';requestId=crypto.randomUUID();showMovement.value=true;}
+async function saveMovement():Promise<void>{if(busy.value)return;busy.value=true;movementError.value='';try{if(!/^(0|[1-9]\d{0,12})(\.\d{1,2})?$/.test(amount.value)||!/^(-?(0|[1-9]\d{0,12})(\.\d{1,2})?)?$/.test(interest.value))throw Error('金额最多两位小数');const at=moment.tz(date.value+' 12:00','YYYY-MM-DD HH:mm',true,scope.timeZone);if(!at.isValid())throw Error('请选择日期');await debtAccounts.record({debtAccountId:id.value,cashAccountId:cashId.value,action:operation.value,principal:amount.value,interest:isSettlement.value?interest.value||'0':'0',time:Math.min(at.unix(),Math.floor(Date.now()/1000)),timeZone:scope.timeZone,bookId:bookId.value,note:note.value,requestId});showMovement.value=false;await load();}catch(e){movementError.value=investmentError(e);}finally{busy.value=false;}}
+</script>
+<style scoped>
+.debt-summary,.debt-group,.debt-actions,.debt-fields{background:var(--cy-card);border-radius:12px;padding:17px 16px;margin-bottom:15px}.debt-summary{display:grid;grid-template-columns:1fr 1fr;gap:16px}.debt-summary>div>span{font-size:14px;color:var(--cy-muted)}.debt-summary strong{display:block;font-size:24px;font-weight:500;margin-top:7px}.debt-summary p,.debt-summary>a{grid-column:span 2;color:var(--cy-muted);font-size:14px}.debt-actions{display:flex;padding:0}.debt-actions button{display:flex;justify-content:center;gap:12px;align-items:center;flex:1;padding:16px 0;border:0;background:none;color:var(--cy-ink);font-size:16px}.debt-actions .icon{font-size:23px}.debt-group summary{display:flex;gap:10px;align-items:center;list-style:none;padding-bottom:9px;font-size:14px}.debt-group summary::-webkit-details-marker{display:none}.debt-group summary>strong{flex:1;font-weight:400;color:var(--cy-muted)}.debt-group .icon{font-size:13px}.debt-account{display:flex;align-items:center;gap:16px}.debt-account>a{display:flex;align-items:center;flex:1;gap:12px;padding:16px 0;color:var(--cy-ink);min-width:0}.debt-account a>span{flex:1;font-size:15px;overflow-wrap:anywhere}.debt-account strong{font-size:15px;font-weight:400}.debt-account input{width:21px;height:21px;accent-color:var(--cy-accent)}.debt-kind-sheet{height:auto}.debt-sheet-heading{display:flex;justify-content:space-between;padding:18px}.debt-fields{padding:0 16px}.debt-fields label{min-height:53px;display:flex;align-items:center;justify-content:space-between;gap:16px;font-size:15px}.debt-fields input,.debt-fields select{min-width:0;width:65%;flex:1;text-align:right;border:0;background:none;color:var(--cy-ink);font:inherit}.debt-hint{font-size:12px;color:var(--cy-muted);line-height:1.8;margin:16px 3px}.debt-load{width:100%;padding:15px;border:0;background:var(--cy-card);color:var(--cy-accent);border-radius:10px}
+</style>

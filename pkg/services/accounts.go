@@ -302,6 +302,12 @@ func (s *AccountService) CreateAccounts(c core.Context, mainAccount *models.Acco
 	return userDataDb.DoTransaction(c, func(sess *xorm.Session) error {
 		for i := 0; i < len(allAccounts); i++ {
 			account := allAccounts[i]
+			if err := validateAccountAssetProfile(sess, account); err != nil {
+				return err
+			}
+			if account.IsReimbursement() && account.Balance != 0 {
+				return investmentError("报销账户余额由待报销账单计算，无需填写初始余额")
+			}
 			_, err := sess.Insert(account)
 
 			if err != nil {
@@ -311,6 +317,11 @@ func (s *AccountService) CreateAccounts(c core.Context, mainAccount *models.Acco
 
 		for i := 0; i < len(allInitTransactions); i++ {
 			transaction := allInitTransactions[i]
+			bookID, bookErr := Books.ResolveInSession(sess, transaction.Uid, "", false)
+			if bookErr != nil {
+				return bookErr
+			}
+			transaction.BookId = bookID
 			if err := InvalidateWealthSnapshots(sess, transaction.Uid, utils.GetUnixTimeFromTransactionTime(transaction.TransactionTime)); err != nil {
 				return err
 			}
@@ -451,6 +462,12 @@ func (s *AccountService) ModifyAccounts(c core.Context, mainAccount *models.Acco
 		// update accounts
 		for i := 0; i < len(updateAccounts); i++ {
 			account := updateAccounts[i]
+			if err := validateAccountAssetProfile(sess, account); err != nil {
+				return err
+			}
+			if err := InvalidateWealthSnapshots(sess, account.Uid, 0); err != nil {
+				return err
+			}
 			updateColumns := []string{"name", "display_order", "category", "icon", "icon_type", "color", "comment", "extend", "hidden", "updated_unix_time"}
 
 			if updateMainAccountCurrency && account.AccountId == mainAccount.AccountId {
@@ -469,6 +486,9 @@ func (s *AccountService) ModifyAccounts(c core.Context, mainAccount *models.Acco
 		// add new sub accounts
 		for i := 0; i < len(addSubAccounts); i++ {
 			account := addSubAccounts[i]
+			if err := validateAccountAssetProfile(sess, account); err != nil {
+				return err
+			}
 			_, err := sess.Insert(account)
 
 			if err != nil {
@@ -479,6 +499,11 @@ func (s *AccountService) ModifyAccounts(c core.Context, mainAccount *models.Acco
 		// add init transaction for new sub accounts
 		for i := 0; i < len(addInitTransactions); i++ {
 			transaction := addInitTransactions[i]
+			bookID, bookErr := Books.ResolveInSession(sess, transaction.Uid, "", false)
+			if bookErr != nil {
+				return bookErr
+			}
+			transaction.BookId = bookID
 			if err := InvalidateWealthSnapshots(sess, transaction.Uid, utils.GetUnixTimeFromTransactionTime(transaction.TransactionTime)); err != nil {
 				return err
 			}
@@ -570,6 +595,9 @@ func (s *AccountService) ModifyAccounts(c core.Context, mainAccount *models.Acco
 				Balance:         0,
 				Deleted:         true,
 				DeletedUnixTime: now,
+			}
+			if err := pauseMonetaryIncome(sess, mainAccount.Uid, removeSubAccountIds); err != nil {
+				return err
 			}
 
 			deletedRows, err := sess.Cols("balance", "deleted", "deleted_unix_time").Where("uid=? AND deleted=?", mainAccount.Uid, false).In("account_id", removeSubAccountIds).Update(deleteAccountUpdateModel)
@@ -733,6 +761,12 @@ func (s *AccountService) DeleteAccount(c core.Context, uid int64, accountId int6
 			accountAndSubAccountIdsConditions.WriteString("?")
 			accountAndSubAccountIds[i] = accountAndSubAccounts[i].AccountId
 		}
+		if err := pauseMonetaryIncome(sess, uid, accountAndSubAccountIds); err != nil {
+			return err
+		}
+		if err := guardReimbursementAccounts(sess, uid, accountAndSubAccountIds); err != nil {
+			return err
+		}
 
 		var relatedTransactionsByAccount []*models.Transaction
 		err = sess.Cols("transaction_id", "uid", "deleted", "account_id", "type").Where("uid=? AND deleted=?", uid, false).In("account_id", accountAndSubAccountIds).Limit(len(accountAndSubAccounts) + 1).Find(&relatedTransactionsByAccount)
@@ -875,6 +909,9 @@ func (s *AccountService) DeleteSubAccount(c core.Context, uid int64, accountId i
 			return err
 		} else if exists {
 			return errs.ErrSubAccountInUseCannotBeDeleted
+		}
+		if err := pauseMonetaryIncome(sess, uid, []int64{accountId}); err != nil {
+			return err
 		}
 
 		deletedRows, err := sess.Cols("balance", "deleted", "deleted_unix_time").Where("uid=? AND deleted=? AND account_id=?", uid, false, accountId).Update(updateModel)

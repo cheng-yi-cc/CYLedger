@@ -1,128 +1,91 @@
-# CYLedger 初版运行、备份与恢复
+# CYLedger 运维说明
 
-CYLedger 延续 ezBookkeeping 的 Go + Vue 应用，日常记账与新增投资数据使用同一个 SQLite 数据库。`LICENSE` 为 Apache 2.0；`NOTICE` 和 `licenses/ezbookkeeping-MIT-LICENSE` 保留上游归属与 MIT 声明，第三方依赖声明随镜像交付。这里的备份包含全部用户与财务信息，只应由实例管理员操作。
+本页处理电脑/服务器实例。Android 的本机运行、签名和升级见 [Android 说明](../android/README.md)，不能把本页备份命令视为已经实现的手机备份入口。
 
-## Windows 本机运行
+## Windows 启动
 
-本次本机交付的服务已在 **http://localhost:8080/** 运行，可直接打开；如果已有本应用占用 8080，不要重复执行启动命令。用户名为 `cyledger`，密码仅位于私密文件 `.runtime/LOCAL_LOGIN.txt`。这不是通用安装默认密码，下文的创建账户步骤用于其他机器或尚未初始化的实例。
-
-从项目根目录打开 PowerShell。需要 Go（项目 `go.mod` 指定版本）、GCC、Node.js、npm、Python 3.11 或更新版本。当前机器的 Go 与 GCC 分别安装在 `D:\tools\cyledger\go\bin` 和 `D:\tools\cyledger\mingw64\bin`，启动脚本会自动加入本进程 PATH，不改系统设置。
-
-首次构建和启动（重建本次实例前应先停止现有服务）：
+需要 Go/CGO、GCC、Node.js/npm 和 Python。本机工具路径见 [开发入口](../README.CYLEDGER.md#本机开发)。在项目根执行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\Start-CYLedger.ps1 -Build -DirectNpm
 ```
 
-`-DirectNpm` 使用运行目录里的独立 npm 配置，绕过本机已有但失效的 npm 用户代理；不修改全局 `.npmrc`。有可用企业代理时可省略该参数。构建包含 Go 二进制和完整 Vue 前端，第一次下载依赖需要网络。
+打开 [http://localhost:8080/](http://localhost:8080/)；手机布局为 [http://localhost:8080/mobile](http://localhost:8080/mobile)。已构建时省略 `-Build -DirectNpm`。脚本在前台运行，按 `Ctrl+C` 停止；不要重复启动已占用端口的实例。
 
-浏览器访问 **http://localhost:8080/**。脚本在当前终端运行服务，按 `Ctrl+C` 停止。服务已经停止时，后续启动：
+`-DirectNpm` 仅使用运行目录内的独立 npm 配置绕过失效代理，不改变全局设置。脚本支持 `-Port 18080`、`-BindAddress 0.0.0.0`、`-RuntimeDirectory <独立目录>`、`-ConfigureOnly`。默认只监听 `127.0.0.1`，局域网监听不等于公网部署。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Start-CYLedger.ps1
-```
-
-仅写入配置、不启动服务：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Start-CYLedger.ps1 -ConfigureOnly
-```
-
-默认仅监听本机 `127.0.0.1`。需要同一局域网手机验收时，运行 `-BindAddress 0.0.0.0`，在手机打开电脑的局域网地址及 `8080` 端口；这不是正式公网部署。`-Port 18080` 可指定其他端口。浏览器首次登录后将界面语言设为简体中文，在投资设置中确认本位币 CNY 和自己的会计时区，时区不由服务端 `TZ` 代替。
-
-运行文件：
-
-| 路径 | 用途 |
+| 持久路径 | 用途 |
 |---|---|
-| `.runtime/cyledger.exe` | 本机服务程序 |
+| `.runtime/cyledger.exe` | 电脑服务程序 |
 | `.runtime/cyledger.ini` | 私密配置与自动生成的签名密钥 |
-| `.runtime/data/cyledger.db` | 完整 SQLite 数据库，包括新增投资表与关联 |
-| `.runtime/storage/` | 附件、头像、自定义图标 |
-| `.runtime/log/` | 运行日志 |
-| `dist/` | 前端构建文件，可重新生成 |
+| `.runtime/data/cyledger.db` | SQLite 全部业务表 |
+| `.runtime/storage/` | 附件、头像和自定义图标 |
+| `.runtime/log/` | 服务日志 |
+| `.runtime/android-signing/` | Android 持久签名材料，禁止作为临时文件清理 |
+| `backups/` | 建议存放完整备份，受 Git 忽略 |
+| `dist/` | 网页构建及 Android 最终 APK |
 
-每次配置会更新运行路径、监听地址、端口，并保持公开注册关闭；已生成的签名密钥保留。可选 CoinGecko Demo 行情密钥通过本进程环境变量 `CYLEDGER_COINGECKO_DEMO_API_KEY` 设置，服务重启后生效。不要填入交易所交易密钥、私钥或助记词。
-
-### 停止本次后台预览
-
-本次交付的 8080 预览在后台运行，其 PID 记录在 `.runtime/server.pid`。需要重建或备份时，在项目根目录运行下面的命令；先验证该进程的程序路径确实是当前项目的 `.runtime/cyledger.exe`，再停止。PID 文件缺失、内容无效或路径不符时应先核对实例，不要直接按旧 PID 终止程序。之后用 `Start-CYLedger.ps1` 启动的前台服务按 `Ctrl+C` 停止即可。
-
-```powershell
-$ledgerProcessId = 0
-$ledgerPidText = (Get-Content -LiteralPath .\.runtime\server.pid -Raw -ErrorAction Stop).Trim()
-if (-not [int]::TryParse($ledgerPidText, [ref]$ledgerProcessId) -or $ledgerProcessId -le 0) {
-    throw '运行记录中的 PID 无效，请先核对服务进程。'
-}
-$ledgerExecutable = (Resolve-Path -LiteralPath .\.runtime\cyledger.exe -ErrorAction Stop).Path
-$ledgerProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $ledgerProcessId" -ErrorAction Stop
-if ($null -eq $ledgerProcess) {
-    Write-Host '记录的进程已停止。'
-} elseif (-not [string]::Equals($ledgerProcess.ExecutablePath, $ledgerExecutable, [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw '记录的 PID 与当前项目程序路径不符，未停止任何进程。'
-} else {
-    Stop-Process -Id $ledgerProcessId -ErrorAction Stop
-    Write-Host 'CYLedger 后台预览已停止。'
-}
-```
+若另行安排后台运行，停止前必须核对进程的绝对程序路径、配置和监听端口。旧 PID 文件不证明进程仍属于本应用；不能只按陈旧 PID 结束进程。
 
 ## 创建自己的登录账户
 
-公开注册默认关闭，不提供共享管理员密码。服务首次启动完成数据库结构初始化后，在项目根目录另开终端运行：
+公开注册默认关闭。服务首次启动完成数据库初始化后另开终端：
 
 ```powershell
 python .\scripts\create_user.py --binary .\.runtime\cyledger.exe --config .\.runtime\cyledger.ini --username cy --email your-address@example.com --nickname 我的账本
 ```
 
-按提示输入两次密码。脚本使用现有 CLI 创建用户，将默认记账货币设为人民币；不把密码写进 shell 历史，并对 CLI 失败输出进行密码脱敏。上游 CLI 接口仍需把密码作为短暂进程参数传递，因此应在你控制的本机上执行。随后返回网页登录；公开注册继续关闭。
+按提示输入密码，默认记账货币为人民币。密码不写入 shell 历史；上游 CLI 仍以短暂进程参数接收密码，应在可信本机执行。已有本机个人账户信息保存在私密 `.runtime/LOCAL_LOGIN.txt`，不是新安装的默认凭据。
+
+## 配置与环境变量
+
+| 变量 | 生效位置与含义 |
+|---|---|
+| `CYLEDGER_BIND` | Compose 宿主机监听地址，默认 `127.0.0.1` |
+| `CYLEDGER_PORT` | Compose 宿主机端口，默认 `8080`；Windows 脚本用 `-Port` |
+| `CYLEDGER_ROOT_URL` | Compose 对外完整地址，默认 `http://localhost:8080/` |
+| `CYLEDGER_VOLUME` | Compose 持久卷名，默认 `cyledger_data`；仅在有意切换实例时修改 |
+| `TZ` | 容器系统时区，默认 `Asia/Shanghai`；会计时区仍取用户设置 |
+| `CYLEDGER_COINGECKO_DEMO_API_KEY` | 可选服务端行情密钥，重启后生效；不是交易账户密钥 |
+| `ANDROID_HOME` | Android 构建使用的 SDK 根目录，可用 `--sdk` 覆盖 |
+
+`.env.example` 是 Compose 配置模板，实际 `.env` 不提交。证券公开参考价、场外净值、货币基金万份收益和 ECB 汇率无需新增密钥；网络、供应商接口及额度仍是外部条件。报价规则与显式联网检查见 [行情模块](../pkg/marketquotes/README.md)。
 
 ## Docker Compose
 
-在已能正常运行 Docker 的机器上，项目根目录执行：
+在 Docker 可正常运行的机器上执行：
 
 ```bash
 docker compose up -d --build
-```
-
-然后访问 **http://localhost:8080/**。默认使用一个应用容器和名为 `cyledger_data` 的持久化卷，卷中包含配置、SQLite、附件和日志。首次启动自动生成签名密钥。更新镜像不会替换数据卷。
-
-需要修改地址、端口或行情密钥时，将 `.env.example` 复制为 `.env` 并填写实际值。示例内没有可用密钥。正式公网环境应由 HTTPS 反向代理接入，`CYLEDGER_ROOT_URL` 填写实际 HTTPS 地址；不要直接把开发 HTTP 端口暴露到公网。
-
-创建账户：
-
-```bash
-docker compose exec app python3 /app/scripts/create_user.py --binary /app/cyledger --config /app/runtime/cyledger.ini --username cy --email your-address@example.com --nickname 我的账本
-```
-
-状态、日志和健康检查：
-
-```bash
 docker compose ps
 docker compose logs --tail=100 -f app
 curl --fail http://localhost:8080/healthz.json
 ```
 
-`/healthz.json` 检查 Web 服务能否响应；不意味着外部行情供应商可用。行情是否实时、过期或缺失，应查看资产页的报价状态。容器以 UID/GID 1000 运行，不赋予额外 Linux capabilities。
+容器以 UID/GID 1000 运行，持久卷包含配置、SQLite、附件和日志；更新镜像不替换该卷。首次创建账户：
 
-当前本机 Docker daemon 未能启动，因此本轮应以原生 Windows 运行验收为准。Dockerfile 和 Compose 是部署交付，不能把未实际运行的容器构建宣称为已通过。
+```bash
+docker compose exec app python3 /app/scripts/create_user.py --binary /app/cyledger --config /app/runtime/cyledger.ini --username cy --email your-address@example.com --nickname 我的账本
+```
+
+公网部署需 HTTPS 反向代理及正确的 `CYLEDGER_ROOT_URL`。当前只完成 Compose 配置检查，未完成当前版本镜像构建、容器运行和公网验收。健康检查只证明 Web 服务响应，不代表外部行情可用。
 
 ## 完整备份
 
-业务 CSV 适合阅读和迁移，完整恢复必须使用这里的备份。备份包包含：SQLite 所有表、账户余额、投资事件、数量与成本、系统结算角色、旧流水关联、持仓快照、用户配置、附件、版本元数据以及逐文件 SHA256。日志和程序二进制不属于业务恢复数据。
-
-**先停止应用再备份。** SQLite backup API 本身能获得一致的数据库快照，但附件与数据库是两个存储层，停服才能保证它们属于同一状态。`--stopped` 表示你已经停止所有应用进程与定时写入任务，工具不会擅自终止程序。
-
-Windows：在运行服务的终端按 `Ctrl+C`；本次后台预览按上面的进程校验步骤停止，然后：
+**先停止应用及所有写入任务。** SQLite backup API 可保持数据库一致，但附件与数据库需要停服才能对应。`--stopped` 是操作者的确认，脚本不会自动停止服务。
 
 ```powershell
-New-Item -ItemType Directory -Path .\backups -Force
-$backupFile = '.\backups\cyledger-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.zip'
-python .\scripts\backup.py create --runtime .\.runtime --output $backupFile --stopped
-python .\scripts\backup.py verify $backupFile
+New-Item -ItemType Directory -Path .\backups -Force | Out-Null
+$ledgerBackup = '.\backups\cyledger-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.zip'
+python .\scripts\backup.py create --runtime .\.runtime --output $ledgerBackup --stopped
+if ($LASTEXITCODE -ne 0) { throw '备份失败。' }
+python .\scripts\backup.py verify $ledgerBackup
+if ($LASTEXITCODE -ne 0) { throw '备份校验失败。' }
 ```
 
-完成后重新运行 `Start-CYLedger.ps1`。输出应为 `status: ok`。工具拒绝覆盖同名备份；失败产生的包不会通过 `verify`，不要用它恢复。
+备份包含 SQLite 所有表、账本/账户/流水/模板、投资事件及关联、报销/债务/分期/定存、自动收益防重记录、配置和附件，附版本信息与逐文件 SHA-256；不包含日志和程序。完成后重新启动服务。
 
-Docker（以下为 Bash 命令，备份路径可替换）：
+Docker 停服备份（Bash）：
 
 ```bash
 mkdir -p backups
@@ -131,15 +94,11 @@ docker compose run --rm --no-deps --user 0:0 --entrypoint python3 -v "$PWD/backu
 docker compose start app
 ```
 
-备份辅助容器临时使用 root 以读取私密卷和写入宿主机备份目录，常驻应用仍是非 root。Linux 上生成的包权限为仅创建者可读写，管理员可将包所有者移交给自己的账户后离机保存。任何备份失败时应查看错误，确认服务已经重新启动。
-
-备份包含账户信息、财务数据和签名密钥，**ZIP 没有加密**；应放在受保护目录，并保存一份离机副本。SHA256 用于检测损坏和未同步修改，不能证明文件来自可信发布者；仅恢复自己保管的备份。自托管不等于端到端加密。
+辅助容器临时使用 root 读取卷，常驻服务仍使用 UID 1000。核对命令结果并确保服务恢复运行。备份包拒绝同名覆盖；ZIP 未加密且含密钥及财务数据，应保护访问并另存离机副本。SHA-256 检测损坏，不能证明发布者身份。
 
 ## 恢复到空白实例
 
-工具只允许恢复到不存在或完全为空的目录，不覆盖当前账本。恢复前会拒绝路径穿越、绝对路径、重复路径、ZIP 符号链接及校验不一致的条目。恢复后进行 SQLite 完整性检查和表记录数比对，并将数据库/附件路径指向新目录，避免恢复实例意外打开原数据库。
-
-Windows 示例：
+只能恢复到不存在或完全为空的目录，不覆盖现有账本。恢复拒绝路径穿越、重复/绝对路径、符号链接和校验不一致，执行 SQLite 完整性及表记录数检查，并重写数据库/附件路径以隔离原实例。
 
 ```powershell
 python .\scripts\backup.py restore .\backups\cyledger-backup.zip --target .\.runtime\recovered
@@ -147,9 +106,9 @@ Copy-Item -LiteralPath .\.runtime\cyledger.exe -Destination .\.runtime\recovered
 powershell -ExecutionPolicy Bypass -File .\scripts\Start-CYLedger.ps1 -RuntimeDirectory .\.runtime\recovered -Port 18080
 ```
 
-在 **http://localhost:18080/** 用原账户登录，比较恢复前后日常账户余额、投资数量、剩余成本、旧流水关联和净资产。净资产应使用同一份保存的价格/汇率对比；真实行情继续更新后市场估值可能自然改变。确认恢复验收完成后再决定切换使用实例，原数据保持不动。
+打开 [恢复实例](http://localhost:18080/)，用原账户核对余额、数量、成本、账本归属和各类关联。估值对比使用同一份保存的价格/汇率；实时行情刷新造成的估值变化不等于恢复错误。确认后才决定切换，保留原实例。
 
-Docker 恢复到另一个新卷：
+Docker 使用新卷恢复（Bash）：
 
 ```bash
 docker volume create cyledger_restored
@@ -157,18 +116,26 @@ docker run --rm --user 0:0 --entrypoint python3 -v cyledger_restored:/app/runtim
 docker run --rm --user 0:0 --entrypoint sh -v cyledger_restored:/app/runtime cyledger:local -c 'chown -R 1000:1000 /app/runtime'
 ```
 
-卷初始化后必须把数据目录所有者交回应用的 UID 1000。在 `.env` 将 `CYLEDGER_VOLUME` 改为 `cyledger_restored`，再执行 `docker compose up -d`。切换前备份当前实例，停用旧容器；旧卷保留用于回退。不要执行 `docker compose down -v`，该参数会删除持久化卷。
+在 `.env` 将 `CYLEDGER_VOLUME` 改为新卷，再启动并核对。保留旧卷回退，禁止 `docker compose down -v` 删除数据卷。工具仅支持 SQLite + 本地附件，单包上限 16 GiB / 100,000 文件，不提供远程附件的一致性备份。
 
 ## 升级与验证
 
-升级前停服并完成完整备份，记录当前源码提交；再更新本项目版本，使用 `Start-CYLedger.ps1 -Build` 或 `docker compose up -d --build` 构建。数据库迁移在启动时执行。升级失败时使用旧版程序和升级前备份恢复到新的空目录/新卷，不直接用旧程序打开已经迁移的新数据库。
+1. 确认配置、程序和数据库路径；停服，备份并校验，记录旧源码提交。
+2. 先将备份恢复到独立目录和端口，用新程序验证。多账本迁移会建立默认“日常账本”并补齐历史归属，重复执行不重复迁移。
+3. 验证余额、成本、持仓及关联后，重建正式程序并启动；检查 `/healthz.json`、登录、账本筛选与资产详情。
+4. 失败时用旧版本和升级前备份恢复到另一空目录；不要用旧程序直接打开已迁移的新库，不覆盖当前库。
 
-本地可运行的备份恢复检查：
+Android 使用独立签名升级流程，详见 [Android](../android/README.md)。备份工具验证命令为 `python -m unittest discover -s scripts -p test_backup.py -v`；运行会生成隔离测试目录，用户要求清理时可删除。
 
-```powershell
-python -m unittest discover -s scripts -p test_backup.py -v
-```
+## 常见问题
 
-测试实际创建 SQLite 账本、二进制附件和签名配置，恢复到空目录后核对余额、18 位数量、36 位计算成本文本、净资产快照、关联与附件，并检查篡改、恶意路径和覆盖已有目录的拒绝行为。测试证据保留在 `.runtime/backup-tests-*`。这属于备份工具验收；产品接口、用户隔离和手机页面仍需按开发文档分别验收。
+| 现象 | 核查 |
+|---|---|
+| 端口占用或界面仍旧 | 核对服务路径/版本和 `dist`，停止旧实例后重建；PWA 更新下载后刷新，不清空账本 |
+| 基金收益等待 | 核对六位代码、开始日期、时区、公开万份收益及网络；缺日不跳过，不用净值替代万份收益 |
+| 分期/定存没有到期记录 | 核对日期/时区、账户与分类、是否结束；重新进入应用触发同步，不能把提醒当作真实还款 |
+| 资产不完整 | 查看缺失价格、历史成本或汇率及其日期，不手工填零消除未知 |
+| Android 没有提醒 | 查看资产提醒开关和系统通知授权；应用停止、节电限制或系统调度可能影响送达 |
+| 签名不兼容 | 核对原 `.runtime/android-signing`；不能用卸载正式版解决升级签名问题 |
 
-限制：完整备份工具当前仅支持 SQLite + 本地附件存储，单包上限 16 GiB、100,000 个文件；不是异地附件存储或在线多服务一致性备份。导入历史账单时仍需自行选择“历史流水重建余额”或“当前余额起步”，避免将当前余额与已包含的历史流水重复累计。
+日志不应记录完整账本、密钥或测试令牌。排错和破坏性验证使用独立库；正式数据与签名材料不能作为过程文件删除。

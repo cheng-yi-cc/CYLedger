@@ -129,6 +129,10 @@
             </template>
 
             <template #subtitle>
+                <div v-if="currentStep !== 'finalResult'" class="mx-4 mt-3 mb-2">
+                    <BookPicker v-model="targetBookId" :disabled="loading || submitting" />
+                    <p class="text-caption mt-1">没有账本列的账单导入所选账本；文件中已指定的账本会保留，可在预览表中核对或编辑。</p>
+                </div>
                 <v-divider class="mt-2" />
                 <div class="cursor-default mt-3 mx-3 mb-md-2">
                     <steps-bar min-width="700" :always-horizontal="true" :clickable="false"
@@ -326,6 +330,7 @@
                         <import-transaction-check-data-tab
                             ref="importTransactionCheckDataTab"
                             :import-transactions="importTransactions"
+                            :default-book-id="targetBookId"
                             :disabled="loading || submitting"
                         />
                     </v-window-item>
@@ -360,6 +365,8 @@
 import type { StepBarItem } from '@/components/desktop/StepsBar.vue';
 import ConfirmDialog from '@/components/desktop/ConfirmDialog.vue';
 import SnackBar from '@/components/desktop/SnackBar.vue';
+import BookPicker from '@/components/mobile/BookPicker.vue';
+import { useBooksStore } from '@/stores/books.ts';
 import ImportTransactionDefineColumnTab from './tabs/ImportTransactionDefineColumnTab.vue';
 import ImportTransactionExecuteCustomScriptTab from './tabs/ImportTransactionExecuteCustomScriptTab.vue';
 import ImportTransactionRecognizeImagesTab, { type BatchImportImageItem } from './tabs/ImportTransactionRecognizeImagesTab.vue';
@@ -374,8 +381,6 @@ import { useAccountsStore } from '@/stores/account.ts';
 import { useTransactionCategoriesStore } from '@/stores/transactionCategory.ts';
 import { useTransactionTagsStore } from '@/stores/transactionTag.ts';
 import { useTransactionsStore } from '@/stores/transaction.ts';
-import { useOverviewStore } from '@/stores/overview.ts';
-import { useStatisticsStore } from '@/stores/statistics.ts';
 
 import { type KeyAndName, itemAndIndex } from '@/core/base.ts';
 import { TransactionType } from '@/core/transaction.ts';
@@ -436,12 +441,12 @@ const {
 } = useI18n();
 
 const settingsStore = useSettingsStore();
+const booksStore = useBooksStore();
+const targetBookId = ref('');
 const accountsStore = useAccountsStore();
 const transactionCategoriesStore = useTransactionCategoriesStore();
 const transactionTagsStore = useTransactionTagsStore();
 const transactionsStore = useTransactionsStore();
-const overviewStore = useOverviewStore();
-const statisticsStore = useStatisticsStore();
 
 const confirmDialog = useTemplateRef<ConfirmDialogType>('confirmDialog');
 const snackbar = useTemplateRef<SnackBarType>('snackbar');
@@ -693,6 +698,8 @@ function loadInitFileTypeFromSettings(): void {
 }
 
 function open(): Promise<void> {
+    loading.value = true;
+    targetBookId.value = booksStore.defaultBookId;
     migrationMode.value = '';
     fileType.value = 'ezbookkeeping';
     fileSubType.value = 'ezbookkeeping_csv';
@@ -721,12 +728,14 @@ function open(): Promise<void> {
     clearImportImageFiles();
 
     const promises = [
+        booksStore.loadBooks(),
         accountsStore.loadAllAccounts({ force: false }),
         transactionCategoriesStore.loadAllCategories({ force: false }),
         transactionTagsStore.loadAllTags({ force: false })
     ];
 
     Promise.all(promises).then(() => {
+        if (!targetBookId.value) targetBookId.value = booksStore.defaultBookId;
         loading.value = false;
     }).catch(error => {
         logger.error('failed to load essential data for importing transaction', error);
@@ -1196,6 +1205,7 @@ function batchApplyRules(): void {
 
 function submit(): void {
     if (migrationMode.value !== 'history') return;
+    if (!targetBookId.value) { snackbar.value?.showError('请选择本次导入的目标账本。'); return; }
     if (importTransactionCheckDataTab.value?.isEditing) {
         return;
     }
@@ -1205,6 +1215,10 @@ function submit(): void {
     if (importTransactions.value) {
         for (const importTransaction of importTransactions.value) {
             if (importTransaction.valid && importTransaction.selected) {
+                if (!booksStore.activeBooks.some(book => book.id === (importTransaction.bookId || targetBookId.value))) {
+                    snackbar.value?.showError('部分账单的账本不存在或已归档，请在预览表中编辑账本后再导入。');
+                    return;
+                }
                 transactions.push(importTransaction);
             } else if (!importTransaction.valid && importTransaction.selected) {
                 snackbar.value?.showError('Cannot import invalid transactions');
@@ -1256,6 +1270,7 @@ function submit(): void {
         }
 
         transactionsStore.importTransactions({
+            bookId: targetBookId.value,
             transactions: transactions,
             clientSessionId: clientSessionId.value
         }).then(response => {
@@ -1268,10 +1283,7 @@ function submit(): void {
             importedCount.value = response;
             currentStep.value = 'finalResult';
 
-            accountsStore.updateAccountListInvalidState(true);
-            transactionsStore.updateTransactionListInvalidState(true);
-            overviewStore.updateTransactionOverviewInvalidState(true);
-            statisticsStore.updateTransactionStatisticsInvalidState(true);
+            transactionsStore.updateStoreInvalidState({ transactionList: true, reconciliationStatement: true, accountList: true, overview: true, statistics: true, explorer: true });
 
             submitting.value = false;
         }).catch(error => {

@@ -152,6 +152,9 @@ dist/
 .codex
 .planning
 
+# Local agent skills and tooling are installed per machine.
+/.agents/
+
 # Binary and build files
 ezbookkeeping
 !**/ezbookkeeping/

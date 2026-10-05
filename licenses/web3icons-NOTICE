@@ -1,0 +1,12 @@
+Web3 Icons — selected exchange and wallet SVG assets
+Source: https://github.com/0xa3k5/web3icons
+Revision: ad3cbe05229db54931cd8b2c2a86662288a0ce50
+Author: 0xa3k5 and Web3 Icons contributors
+Upstream packages/core/package.json declares the MIT license.
+Assets: packages/core/src/svgs/{exchanges,wallets}/background/
+Local copies: public/img/crypto-platforms/
+
+These logos identify user-selected account providers. Brand names and trademarks
+remain the property of their respective owners. No affiliation or endorsement
+is implied. The upstream repository revision does not include a LICENSE file;
+its README and package metadata identify the license as MIT.

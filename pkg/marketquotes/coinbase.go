@@ -19,6 +19,8 @@ type coinbaseProduct struct {
 	Status          string `json:"status"`
 	Disabled        bool   `json:"is_disabled"`
 	TradingDisabled bool   `json:"trading_disabled"`
+	BaseName        string `json:"base_name"`
+	Change24h       string `json:"price_percentage_change_24h"`
 }
 
 func (s *Service) verifyProducts(ctx context.Context) error {
@@ -164,6 +166,7 @@ type coinbaseMessage struct {
 		Tickers          []struct {
 			ProductID string `json:"product_id"`
 			Price     string `json:"price"`
+			Change24h string `json:"price_percent_chg_24_h"`
 		} `json:"tickers"`
 	} `json:"events"`
 }
@@ -275,7 +278,7 @@ func (s *Service) consumeMessage(message coinbaseMessage, state *streamState) er
 				if !exists {
 					continue
 				}
-				s.putQuote(Quote{InstrumentID: id, Price: ticker.Price, Currency: "USD", Source: SourceCoinbaseWS, ReceivedAt: s.config.Now().Unix(), State: quality}, sourceTime)
+				s.putQuote(Quote{InstrumentID: id, Price: ticker.Price, Currency: "USD", Source: SourceCoinbaseWS, ReceivedAt: s.config.Now().Unix(), State: quality, ChangePercent: signedPercent(ticker.Change24h), ChangePeriod: "24h"}, sourceTime)
 			}
 		}
 	case "subscriptions":

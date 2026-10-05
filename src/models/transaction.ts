@@ -14,6 +14,12 @@ import { TransactionPicture, type TransactionPictureInfoBasicResponse } from './
 
 export class Transaction implements TransactionInfoResponse {
     public id: string;
+    public bookId: string = '';
+    public investmentEventId?: string;
+    public excludeFromStatistics = false;
+    public reimbursementAccountId = '0';
+    public reimbursementReceiptId = '';
+    public reimbursementClosedAt = 0;
     public timeSequenceId: string;
     public type: number;
     public expenseCategoryId: string = '';
@@ -232,6 +238,9 @@ export class Transaction implements TransactionInfoResponse {
 
     public toCreateRequest(clientSessionId: string): TransactionCreateRequest {
         return {
+            bookId: this.bookId,
+            excludeFromStatistics: this.excludeFromStatistics,
+            reimbursementAccountId: this.type === TransactionType.Expense ? this.reimbursementAccountId : '0',
             type: this.type,
             categoryId: this.getCategoryId(),
             time: this.time,
@@ -257,6 +266,9 @@ export class Transaction implements TransactionInfoResponse {
         }
 
         return {
+            bookId: this.bookId,
+            excludeFromStatistics: this.excludeFromStatistics,
+            reimbursementAccountId: this.type === TransactionType.Expense ? this.reimbursementAccountId : '0',
             id: this.id,
             type: this.type,
             categoryId: categoryId,
@@ -282,6 +294,9 @@ export class Transaction implements TransactionInfoResponse {
         }
 
         return {
+            bookId: this.bookId,
+            excludeFromStatistics: this.excludeFromStatistics,
+            reimbursementAccountId: this.type === TransactionType.Expense ? this.reimbursementAccountId : '0',
             type: this.type,
             categoryId: this.getCategoryId(),
             sourceAccountId: this.sourceAccountId,
@@ -334,6 +349,12 @@ export class Transaction implements TransactionInfoResponse {
             transactionResponse.editable
         );
 
+        transaction.bookId = transactionResponse.bookId || '';
+        transaction.excludeFromStatistics = !!transactionResponse.excludeFromStatistics;
+        transaction.reimbursementAccountId = transactionResponse.reimbursementAccountId || '0';
+        transaction.reimbursementReceiptId = transactionResponse.reimbursementReceiptId || '';
+        transaction.reimbursementClosedAt = transactionResponse.reimbursementClosedAt || 0;
+        transaction.investmentEventId = transactionResponse.investmentEventId;
         if (transactionResponse.category) {
             transaction.setCategory(TransactionCategory.of(transactionResponse.category));
         }
@@ -406,6 +427,11 @@ export class Transaction implements TransactionInfoResponse {
             true // editable
         );
 
+        transaction.bookId = transactionDraft.bookId || '';
+        transaction.excludeFromStatistics = !!transactionDraft.excludeFromStatistics;
+        transaction.reimbursementAccountId = transactionDraft.reimbursementAccountId || '0';
+        transaction.reimbursementReceiptId = transactionDraft.reimbursementReceiptId || '';
+        transaction.reimbursementClosedAt = transactionDraft.reimbursementClosedAt || 0;
         if (transactionDraft.pictures) {
             const pictures: TransactionPicture[] = [];
 
@@ -513,6 +539,11 @@ export class TransactionTagFilter {
 }
 
 export interface TransactionDraft {
+    readonly excludeFromStatistics?: boolean;
+    readonly reimbursementAccountId?: string;
+    readonly reimbursementReceiptId?: string;
+    readonly reimbursementClosedAt?: number;
+    readonly bookId?: string;
     readonly type?: number;
     readonly categoryId?: string;
     readonly sourceAccountId?: string;
@@ -531,6 +562,11 @@ export interface TransactionGeoLocationRequest {
 }
 
 export interface TransactionCreateRequest {
+    readonly excludeFromStatistics?: boolean;
+    readonly reimbursementAccountId?: string;
+    readonly reimbursementReceiptId?: string;
+    readonly reimbursementClosedAt?: number;
+    readonly bookId?: string;
     readonly type: number;
     readonly categoryId: string;
     readonly time: number;
@@ -548,6 +584,11 @@ export interface TransactionCreateRequest {
 }
 
 export interface TransactionModifyRequest {
+    readonly excludeFromStatistics?: boolean;
+    readonly reimbursementAccountId?: string;
+    readonly reimbursementReceiptId?: string;
+    readonly reimbursementClosedAt?: number;
+    readonly bookId?: string;
     readonly id: string;
     readonly type: number;
     readonly categoryId: string;
@@ -604,11 +645,13 @@ export interface TransactionBatchDeleteRequest {
 }
 
 export interface TransactionImportRequest {
+    readonly bookId?: string;
     readonly transactions: TransactionCreateRequest[];
     readonly clientSessionId: string;
 }
 
 export interface TransactionListByMaxTimeRequest {
+    readonly bookIds?: string[];
     readonly maxTime: number;
     readonly minTime: number;
     readonly count: number;
@@ -640,6 +683,8 @@ export interface TransactionListInMonthByPageRequest {
 }
 
 export interface TransactionAllListRequest {
+    readonly accountIds?: string;
+    readonly bookIds?: string[];
     readonly startTime: number;
     readonly endTime: number;
     readonly withPictures?: boolean;
@@ -654,6 +699,12 @@ export interface TransactionReconciliationStatementRequest {
 export type TransactionGeoLocationResponse = Coordinate;
 
 export interface TransactionInfoResponse {
+    readonly excludeFromStatistics?: boolean;
+    readonly reimbursementAccountId?: string;
+    readonly reimbursementReceiptId?: string;
+    readonly reimbursementClosedAt?: number;
+    readonly bookId?: string;
+    readonly investmentEventId?: string;
     readonly id: string;
     readonly timeSequenceId: string;
     readonly type: number;

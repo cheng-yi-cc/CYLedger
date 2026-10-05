@@ -4,8 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/url"
-	"strings"
+	"sort"
 	"time"
 )
 
@@ -19,10 +18,27 @@ func (s *Service) coinGeckoLoop(ctx context.Context) {
 }
 
 func (s *Service) refreshCoinGecko(ctx context.Context) {
-	if s.config.CoinGeckoAPIKey == "" {
+	s.mu.Lock()
+	bindings := make([]Binding, 0)
+	seen := make(map[string]bool)
+	// Keyless deployments only poll explicit, verified custom bindings. The
+	// preset fallback remains opt-in through a server-side Demo key.
+	if s.config.CoinGeckoAPIKey != "" {
+		for _, candidate := range instruments {
+			bindings = append(bindings, Binding{Market: "CRYPTO", Provider: "coingecko", ProviderID: candidate.geckoID, Currency: "USD"})
+			seen[candidate.geckoID] = true
+		}
+	}
+	for _, b := range s.references {
+		if b.Provider == "coingecko" && !seen[b.ProviderID] {
+			bindings = append(bindings, b)
+			seen[b.ProviderID] = true
+		}
+	}
+	if len(bindings) == 0 {
+		s.mu.Unlock()
 		return
 	}
-	s.mu.Lock()
 	now := s.config.Now()
 	// Count attempts as budget usage, including HTTP failures and 429s. Neither
 	// reconnection nor a client refreshing its page bypasses this shared gate.
@@ -32,33 +48,26 @@ func (s *Service) refreshCoinGecko(ctx context.Context) {
 	}
 	s.lastGeckoAttempt = now
 	s.mu.Unlock()
-	ids := make([]string, 0, len(instruments))
-	for _, candidate := range instruments {
-		ids = append(ids, candidate.geckoID)
-	}
-	address, err := url.Parse(s.config.CoinGeckoURL)
+	sort.Slice(bindings, func(i, j int) bool { return bindings[i].ProviderID < bindings[j].ProviderID })
+	quotes, err := s.fetchGeckoReferences(ctx, bindings)
 	if err != nil {
 		return
 	}
-	query := address.Query()
-	query.Set("ids", strings.Join(ids, ","))
-	query.Set("vs_currencies", "usd")
-	query.Set("include_last_updated_at", "true")
-	query.Set("precision", "full")
-	address.RawQuery = query.Encode()
-	var response map[string]struct {
-		USD           json.Number `json:"usd"`
-		LastUpdatedAt int64       `json:"last_updated_at"`
+	for _, q := range quotes {
+		// putReferenceQuote only accepts registered public identities.
+		s.putReferenceQuote(q)
 	}
-	if err = s.getJSON(ctx, address.String(), map[string]string{"x-cg-demo-api-key": s.config.CoinGeckoAPIKey}, &response); err != nil {
+	if s.config.CoinGeckoAPIKey == "" {
 		return
 	}
 	for _, candidate := range instruments {
-		price, found := response[candidate.geckoID]
-		if !found || price.LastUpdatedAt <= 0 {
+		b := Binding{Provider: "coingecko", ProviderID: candidate.geckoID}
+		q, found := quotes[b.Key()]
+		if !found {
 			continue
 		}
-		s.putQuote(Quote{InstrumentID: candidate.id, Price: string(price.USD), Currency: "USD", Source: SourceCoinGecko, ReceivedAt: s.config.Now().Unix(), State: StateDelayed}, time.Unix(price.LastUpdatedAt, 0))
+		q.InstrumentID = candidate.id
+		s.putQuote(q, time.Unix(q.SourceTime, 0))
 	}
 }
 

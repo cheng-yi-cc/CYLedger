@@ -7,6 +7,7 @@ import (
 	"github.com/mayswind/ezbookkeeping/pkg/datastore"
 	"github.com/mayswind/ezbookkeeping/pkg/log"
 	"github.com/mayswind/ezbookkeeping/pkg/models"
+	"github.com/mayswind/ezbookkeeping/pkg/services"
 )
 
 // Database represents the database command
@@ -182,7 +183,7 @@ func updateAllDatabaseTablesStructure(c *core.CliContext) error {
 	log.BootInfof(c, "[database.updateAllDatabaseTablesStructure] insights explorer table maintained successfully")
 
 	err = datastore.Container.UserDataStore.SyncStructs(
-		new(models.InvestmentSettings), new(models.PortfolioAccount), new(models.InvestmentInstrument),
+		new(models.Book), new(models.CalendarEvent), new(models.AssetPresentation), new(models.ReimbursementReceipt), new(models.AssetAdjustment), new(models.CreditInstallment), new(models.DebtMovement), new(models.FixedDeposit), new(models.MonetaryIncomeBinding), new(models.MonetaryIncomeDay), new(models.InvestmentSettings), new(models.PortfolioAccount), new(models.InvestmentInstrument),
 		new(models.InvestmentEventRecord), new(models.InvestmentEventRevision), new(models.InvestmentTransactionLink),
 		new(models.InvestmentIdempotency), new(models.InvestmentQuote), new(models.WealthSnapshot),
 	)
@@ -190,5 +191,5 @@ func updateAllDatabaseTablesStructure(c *core.CliContext) error {
 		return err
 	}
 
-	return nil
+	return services.Books.MigrateAll(c)
 }

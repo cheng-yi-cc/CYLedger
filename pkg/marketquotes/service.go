@@ -34,14 +34,16 @@ const (
 // SourceTime is zero only if the supplier did not provide a time. Empty Price
 // means unavailable; it is never a synthetic zero or a fixed stablecoin peg.
 type Quote struct {
-	InstrumentID string `json:"instrumentId"`
-	Price        string `json:"price"`
-	Currency     string `json:"currency"`
-	Source       string `json:"source"`
-	SourceTime   int64  `json:"sourceTime"`
-	ReceivedAt   int64  `json:"receivedAt"`
-	State        string `json:"state"`
-	Connected    bool   `json:"connected"`
+	InstrumentID  string  `json:"instrumentId"`
+	Price         string  `json:"price"`
+	Currency      string  `json:"currency"`
+	Source        string  `json:"source"`
+	SourceTime    int64   `json:"sourceTime"`
+	ReceivedAt    int64   `json:"receivedAt"`
+	State         string  `json:"state"`
+	Connected     bool    `json:"connected"`
+	ChangePercent *string `json:"changePercent,omitempty"`
+	ChangePeriod  string  `json:"changePeriod,omitempty"`
 }
 
 // FXRate is a daily reference rate, not an executable intraday FX quote.
@@ -58,21 +60,27 @@ type FXRate struct {
 // Config permits isolated local fake servers in tests. Production defaults only
 // query public instrument identifiers. API keys remain in the backend process.
 type Config struct {
-	HTTPClient        *http.Client
-	CoinbaseRESTURL   string
-	CoinbaseWSURL     string
-	CoinGeckoURL      string
-	CoinGeckoAPIKey   string
-	FXURL             string
-	RESTInterval      time.Duration
-	CoinGeckoInterval time.Duration
-	FXInterval        time.Duration
-	FXRetryInterval   time.Duration
-	ReadTimeout       time.Duration
-	ReconnectMin      time.Duration
-	ReconnectMax      time.Duration
-	StaleAfter        time.Duration
-	Now               func() time.Time
+	HTTPClient         *http.Client
+	CoinbaseRESTURL    string
+	CoinbaseWSURL      string
+	CoinGeckoURL       string
+	CoinGeckoAPIKey    string
+	FXURL              string
+	RESTInterval       time.Duration
+	CoinGeckoInterval  time.Duration
+	FXInterval         time.Duration
+	FXRetryInterval    time.Duration
+	ReadTimeout        time.Duration
+	ReconnectMin       time.Duration
+	ReconnectMax       time.Duration
+	StaleAfter         time.Duration
+	Now                func() time.Time
+	TencentURL         string
+	TencentSearchURL   string
+	FundSearchURL      string
+	FundNAVURL         string
+	CoinGeckoSearchURL string
+	HKDFXURL           string
 }
 
 type instrument struct {
@@ -100,18 +108,25 @@ type cachedQuote struct {
 
 // Service can be safely shared by all users and HTTP handlers.
 type Service struct {
-	config             Config
-	once               sync.Once
-	mu                 sync.RWMutex
-	quotes             map[string]cachedQuote
-	fx                 FXRate
-	fxRestored         bool
-	products           map[string]string // verified Coinbase product -> instrument ID
-	productsVerifiedAt time.Time
-	connected          bool
-	heartbeatAt        time.Time
-	lastRESTAttempt    time.Time
-	lastGeckoAttempt   time.Time
+	config               Config
+	once                 sync.Once
+	mu                   sync.RWMutex
+	quotes               map[string]cachedQuote
+	fx                   FXRate
+	fxRestored           bool
+	products             map[string]string // verified Coinbase product -> instrument ID
+	productsVerifiedAt   time.Time
+	connected            bool
+	heartbeatAt          time.Time
+	lastRESTAttempt      time.Time
+	lastGeckoAttempt     time.Time
+	references           map[string]Binding
+	lastReferenceAttempt map[string]time.Time
+	searchCache          map[string]searchEntry
+	searchMu             sync.Mutex
+	conversionMu         sync.Mutex
+	hkdFX                FXRate
+	hkdFXRestored        bool
 }
 
 // Default is one cache and one public subscription shared by the application.
@@ -174,7 +189,8 @@ func New(config Config) *Service {
 		config.Now = time.Now
 	}
 	config.CoinbaseRESTURL = strings.TrimRight(config.CoinbaseRESTURL, "/")
-	return &Service{config: config, quotes: make(map[string]cachedQuote), products: make(map[string]string)}
+	configureReferenceSources(&config)
+	return &Service{config: config, quotes: make(map[string]cachedQuote), products: make(map[string]string), references: make(map[string]Binding), lastReferenceAttempt: make(map[string]time.Time), searchCache: make(map[string]searchEntry)}
 }
 
 // Start starts background refreshes once and returns immediately. Cancelling ctx
@@ -183,10 +199,10 @@ func (s *Service) Start(ctx context.Context) {
 	s.once.Do(func() {
 		go s.coinbaseLoop(ctx)
 		go s.restLoop(ctx)
-		if s.config.CoinGeckoAPIKey != "" {
-			go s.coinGeckoLoop(ctx)
-		}
+		go s.coinGeckoLoop(ctx)
 		go s.fxLoop(ctx)
+		go s.referenceLoop(ctx)
+		go s.hkdFXLoop(ctx)
 	})
 }
 
@@ -200,6 +216,18 @@ func (s *Service) Quotes() []Quote {
 			result = append(result, s.quoteViewLocked(cached))
 		} else {
 			result = append(result, Quote{InstrumentID: candidate.id, Currency: "USD", State: StateUnavailable})
+		}
+	}
+	ids := make([]string, 0, len(s.references))
+	for id := range s.references {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if cached, ok := s.quotes[id]; ok {
+			result = append(result, s.quoteViewLocked(cached))
+		} else {
+			result = append(result, Quote{InstrumentID: id, Currency: s.references[id].Currency, State: StateUnavailable})
 		}
 	}
 	return result
@@ -221,7 +249,7 @@ func (s *Service) FX() []FXRate {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.fx.Rate == "" {
-		return []FXRate{{Base: "USD", Quote: "CNY", Source: SourceECB, State: StateUnavailable}}
+		return []FXRate{{Base: "USD", Quote: "CNY", Source: SourceECB, State: StateUnavailable}, s.hkdFXViewLocked()}
 	}
 	fx := s.fx
 	date, err := time.Parse("2006-01-02", fx.Date)
@@ -233,7 +261,7 @@ func (s *Service) FX() []FXRate {
 	} else {
 		fx.State = StateDelayed
 	}
-	return []FXRate{fx}
+	return []FXRate{fx, s.hkdFXViewLocked()}
 }
 
 // Restore accepts only known public sources and preserves original timestamps.
@@ -244,19 +272,27 @@ func (s *Service) Restore(quotes []Quote, rates []FXRate) {
 	now := s.config.Now()
 	for _, quote := range quotes {
 		price, valid := positiveDecimal(quote.Price)
-		if !knownInstrument(quote.InstrumentID) || !knownSource(quote.Source) || quote.Currency != "USD" || !valid || quote.SourceTime <= 0 || quote.ReceivedAt <= 0 || quote.SourceTime > now.Add(2*time.Minute).Unix() || quote.ReceivedAt > now.Add(2*time.Minute).Unix() {
+		if !s.validQuoteIdentityLocked(quote) || !valid || quote.SourceTime <= 0 || quote.ReceivedAt <= 0 || quote.SourceTime > now.Add(2*time.Minute).Unix() || quote.ReceivedAt > now.Add(2*time.Minute).Unix() {
 			continue
 		}
 		if existing, ok := s.quotes[quote.InstrumentID]; ok && existing.quote.SourceTime >= quote.SourceTime {
 			continue
 		}
 		quote.Price, quote.State, quote.Connected = price, StateStale, false
+		normalizeQuoteChange(&quote)
 		s.quotes[quote.InstrumentID] = cachedQuote{quote: quote, sourceTime: time.Unix(quote.SourceTime, 0), restored: true}
 	}
 	for _, rate := range rates {
 		value, valid := positiveDecimal(rate.Rate)
 		date, err := time.Parse("2006-01-02", rate.Date)
-		if rate.Base != "USD" || rate.Quote != "CNY" || rate.Source != SourceECB || !valid || err != nil || date.After(now) || rate.ReceivedAt <= 0 || rate.ReceivedAt > now.Add(2*time.Minute).Unix() {
+		if (rate.Base != "USD" && rate.Base != "HKD") || rate.Quote != "CNY" || rate.Source != SourceECB || !valid || err != nil || date.After(now) || rate.ReceivedAt <= 0 || rate.ReceivedAt > now.Add(2*time.Minute).Unix() {
+			continue
+		}
+		if rate.Base == "HKD" {
+			if s.hkdFX.Rate == "" || s.hkdFX.Date < rate.Date {
+				rate.Rate, rate.State = value, StateStale
+				s.hkdFX, s.hkdFXRestored = rate, true
+			}
 			continue
 		}
 		if s.fx.Rate != "" && s.fx.Date >= rate.Date {
@@ -269,6 +305,10 @@ func (s *Service) Restore(quotes []Quote, rates []FXRate) {
 
 func (s *Service) quoteViewLocked(cached cachedQuote) Quote {
 	quote := cached.quote
+	if quote.ChangePercent != nil {
+		value := *quote.ChangePercent
+		quote.ChangePercent = &value
+	}
 	now := s.config.Now()
 	quote.Connected = quote.Source == SourceCoinbaseWS && s.connected && now.Sub(s.heartbeatAt) < s.config.ReadTimeout && !cached.restored
 	if quote.Connected {
@@ -283,6 +323,19 @@ func (s *Service) quoteViewLocked(cached cachedQuote) Quote {
 	}
 	if cached.restored {
 		quote.State = StateStale
+		return quote
+	}
+	if quote.Source == SourceTencent || quote.Source == SourceFundNAV {
+		quote.State = StateDelayed
+		maxReceiptAge := 10 * time.Minute
+		if quote.Source == SourceFundNAV {
+			maxReceiptAge = 48 * time.Hour
+		}
+		// Closed sessions and fund publication delays retain their actual source
+		// date; they do not become a live intraday quote on each HTTP refresh.
+		if now.Sub(time.Unix(quote.ReceivedAt, 0)) > maxReceiptAge || now.Sub(cached.sourceTime) > 10*24*time.Hour {
+			quote.State = StateStale
+		}
 		return quote
 	}
 	// ticker_batch only reports changed prices. A current heartbeat means that
@@ -310,6 +363,7 @@ func (s *Service) putQuote(quote Quote, sourceTime time.Time) bool {
 	quote.Price = price
 	quote.SourceTime = sourceTime.Unix()
 	quote.Connected = false // computed from current heartbeat on reads
+	normalizeQuoteChange(&quote)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if old, exists := s.quotes[quote.InstrumentID]; exists {

@@ -1,11 +1,23 @@
 package models
 
 import (
+	"encoding/json"
 	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestCategoryScopeLegacyAndExplicitGlobalRequests(t *testing.T) {
+	var legacy, global TransactionCategoryModifyRequest
+	assert.NoError(t, json.Unmarshal([]byte(`{"id":"1"}`), &legacy))
+	assert.NoError(t, json.Unmarshal([]byte(`{"id":"1","bookIds":[]}`), &global))
+	assert.Nil(t, legacy.BookIds)
+	assert.NotNil(t, global.BookIds)
+	response, err := json.Marshal((&TransactionCategory{CategoryId: 1}).ToTransactionCategoryInfoResponse())
+	assert.NoError(t, err)
+	assert.Contains(t, string(response), `"bookIds":[]`)
+}
 
 func TestTransactionCategoryInfoResponseSliceLess(t *testing.T) {
 	var transactionCategoryRespSlice TransactionCategoryInfoResponseSlice

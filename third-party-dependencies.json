@@ -14,6 +14,13 @@
         "licenseUrl": "https://github.com/shopspring/decimal/blob/v1.4.0/LICENSE"
     },
     {
+        "name": "Web3 Icons (selected exchange and wallet SVGs)",
+        "copyright": "0xa3k5 and Web3 Icons contributors; brand trademarks belong to their respective owners",
+        "url": "https://github.com/0xa3k5/web3icons",
+        "license": "MIT License",
+        "licenseUrl": "https://github.com/0xa3k5/web3icons/blob/ad3cbe05229db54931cd8b2c2a86662288a0ce50/packages/core/package.json"
+    },
+    {
         "name": "Gin",
         "copyright": "Copyright (c) 2014 Manuel Martínez-Almeida",
         "url": "https://github.com/gin-gonic/gin",

@@ -16,6 +16,7 @@ export class TransactionCategory implements TransactionCategoryInfoResponse {
     public comment: string;
     public displayOrder: number;
     public visible: boolean;
+    public bookIds: string[] = [];
     public subCategories?: TransactionCategory[];
 
     private constructor(id: string, name: string, parentId: string, type: CategoryType, icon: string, iconType: number, color: ColorValue, comment: string, displayOrder: number, visible: boolean, subCategories?: TransactionCategory[]) {
@@ -51,7 +52,8 @@ export class TransactionCategory implements TransactionCategoryInfoResponse {
             this.color === other.color &&
             this.comment === other.comment &&
             this.displayOrder === other.displayOrder &&
-            this.visible === other.visible;
+            this.visible === other.visible &&
+            this.bookIds.length === other.bookIds.length && this.bookIds.every(id => other.bookIds.includes(id));
 
         if (!isEqual) {
             return false;
@@ -84,10 +86,11 @@ export class TransactionCategory implements TransactionCategoryInfoResponse {
         this.color = other.color;
         this.comment = other.comment;
         this.visible = other.visible;
+        this.bookIds = [...other.bookIds];
     }
 
     public clone(): TransactionCategory {
-        return new TransactionCategory(
+        const category = new TransactionCategory(
             this.id,
             this.name,
             this.parentId,
@@ -99,6 +102,8 @@ export class TransactionCategory implements TransactionCategoryInfoResponse {
             this.displayOrder,
             this.visible
         );
+        category.bookIds = [...this.bookIds];
+        return category;
     }
 
     public toCreateRequest(clientSessionId: string): TransactionCategoryCreateRequest {
@@ -110,6 +115,7 @@ export class TransactionCategory implements TransactionCategoryInfoResponse {
             iconType: this.iconType,
             color: this.color,
             comment: this.comment,
+            bookIds: [...this.bookIds],
             clientSessionId: clientSessionId
         };
     }
@@ -123,12 +129,13 @@ export class TransactionCategory implements TransactionCategoryInfoResponse {
             iconType: this.iconType,
             color: this.color,
             comment: this.comment,
-            hidden: !this.visible
+            hidden: !this.visible,
+            bookIds: [...this.bookIds]
         };
     }
 
     public static of(categoryResponse: TransactionCategoryInfoResponse): TransactionCategory {
-        return new TransactionCategory(
+        const category = new TransactionCategory(
             categoryResponse.id,
             categoryResponse.name,
             categoryResponse.parentId,
@@ -141,6 +148,8 @@ export class TransactionCategory implements TransactionCategoryInfoResponse {
             !categoryResponse.hidden,
             categoryResponse.subCategories ? TransactionCategory.ofMulti(categoryResponse.subCategories) : undefined
         );
+        category.bookIds = [...(categoryResponse.bookIds || [])];
+        return category;
     }
 
     public static ofMulti(categoryResponses: TransactionCategoryInfoResponse[]): TransactionCategory[] {
@@ -179,6 +188,7 @@ export class TransactionCategory implements TransactionCategoryInfoResponse {
 }
 
 export interface TransactionCategoryCreateRequest {
+    readonly bookIds?: string[];
     readonly name: string;
     readonly type: number;
     readonly parentId: string;
@@ -194,6 +204,7 @@ export interface TransactionCategoryCreateBatchRequest {
 }
 
 export interface TransactionCategoryCreateWithSubCategories {
+    readonly bookIds?: string[];
     readonly name: string;
     readonly type: CategoryType;
     readonly icon: string;
@@ -203,6 +214,7 @@ export interface TransactionCategoryCreateWithSubCategories {
 }
 
 export interface TransactionCategoryModifyRequest {
+    readonly bookIds?: string[];
     readonly id: string;
     readonly name: string;
     readonly parentId: string;
@@ -232,6 +244,7 @@ export interface TransactionCategoryDeleteRequest {
 }
 
 export interface TransactionCategoryInfoResponse {
+    readonly bookIds?: string[];
     readonly id: string;
     readonly name: string;
     readonly parentId: string;

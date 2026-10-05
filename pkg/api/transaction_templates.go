@@ -273,6 +273,7 @@ func (a *TransactionTemplatesApi) TemplateModifyHandler(c *core.WebContext) (any
 	}
 
 	newTemplate := &models.TransactionTemplate{
+		BookId:               templateModifyReq.BookId,
 		TemplateId:           template.TemplateId,
 		Uid:                  uid,
 		Name:                 templateModifyReq.Name,
@@ -322,7 +323,10 @@ func (a *TransactionTemplatesApi) TemplateModifyHandler(c *core.WebContext) (any
 		}
 	}
 
-	if newTemplate.Name == template.Name &&
+	if newTemplate.BookId == "" {
+		newTemplate.BookId = template.BookId
+	}
+	if newTemplate.BookId == template.BookId && newTemplate.Name == template.Name &&
 		newTemplate.Type == template.Type &&
 		newTemplate.CategoryId == template.CategoryId &&
 		newTemplate.AccountId == template.AccountId &&
@@ -483,6 +487,7 @@ func (a *TransactionTemplatesApi) TemplateDeleteHandler(c *core.WebContext) (any
 
 func (a *TransactionTemplatesApi) createNewTemplateModel(uid int64, templateCreateReq *models.TransactionTemplateCreateRequest, order int32) (*models.TransactionTemplate, error) {
 	template := &models.TransactionTemplate{
+		BookId:               templateCreateReq.BookId,
 		Uid:                  uid,
 		TemplateType:         templateCreateReq.TemplateType,
 		Name:                 templateCreateReq.Name,

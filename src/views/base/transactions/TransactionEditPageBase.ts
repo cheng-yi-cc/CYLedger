@@ -1,4 +1,5 @@
 import { ref, computed, watch } from 'vue';
+import moment from 'moment-timezone';
 
 import { useI18n } from '@/locales/helpers.ts';
 
@@ -9,6 +10,8 @@ import { useTransactionCategoriesStore } from '@/stores/transactionCategory.ts';
 import { useTransactionTagsStore } from '@/stores/transactionTag.ts';
 import { useTransactionsStore } from '@/stores/transaction.ts';
 import { useExchangeRatesStore } from '@/stores/exchangeRates.ts';
+import { useBooksStore } from '@/stores/books.ts';
+import { useAssetToolsStore } from '@/stores/assetTools.ts';
 
 import type { BigDecimal, NumeralSystem } from '@/core/numeral.ts';
 import type { WeekDayValue } from '@/core/datetime.ts';
@@ -73,7 +76,7 @@ export enum AfterSaveAction {
     StayWithCurrentTransaction = 'stayWithCurrentTransaction'
 }
 
-export function useTransactionEditPageBase(type: TransactionEditPageType, initMode?: TransactionEditPageMode, transactionDefaultType?: number) {
+export function useTransactionEditPageBase(type: TransactionEditPageType, initMode?: TransactionEditPageMode, transactionDefaultType?: number, followSystemTimeZone = false) {
     const {
         tt,
         getAllTimezones,
@@ -92,6 +95,9 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
     const transactionTagsStore = useTransactionTagsStore();
     const transactionsStore = useTransactionsStore();
     const exchangeRatesStore = useExchangeRatesStore();
+    const booksStore = useBooksStore();
+    const assetToolsStore = useAssetToolsStore();
+    void assetToolsStore.load().catch(() => { /* Retry when the asset settings page is opened. */ });
 
     const isSupportGeoLocation: boolean = !!navigator.geolocation;
 
@@ -129,13 +135,14 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
         }
     });
     const allAccounts = computed<Account[]>(() => accountsStore.allPlainAccounts);
-    const allVisibleAccounts = computed<Account[]>(() => accountsStore.allVisiblePlainAccounts);
+    const allVisibleAccounts = computed<Account[]>(() => accountsStore.allVisiblePlainAccounts.filter(account => account.assetProfile.kind!=='reimbursement' && (assetToolsStore.available('cash',account.id,transaction.value.bookId) || (mode.value !== TransactionEditPageMode.Add && [transaction.value.sourceAccountId,transaction.value.destinationAccountId].includes(account.id)))));
     const allAccountsMap = computed<Record<string, Account>>(() => accountsStore.allAccountsMap);
     const allVisibleCategorizedAccounts = computed<CategorizedAccountWithDisplayBalance[]>(() => getCategorizedAccountsWithDisplayBalance(allVisibleAccounts.value, showAccountBalance.value, customAccountCategoryOrder.value));
     const allCategories = computed<Record<number, TransactionCategory[]>>(() => transactionCategoriesStore.allTransactionCategories);
     const allCategoriesMap = computed<Record<string, TransactionCategory>>(() => transactionCategoriesStore.allTransactionCategoriesMap);
     const allTagsMap = computed<Record<string, TransactionTag>>(() => transactionTagsStore.allTransactionTagsMap);
     const firstVisibleAccountId = computed<string | undefined>(() => allVisibleAccounts.value && allVisibleAccounts.value[0] ? allVisibleAccounts.value[0].id : undefined);
+    watch(()=>transaction.value.bookId,()=>{if(mode.value===TransactionEditPageMode.Add){if(transaction.value.sourceAccountId&&!assetToolsStore.available('cash',transaction.value.sourceAccountId,transaction.value.bookId))transaction.value.sourceAccountId=firstVisibleAccountId.value||'';if(transaction.value.destinationAccountId&&!assetToolsStore.available('cash',transaction.value.destinationAccountId,transaction.value.bookId))transaction.value.destinationAccountId='';}});
 
     const hasVisibleExpenseCategories = computed<boolean>(() => transactionCategoriesStore.hasVisibleExpenseCategories);
     const hasVisibleIncomeCategories = computed<boolean>(() => transactionCategoriesStore.hasVisibleIncomeCategories);
@@ -389,12 +396,13 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
     });
 
     function getCurrentUnixTimeForNewTransaction(): number {
+        if (followSystemTimeZone) return getCurrentUnixTime();
         return getSameDateTimeWithCurrentTimezone(parseDateTimeFromUnixTimeWithBrowserTimezone(getCurrentUnixTime())).getUnixTime();
     }
 
     function createNewTransactionModel(transactionType?: number): Transaction | TransactionTemplate {
         const now: number = getCurrentUnixTimeForNewTransaction();
-        const currentTimezone: string = settingsStore.appSettings.timeZone;
+        const currentTimezone: string = followSystemTimeZone ? moment.tz.guess(true) : settingsStore.appSettings.timeZone;
 
         let defaultType: TransactionType = TransactionType.Expense;
 
@@ -405,6 +413,7 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
         }
 
         let newTransaction: Transaction | TransactionTemplate = Transaction.createNewTransaction(defaultType, now, currentTimezone, getTimezoneOffsetMinutes(now, currentTimezone));
+        newTransaction.bookId = booksStore.defaultBookId;
 
         if (type === TransactionEditPageType.Template) {
             newTransaction = TransactionTemplate.createNewTransactionTemplate(newTransaction);
@@ -424,6 +433,7 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
             allTagsMap.value,
             defaultAccountId.value,
             {
+                bookId: options?.bookId,
                 time: options?.time,
                 type: options?.type,
                 categoryId: options?.categoryId,
@@ -456,7 +466,9 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
 
     function updateTransactionModelByAfterSaveAction(afterSaveAction: AfterSaveAction, initOptions?: SetTransactionOptions): void {
         if (afterSaveAction === AfterSaveAction.StayWithNewTransaction) {
+            const bookId = transaction.value.bookId;
             transaction.value = createNewTransactionModel(transactionDefaultType);
+            transaction.value.bookId = bookId || booksStore.defaultBookId;
             setTransactionModel(null, initOptions, true);
             geoLocationStatus.value = null;
         } else if (afterSaveAction === AfterSaveAction.StayWithCurrentTransaction) {

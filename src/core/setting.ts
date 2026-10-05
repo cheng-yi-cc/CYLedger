@@ -42,6 +42,11 @@ export interface ApplicationSettings extends BaseApplicationSetting {
     accountCategoryOrders: string;
     chartColors: string;
     swipeBack: boolean;
+    calendarWeekStart: number;
+    calendarShowLunar: boolean;
+    calendarShowRepayments: boolean;
+    calendarShowDeposits: boolean;
+    calendarHeatmap: boolean;
     animate: boolean;
     // Application Lock
     applicationLock: boolean;
@@ -206,6 +211,11 @@ export const DEFAULT_APPLICATION_SETTINGS: ApplicationSettings = {
     accountCategoryOrders: '',
     chartColors: '',
     swipeBack: true,
+    calendarWeekStart: 0,
+    calendarShowLunar: true,
+    calendarShowRepayments: true,
+    calendarShowDeposits: true,
+    calendarHeatmap: false,
     animate: true,
     // Application Lock
     applicationLock: false,

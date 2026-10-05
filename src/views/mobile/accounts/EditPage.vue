@@ -1,306 +1,17 @@
 <template>
-    <f7-page @page:afterin="onPageAfterIn">
+    <f7-page class="cy-account-edit cy-mobile-surface" @page:afterin="onPageAfterIn">
         <f7-navbar>
-            <f7-nav-left :class="{ 'disabled': loading }" :back-link="tt('Back')"></f7-nav-left>
+            <f7-nav-left><f7-link icon-f7="xmark" aria-label="取消" @click="f7router.back()" /></f7-nav-left>
             <f7-nav-title :title="tt(title)"></f7-nav-title>
             <f7-nav-right :class="{ 'navbar-compact-icons': true, 'disabled': loading }">
-                <f7-link icon-f7="ellipsis" :class="{ 'disabled': account.type !== AccountType.MultiSubAccounts.type }" :aria-label="tt('More')" @click="showMoreActionSheet = true"></f7-link>
+                <f7-link icon-f7="ellipsis" v-if="account.type === AccountType.MultiSubAccounts.type" :aria-label="tt('More')" @click="showMoreActionSheet = true"></f7-link>
                 <f7-link icon-f7="checkmark_alt" :class="{ 'disabled': inputIsEmpty || submitting }" :aria-label="tt('Save')" @click="save"></f7-link>
             </f7-nav-right>
         </f7-navbar>
 
-        <f7-list strong inset dividers class="margin-vertical-half skeleton-text" v-if="loading">
-            <f7-list-item class="list-item-with-header-and-title" header="Account Category" title="Category"></f7-list-item>
-            <f7-list-item class="list-item-with-header-and-title" header="Account Type" title="Account Type"></f7-list-item>
-        </f7-list>
-
-        <f7-list form strong inset dividers class="margin-vertical-half" v-else-if="!loading">
-            <f7-list-item
-                link="#" no-chevron
-                class="list-item-with-header-and-title"
-                :header="tt('Account Category')"
-                :title="findDisplayNameByType(allAccountCategories, account.category)"
-                @click="showAccountCategorySheet = true"
-            >
-                <list-item-selection-sheet value-type="item"
-                                           key-field="type" value-field="type" title-field="displayName"
-                                           icon-field="defaultAccountIconId" icon-type="account"
-                                           :items="allAccountCategories"
-                                           v-model:show="showAccountCategorySheet"
-                                           v-model="account.category">
-                </list-item-selection-sheet>
-            </f7-list-item>
-
-            <f7-list-item
-                link="#" no-chevron
-                class="list-item-with-header-and-title"
-                :class="{ 'disabled': editAccountId }"
-                :header="tt('Account Type')"
-                :title="findDisplayNameByType(allAccountTypes, account.type)"
-                @click="showAccountTypeSheet = true"
-            >
-                <list-item-selection-sheet value-type="item"
-                                           key-field="type" value-field="type" title-field="displayName"
-                                           :items="allAccountTypes"
-                                           v-model:show="showAccountTypeSheet"
-                                           v-model="account.type">
-                </list-item-selection-sheet>
-            </f7-list-item>
-        </f7-list>
-
-        <f7-list strong inset dividers class="margin-vertical skeleton-text" v-if="loading">
-            <f7-list-input label="Account Name" placeholder="Your account name"></f7-list-input>
-            <f7-list-item class="list-item-with-header-and-title list-item-with-multi-item">
-                <template #default>
-                    <div class="grid grid-cols-2">
-                        <div class="list-item-subitem no-chevron">
-                            <a class="item-link" href="#">
-                                <div class="item-content">
-                                    <div class="item-inner">
-                                        <div class="item-header">
-                                            <span>Account Icon</span>
-                                        </div>
-                                        <div class="item-title">
-                                            <div class="list-item-custom-title no-padding">
-                                                <f7-icon f7="app_fill"></f7-icon>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </a>
-                        </div>
-                        <div class="list-item-subitem no-chevron">
-                            <a class="item-link" href="#">
-                                <div class="item-content">
-                                    <div class="item-inner">
-                                        <div class="item-header">
-                                            <span>Account Color</span>
-                                        </div>
-                                        <div class="item-title">
-                                            <div class="list-item-custom-title no-padding">
-                                                <f7-icon f7="app_fill"></f7-icon>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </a>
-                        </div>
-                    </div>
-                </template>
-            </f7-list-item>
-            <f7-list-item class="list-item-with-header-and-title list-item-no-item-after" header="Currency" title="Currency" :link="editAccountId ? null : '#'"></f7-list-item>
-            <f7-list-item class="list-item-with-header-and-title" header="Account Balance" title="Balance"></f7-list-item>
-            <f7-list-item class="list-item-toggle" header="Visible" after="True"></f7-list-item>
-            <f7-list-input label="Description" type="textarea" placeholder="Your account description (optional)"></f7-list-input>
-        </f7-list>
-
-        <f7-list form strong inset dividers class="margin-vertical" v-else-if="!loading && account.type === AccountType.SingleAccount.type">
-            <f7-list-input
-                type="text"
-                clear-button
-                :label="tt('Account Name')"
-                :placeholder="tt('Your account name')"
-                v-model:value="account.name"
-            ></f7-list-input>
-
-            <f7-list-item class="list-item-with-header-and-title list-item-with-multi-item">
-                <template #default>
-                    <div class="grid grid-cols-2">
-                        <div class="list-item-subitem no-chevron">
-                            <a class="item-link" href="#" @click="accountContext.showIconSelectionSheet = true">
-                                <div class="item-content">
-                                    <div class="item-inner">
-                                        <div class="item-header">
-                                            <span>{{ tt('Account Icon') }}</span>
-                                        </div>
-                                        <div class="item-title">
-                                            <div class="list-item-custom-title no-padding">
-                                                <ItemIcon :icon-type="getAccountIconType(account.iconType)" :icon-id="account.icon" :color="account.color"></ItemIcon>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </a>
-
-                            <icon-selection-sheet :all-system-icon-infos="ALL_ACCOUNT_ICONS"
-                                                  :color="account.color"
-                                                  v-model:show="accountContext.showIconSelectionSheet"
-                                                  v-model:icon-type="account.iconType"
-                                                  v-model="account.icon"
-                            ></icon-selection-sheet>
-                        </div>
-                        <div class="list-item-subitem no-chevron">
-                            <a class="item-link" href="#" @click="accountContext.showColorSelectionSheet = true">
-                                <div class="item-content">
-                                    <div class="item-inner">
-                                        <div class="item-header">
-                                            <span>{{ tt('Account Color') }}</span>
-                                        </div>
-                                        <div class="item-title">
-                                            <div class="list-item-custom-title no-padding">
-                                                <ItemIcon icon-type="fixed-f7" icon-id="app_fill" :color="account.color"></ItemIcon>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </a>
-
-                            <color-selection-sheet :all-system-color-infos="ALL_ACCOUNT_COLORS"
-                                                   v-model:show="accountContext.showColorSelectionSheet"
-                                                   v-model="account.color"
-                            ></color-selection-sheet>
-                        </div>
-                    </div>
-                </template>
-            </f7-list-item>
-
-            <f7-list-item
-                class="list-item-with-header-and-title list-item-no-item-after"
-                link="#"
-                :class="{ 'disabled': editAccountId }"
-                :header="tt('Currency')"
-                :no-chevron="!!editAccountId"
-                @click="accountContext.showCurrencyPopup = true"
-            >
-                <template #title>
-                    <div class="no-padding no-margin">
-                        <span>{{ getCurrencyName(account.currency) }}&nbsp;</span>
-                        <small class="smaller">{{ account.currency }}</small>
-                    </div>
-                </template>
-                <list-item-selection-popup value-type="item"
-                                           key-field="currencyCode" value-field="currencyCode"
-                                           title-field="displayName" after-field="currencyCode"
-                                           :title="tt('Currency Name')"
-                                           :enable-filter="true"
-                                           :filter-placeholder="tt('Currency')"
-                                           :filter-no-items-text="tt('No results')"
-                                           :items="allCurrencies"
-                                           v-model:show="accountContext.showCurrencyPopup"
-                                           v-model="account.currency">
-                </list-item-selection-popup>
-            </f7-list-item>
-
-            <f7-list-item
-                link="#" no-chevron
-                class="list-item-with-header-and-title"
-                :class="{ 'disabled': account.currency === '' || account.currency === ACCOUNT_CURRENCY_NOT_SET_VALUE }"
-                :header="tt('Credit Limit')"
-                :title="getAccountCreditCardCreditLimitDisplayValue(account.numericCreditCardLimit, account.currency)"
-                v-if="account.category === AccountCategory.CreditCard.type"
-                @click="showCreditCardLimitSheet = true"
-            >
-                <number-pad-sheet :min-value="0"
-                                  :max-value="TRANSACTION_MAX_AMOUNT"
-                                  :currency="account.currency"
-                                  v-model:show="showCreditCardLimitSheet"
-                                  v-model="account.numericCreditCardLimit"
-                ></number-pad-sheet>
-            </f7-list-item>
-
-            <f7-list-item
-                link="#"
-                class="list-item-with-header-and-title list-item-no-item-after"
-                :header="tt('Statement Date')"
-                :title="getAccountCreditCardStatementDate(account.creditCardStatementDate)"
-                v-if="account.category === AccountCategory.CreditCard.type"
-                @click="accountContext.showCreditCardStatementDatePopup = true"
-            >
-                <list-item-selection-popup value-type="item"
-                                           key-field="type" value-field="type"
-                                           title-field="displayName"
-                                           :title="tt('Statement Date')"
-                                           :enable-filter="true"
-                                           :filter-placeholder="tt('Statement Date')"
-                                           :filter-no-items-text="tt('No results')"
-                                           :items="allAvailableMonthDays"
-                                           v-model:show="accountContext.showCreditCardStatementDatePopup"
-                                           v-model="account.creditCardStatementDate">
-                </list-item-selection-popup>
-            </f7-list-item>
-
-            <f7-list-item
-                link="#" no-chevron
-                class="list-item-with-header-and-title"
-                :class="{ 'disabled': editAccountId }"
-                :header="account.isLiability ? tt('Account Outstanding Balance') : tt('Account Balance')"
-                :title="formatAccountDisplayBalance(account)"
-                @click="accountContext.showBalanceSheet = true"
-            >
-                <number-pad-sheet :min-value="TRANSACTION_MIN_AMOUNT"
-                                  :max-value="TRANSACTION_MAX_AMOUNT"
-                                  :currency="account.currency"
-                                  :flip-negative="account.isLiability"
-                                  v-model:show="accountContext.showBalanceSheet"
-                                  v-model="account.numericBalance"
-                ></number-pad-sheet>
-            </f7-list-item>
-
-            <f7-list-item
-                class="account-edit-datetime list-item-with-header-and-title"
-                link="#" no-chevron
-                v-show="account.numericBalance"
-                v-if="!editAccountId"
-            >
-                <template #header>
-                    <div class="account-edit-datetime-header" @click="showBalanceDateTimeDialog(accountContext, 'time')">{{ tt('Balance Time') }}</div>
-                </template>
-                <template #title>
-                    <div class="account-edit-datetime-title">
-                        <div @click="showBalanceDateTimeDialog(accountContext, 'date')">{{ formatDate(account.balanceTime) }}</div>&nbsp;<div class="account-edit-datetime-time" @click="showBalanceDateTimeDialog(accountContext, 'time')">{{ formatTime(account.balanceTime) }}</div>
-                    </div>
-                </template>
-                <date-time-selection-sheet :init-mode="accountContext.balanceDateTimeSheetMode"
-                                           :timezone-utc-offset="getDefaultTimezoneOffsetMinutes(account.balanceTime)"
-                                           :model-value="account.balanceTime"
-                                           v-model:show="accountContext.showBalanceDateTimeSheet"
-                                           @update:model-value="updateAccountBalanceTime(account, $event)">
-                </date-time-selection-sheet>
-            </f7-list-item>
-
-            <f7-list-item
-                class="account-edit-datetime list-item-with-header-and-title"
-                link="#" no-chevron
-                v-if="editAccountId && useLastReconciledTime"
-            >
-                <template #header>
-                    <div class="account-edit-datetime-header" @click="showLastReconciledDateTimeDialog(accountContext, 'time')">{{ tt('Last Reconciled Time') }}</div>
-                </template>
-                <template #title>
-                    <div class="account-edit-datetime-title" v-if="account.lastReconciledTime">
-                        <div @click="showLastReconciledDateTimeDialog(accountContext, 'date')">{{ formatDate(account.lastReconciledTime) }}</div>&nbsp;<div class="account-edit-datetime-time" @click="showLastReconciledDateTimeDialog(accountContext, 'time')">{{ formatTime(account.lastReconciledTime) }}</div>
-                    </div>
-                    <div class="account-edit-datetime-title" v-else>
-                        <div class="account-edit-datetime-time" @click="showLastReconciledDateTimeDialog(accountContext, 'date')">{{ tt('None') }}</div>
-                    </div>
-                </template>
-                <date-time-selection-sheet :init-mode="accountContext.lastReconciledDateTimeSheetMode"
-                                           :clearable="true"
-                                           :timezone-utc-offset="getDefaultTimezoneOffsetMinutes(account.lastReconciledTime)"
-                                           :model-value="account.lastReconciledTime ?? getCurrentUnixTime()"
-                                           v-model:show="accountContext.showLastReconciledTimeSheet"
-                                           @update:model-value="updateAccountLastReconciledTime(account, $event)"
-                                           @clear:model-value="account.lastReconciledTime = undefined">
-                </date-time-selection-sheet>
-            </f7-list-item>
-
-            <f7-list-item :title="tt('Visible')" v-if="editAccountId">
-                <template #after>
-                    <f7-toggle :checked="account.visible" @toggle:change="account.visible = $event"></f7-toggle>
-                </template>
-            </f7-list-item>
-
-            <f7-list-input
-                type="textarea"
-                style="height: auto"
-                :label="tt('Description')"
-                :placeholder="tt('Your account description (optional)')"
-                v-textarea-auto-size
-                v-model:value="account.comment"
-            ></f7-list-input>
-        </f7-list>
-
-        <f7-list form strong inset dividers class="margin-vertical" v-else-if="!loading && account.type === AccountType.MultiSubAccounts.type">
+        <div v-if="loading" class="cy-empty"><f7-preloader /></div>
+        <AssetAccountForm v-if="!loading && account.type === AccountType.SingleAccount.type" :account="account" :edit="!!editAccountId" :initial-balance="initialBalance" :income-name="incomeDraft?.fund.name || boundIncomeName" v-model:disabled-books="disabledBooks" v-model:count-adjustment="countAdjustment" @income="showIncomeSetup=true" />
+        <f7-list form strong inset dividers class="margin-vertical" v-if="!loading && account.type === AccountType.MultiSubAccounts.type">
             <f7-list-input
                 type="text"
                 clear-button
@@ -393,9 +104,9 @@
                 :header="tt('Credit Limit')"
                 :title="getAccountCreditCardCreditLimitDisplayValue(account.numericCreditCardLimit, account.currency)"
                 v-if="account.category === AccountCategory.CreditCard.type"
-                @click="showCreditCardLimitSheet = true"
+                @click="setNumberPadAnchor($event); showCreditCardLimitSheet = true"
             >
-                <number-pad-sheet :min-value="0"
+                <number-pad-sheet :reveal-target="numberPadAnchor" :min-value="0"
                                   :max-value="TRANSACTION_MAX_AMOUNT"
                                   :currency="account.currency"
                                   v-model:show="showCreditCardLimitSheet"
@@ -544,9 +255,9 @@
                     :class="{ 'disabled': editAccountId && !isNewAccount(subAccount) }"
                     :header="account.isLiability ? tt('Sub-account Outstanding Balance') : tt('Sub-account Balance')"
                     :title="formatAccountDisplayBalance(subAccount)"
-                    @click="subAccountContexts[idx]!.showBalanceSheet = true"
+                    @click="setNumberPadAnchor($event); subAccountContexts[idx]!.showBalanceSheet = true"
                 >
-                    <number-pad-sheet :min-value="TRANSACTION_MIN_AMOUNT"
+                    <number-pad-sheet :reveal-target="numberPadAnchor" :min-value="TRANSACTION_MIN_AMOUNT"
                                       :max-value="TRANSACTION_MAX_AMOUNT"
                                       :currency="subAccount.currency"
                                       :flip-negative="account.isLiability"
@@ -638,11 +349,25 @@
                 <f7-actions-button bold close>{{ tt('Cancel') }}</f7-actions-button>
             </f7-actions-group>
         </f7-actions>
+        <f7-popup v-model:opened="showIncomeSetup" class="cy-income-setup" :close-by-backdrop-click="false"><MonetaryIncomePage v-if="showIncomeSetup" :draft-account="account" :draft="incomeDraft" @configured="configureIncome" @cancel="showIncomeSetup=false" /></f7-popup>
+        <BankSelectionSheet v-model:opened="showBanks" :credit="account.category===3" @select="selectBank" />
     </f7-page>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
+import AssetAccountForm from '@/components/mobile/AssetAccountForm.vue';
+import BankSelectionSheet from '@/components/mobile/BankSelectionSheet.vue';
+import { assetTools } from '@/lib/asset-tools.ts';
+import { useAssetToolsStore } from '@/stores/assetTools.ts';
+import { useTransactionsStore } from '@/stores/transaction.ts';
+import { LedgerDecimal } from '@/lib/ledger-display.ts';
+import { getTimeZone } from '@/lib/settings.ts';
+import { getBrowserTimezoneName } from '@/lib/datetime.ts';
+import { findAccountPreset } from '@/lib/account-presets.ts';
+import MonetaryIncomePage from '@/views/mobile/accounts/MonetaryIncomePage.vue';
+import {monetaryIncome,type MonetaryDraft} from '@/lib/monetary-income.ts';
+import {investmentError} from '@/lib/investments.ts';
 import type { Router } from 'framework7/types';
 
 import { useI18n } from '@/locales/helpers.ts';
@@ -660,7 +385,7 @@ import { ACCOUNT_CURRENCY_NOT_SET_VALUE } from '@/consts/currency.ts';
 import { TRANSACTION_MIN_AMOUNT, TRANSACTION_MAX_AMOUNT } from '@/consts/transaction.ts';
 import type { Account } from '@/models/account.ts';
 
-import { isDefined, findDisplayNameByType } from '@/lib/common.ts';
+import { isDefined } from '@/lib/common.ts';
 import { parseBigDecimal } from '@/lib/numeral.ts';
 import { getAccountIconType } from '@/lib/icon.ts';
 import {
@@ -709,8 +434,6 @@ const {
     title,
     inputEmptyProblemMessage,
     inputIsEmpty,
-    allAccountCategories,
-    allAccountTypes,
     allAvailableMonthDays,
     getDefaultTimezoneOffsetMinutes,
     getAccountCreditCardStatementDate,
@@ -722,7 +445,15 @@ const {
     setAccount
 } = useAccountEditPageBase();
 
-const accountsStore = useAccountsStore();
+const accountsStore = useAccountsStore(), assetPreferences = useAssetToolsStore();
+const initialBalance=ref('0'), disabledBooks=ref<string[]>([]), countAdjustment=ref(false),boundIncomeName=ref('');
+const showBanks=ref(false);
+function selectBank(bank:{name:string;color:string}):void{account.value.name=bank.name+(account.value.category===3?'信用卡':'');account.value.color=bank.color.replace('#','');}
+let adjustmentRequestId=generateRandomUUID();
+const incomeDraft=ref<MonetaryDraft>(),showIncomeSetup=ref(false),numberPadAnchor=ref<HTMLElement>();
+watch(()=>account.value.type===AccountType.SingleAccount.type && account.value.currency==='CNY' && [1,2,4,8].includes(account.value.category),eligible=>{if(!eligible){incomeDraft.value=undefined;showIncomeSetup.value=false;}});
+function configureIncome(draft:MonetaryDraft):void{incomeDraft.value=draft;showIncomeSetup.value=false;}
+function setNumberPadAnchor(event:MouseEvent):void{if(event.target instanceof Element)numberPadAnchor.value=event.target.closest<HTMLElement>('li') || undefined;}
 
 const DEFAULT_ACCOUNT_CONTEXT: AccountContext = {
     showIconSelectionSheet: false,
@@ -740,8 +471,6 @@ const accountContext = ref<AccountContext>(Object.assign({}, DEFAULT_ACCOUNT_CON
 const subAccountContexts = ref<AccountContext[]>([]);
 const subAccountToDelete = ref<Account | null>(null);
 const loadingError = ref<unknown | null>(null);
-const showAccountCategorySheet = ref<boolean>(false);
-const showAccountTypeSheet = ref<boolean>(false);
 const showMoreActionSheet = ref<boolean>(false);
 const showDeleteActionSheet = ref<boolean>(false);
 const showCreditCardLimitSheet = ref<boolean>(false);
@@ -785,6 +514,9 @@ function init(): void {
             accountId: editAccountId.value
         }).then(response => {
             setAccount(response);
+            initialBalance.value=response.balance;
+            void assetPreferences.load().then(()=>{disabledBooks.value=[...(assetPreferences.preferences.rules[`cash:${response.id}`]?.disabledBooks||[])];});
+            void monetaryIncome.list().then(rows=>{boundIncomeName.value=rows.find(r=>r.accountId===response.id&&r.enabled)?.name||'';}).catch(()=>undefined);
             subAccountContexts.value = [];
 
             for (let i = 0; i < subAccounts.value.length; i++) {
@@ -801,46 +533,45 @@ function init(): void {
             }
         });
     } else {
+        const preset = findAccountPreset(query['preset']);
+        if (preset?.category) {
+            account.value.category = preset.category;
+            account.value.assetProfile = {kind:preset.assetKind,group:preset.group,sharedLimitAccount:'',repaymentDay:0,repaymentAfterDays:0};
+            account.value.name = preset.name === '自定义' ? '' : preset.name;
+            account.value.color = preset.color.replace('#', '');
+            void nextTick(() => { account.value.icon = preset.icon; });
+        }
         loading.value = false;
     }
 }
 
-function save(): void {
-    const router = props.f7router;
-    const problemMessage = inputEmptyProblemMessage.value;
-
-    if (problemMessage) {
-        showAlert(problemMessage);
-        return;
-    }
-
-    submitting.value = true;
-    showLoading(() => submitting.value);
-
-    accountsStore.saveAccount({
-        account: account.value,
-        subAccounts: subAccounts.value,
-        isEdit: !!editAccountId.value,
-        clientSessionId: clientSessionId.value
-    }).then(() => {
-        submitting.value = false;
-        hideLoading();
-
-        if (!editAccountId.value) {
-            showToast('You have added a new account');
-        } else {
-            showToast('You have saved this account');
+async function save(): Promise<void> {
+    if (submitting.value) return;
+    const problemMessage=inputEmptyProblemMessage.value;
+    if(problemMessage){showAlert(problemMessage);return;}
+    const wasNew=!editAccountId.value, desiredBalance=account.value.balance;
+    submitting.value=true;showLoading(()=>submitting.value);
+    let metadataSaved=false;
+    try {
+        const savedAccount=await accountsStore.saveAccount({account:account.value,subAccounts:subAccounts.value,isEdit:!wasNew,clientSessionId:clientSessionId.value});
+        metadataSaved=true;
+        if(wasNew){editAccountId.value=savedAccount.id;account.value.id=savedAccount.id;initialBalance.value=savedAccount.balance;}
+        if(!wasNew && account.value.type===AccountType.SingleAccount.type && desiredBalance!==initialBalance.value){
+            await assetTools.adjustBalance({accountId:savedAccount.id,balance:new LedgerDecimal(desiredBalance).div(100).toString(),expectedBalance:new LedgerDecimal(initialBalance.value).div(100).toString(),bookId:'',countInStatistics:countAdjustment.value,timeZone:getTimeZone()||getBrowserTimezoneName(),requestId:adjustmentRequestId});
+            initialBalance.value=desiredBalance;adjustmentRequestId=generateRandomUUID();
+            useTransactionsStore().updateStoreInvalidState({accountList:true,transactionList:true,overview:true,statistics:true,explorer:true,reconciliationStatement:true});
         }
-
-        router.back();
-    }).catch(error => {
-        submitting.value = false;
-        hideLoading();
-
-        if (!error.processed) {
-            showToast(error.message || error);
+        await assetPreferences.load();
+        const preferences=JSON.parse(JSON.stringify(assetPreferences.preferences));
+        const key=`cash:${savedAccount.id}`,old=preferences.rules[key];
+        if(JSON.stringify(old?.disabledBooks||[])!==JSON.stringify(disabledBooks.value)){
+            preferences.rules[key]={hidden:old?.hidden||false,disabledBooks:[...disabledBooks.value]};
+            await assetPreferences.save(preferences);
         }
-    });
+        if(incomeDraft.value){await monetaryIncome.save({...incomeDraft.value,accountId:savedAccount.id});incomeDraft.value=undefined;}
+        showToast(wasNew?'You have added a new account':'You have saved this account');props.f7router.back();
+    } catch(cause) {showAlert(`${metadataSaved?'账户资料已保存，后续设置尚未完成：':''}${investmentError(cause)}`);}
+    finally {submitting.value=false;hideLoading();}
 }
 
 function addSubAccountAndContext(): void {
@@ -884,7 +615,9 @@ function showLastReconciledDateTimeDialog(accountContext: AccountContext, sheetM
 
 function onPageAfterIn(): void {
     routeBackOnError(props.f7router, loadingError);
+    if (!editAccountId.value && !bankPickerShown && ['bank','credit'].includes(props.f7route.query['preset']||'')) {bankPickerShown=true;showBanks.value=true;}
 }
+let bankPickerShown=false;
 
 watch(() => account.value.type, () => {
     if (subAccounts.value.length < 1) {
@@ -896,6 +629,9 @@ init();
 </script>
 
 <style>
+.cy-account-edit .list-item-with-multi-item .list-item-subitem .item-inner::after{display:none}
+.cy-account-edit .list-item-with-multi-item > .item-content > .item-inner::after{background-color:var(--f7-list-item-border-color);left:calc(var(--f7-list-item-padding-horizontal) + var(--f7-safe-area-left));width:calc(100% - var(--f7-list-item-padding-horizontal) - var(--f7-safe-area-left))}
+
 .account-edit-datetime .item-title {
     width: 100%;
 }

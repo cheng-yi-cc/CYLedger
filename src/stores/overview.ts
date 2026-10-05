@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
+import { useBooksStore } from './books.ts';
 
 import { useSettingsStore } from './setting.ts';
 import { useUserStore } from './user.ts';
@@ -322,6 +323,7 @@ export const useOverviewStore = defineStore('overview', () => {
     }
 
     function loadTransactionOverview({ force, months }: { force: boolean, months?: number }): Promise<TransactionAmountsResponse> {
+        const isCurrentBookScope = useBooksStore().captureReportScope();
         const requestedMonths: number = normalizeInteger(months, 1, 1, 12);
         let dateChanged: boolean = false;
         let rangeChanged: boolean = false;
@@ -360,6 +362,11 @@ export const useOverviewStore = defineStore('overview', () => {
 
         return new Promise((resolve, reject) => {
             services.getTransactionAmounts(requestParams, excludeAccountIds, excludeCategoryIds).then(response => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 const data = response.data;
 
                 if (!data || !data.success || !data.result) {
@@ -381,6 +388,11 @@ export const useOverviewStore = defineStore('overview', () => {
 
                 resolve(data.result);
             }).catch(error => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 if (force) {
                     logger.error('failed to force load transaction overview', error);
                 } else {
@@ -399,6 +411,7 @@ export const useOverviewStore = defineStore('overview', () => {
     }
 
     function loadTransactionCategoryStatistics({ force, dateType }: { force: boolean, dateType: number }): Promise<TransactionStatisticResponse> {
+        const isCurrentBookScope = useBooksStore().captureReportScope();
         if (transactionDataRange.value.today.startTime !== getTodayFirstUnixTime()) {
             updateTransactionDateRange();
             transactionCategoryStatisticsData.value = {};
@@ -430,6 +443,11 @@ export const useOverviewStore = defineStore('overview', () => {
                 matchMode: KeywordMatchMode.Default.type,
                 useTransactionTimezone: settingsStore.appSettings.timezoneUsedForStatisticsInHomePage === TimezoneTypeForStatistics.TransactionTimezone.type
             }).then(response => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 const data = response.data;
 
                 if (!data || !data.success || !data.result) {
@@ -450,6 +468,11 @@ export const useOverviewStore = defineStore('overview', () => {
 
                 resolve(data.result);
             }).catch(error => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 logger.error('failed to retrieve transaction statistics', error);
 
                 if (error.response && error.response.data && error.response.data.errorMessage) {
@@ -464,6 +487,7 @@ export const useOverviewStore = defineStore('overview', () => {
     }
 
     function loadTransactionAssetTrends({ force, months }: { force: boolean, months: number }): Promise<TransactionStatisticAssetTrendsResponseItem[]> {
+        const isCurrentBookScope = useBooksStore().captureReportScope();
         if (!force && !transactionAssetTrendsStateInvalid.value) {
             return Promise.resolve(transactionAssetTrendsData.value);
         }
@@ -476,6 +500,11 @@ export const useOverviewStore = defineStore('overview', () => {
                 startTime: startTime,
                 endTime: endTime
             }).then(response => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 const data = response.data;
 
                 if (!data || !data.success || !data.result) {
@@ -496,6 +525,11 @@ export const useOverviewStore = defineStore('overview', () => {
 
                 resolve(data.result);
             }).catch(error => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 logger.error('failed to retrieve transaction statistics', error);
 
                 if (error.response && error.response.data && error.response.data.errorMessage) {
@@ -510,6 +544,7 @@ export const useOverviewStore = defineStore('overview', () => {
     }
 
     function loadRecentTransactions({ force, queries }: { force: boolean, queries: Record<string, OverviewRecentTransactionsQuery> }): Promise<Record<string, TransactionInfoResponse[]>> {
+        const isCurrentBookScope = useBooksStore().captureReportScope();
         const widetIdCacheKeyMap: Record<string, string> = {};
         const cacheKeyQueryMap: Record<string, OverviewRecentTransactionsQuery> = {};
 
@@ -575,6 +610,11 @@ export const useOverviewStore = defineStore('overview', () => {
             }
 
             Promise.all(promises).then(responses => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 let hasError = false;
 
                 for (const [response, index] of itemAndIndex(responses)) {
@@ -620,6 +660,11 @@ export const useOverviewStore = defineStore('overview', () => {
 
                 resolve(result);
             }).catch(error => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 logger.error('failed to retrieve transaction list', error);
 
                 if (error.response && error.response.data && error.response.data.errorMessage) {
@@ -634,6 +679,7 @@ export const useOverviewStore = defineStore('overview', () => {
     }
 
     function loadTransactionDailyAmounts({ force, months }: { force: boolean, months: number }): Promise<TransactionDailyAmountsResponseItem[]> {
+        const isCurrentBookScope = useBooksStore().captureReportScope();
         if (transactionDataRange.value.today.startTime !== getTodayFirstUnixTime()) {
             updateTransactionDateRange();
             transactionDailyAmountsData.value = [];
@@ -657,6 +703,11 @@ export const useOverviewStore = defineStore('overview', () => {
                 excludeAccountIds: excludeAccountIds,
                 excludeCategoryIds: excludeCategoryIds
             }).then(response => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 const data = response.data;
 
                 if (!data || !data.success || !data.result) {
@@ -677,6 +728,11 @@ export const useOverviewStore = defineStore('overview', () => {
 
                 resolve(data.result);
             }).catch(error => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 logger.error('failed to retrieve transaction overview', error);
 
                 if (error.response && error.response.data && error.response.data.errorMessage) {
@@ -691,6 +747,7 @@ export const useOverviewStore = defineStore('overview', () => {
     }
 
     function loadCurrentMonthTransactions({ force }: { force: boolean }): Promise<Record<string, TransactionTotalAmount>> {
+        const isCurrentBookScope = useBooksStore().captureReportScope();
         if (transactionDataRange.value.today.startTime !== getTodayFirstUnixTime()) {
             updateTransactionDateRange();
             currentMonthTransactions.value = [];
@@ -707,6 +764,11 @@ export const useOverviewStore = defineStore('overview', () => {
                 accountsStore.loadAllAccounts({ force: false }),
                 transactionCategoriesStore.loadAllCategories({ force: false })
             ]).then(() => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 const currentMonth = parseDateTimeFromUnixTime(transactionDataRange.value.thisMonth.startTime);
                 let accountIds = '';
                 let categoryIds = '';
@@ -732,6 +794,11 @@ export const useOverviewStore = defineStore('overview', () => {
                     mustHavePictures: false,
                     withPictures: false
                 }).then(response => {
+                    if (!isCurrentBookScope()) {
+                        reject({ processed: true, isStaleScope: true });
+                        return;
+                    }
+
                     const data = response.data;
 
                     if (!data || !data.success || !data.result) {
@@ -753,6 +820,11 @@ export const useOverviewStore = defineStore('overview', () => {
 
                     resolve(currentMonthTransactionDailyTotalAmounts.value);
                 }).catch(error => {
+                    if (!isCurrentBookScope()) {
+                        reject({ processed: true, isStaleScope: true });
+                        return;
+                    }
+
                     logger.error('failed to retrieve transaction list', error);
 
                     if (error.response && error.response.data && error.response.data.errorMessage) {
@@ -764,6 +836,11 @@ export const useOverviewStore = defineStore('overview', () => {
                     }
                 });
             }).catch(error => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 logger.error('failed to load accounts or categories', error);
                 reject(error);
             });

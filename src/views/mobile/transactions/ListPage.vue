@@ -32,6 +32,8 @@
                 ></f7-searchbar>
             </f7-subnavbar>
         </f7-navbar>
+        <BookScopeControl :disabled="loading || loadingMore" @change="reload()" />
+        <BookMoveControl :transactions="transactions.flatMap(month => month.items)" :disabled="loading || loadingMore" @moved="reload()" />
 
         <f7-popover class="chart-data-type-popover-menu">
             <f7-list dividers>
@@ -219,7 +221,7 @@
                         <f7-list-item swipeout chevron-center accordion-item
                                       class="transaction-info"
                                       :id="getTransactionDomId(transaction)"
-                                      :link="`/transaction/detail?id=${transaction.id}&type=${transaction.type}`"
+                                      :link="transaction.investmentEventId ? `/investments/record?action=revise&eventId=${encodeURIComponent(transaction.investmentEventId)}` : `/transaction/detail?id=${transaction.id}&type=${transaction.type}`"
                                       :key="transaction.id"
                                       v-for="(transaction, idx) in transactionMonthList.items"
                         >
@@ -262,7 +264,7 @@
                                                 </div>
                                             </div>
                                             <div class="item-after">
-                                                <div class="transaction-amount" v-if="transaction.sourceAccount"
+                                                <div class="transaction-amount" v-if="transaction.sourceAccount || (transaction.investmentEventId && transaction.destinationAccount)"
                                                      :class="{ 'text-expense': transaction.type === TransactionType.Expense, 'text-income': transaction.type === TransactionType.Income }">
                                                     <span>{{ getDisplayAmount(transaction) }}</span>
                                                 </div>
@@ -287,8 +289,9 @@
                                             <div class="transaction-footer">
                                                 <span>{{ getDisplayTime(transaction) }}</span>
                                                 <span v-if="!isSameAsDefaultTimezoneOffsetMinutes(transaction)">{{ `(${getDisplayTimezone(transaction)})` }}</span>
-                                                <span v-if="transaction.sourceAccount">·</span>
+                                                <span v-if="transaction.sourceAccount || (transaction.investmentEventId && transaction.destinationAccount)">·</span>
                                                 <span v-if="transaction.sourceAccount">{{ transaction.sourceAccount.name }}</span>
+                                                <span v-else-if="transaction.investmentEventId && transaction.destinationAccount">{{ transaction.destinationAccount.name }}</span>
                                                 <f7-icon class="transaction-account-arrow icon-with-direction" f7="arrow_right" v-if="transaction.sourceAccount && transaction.type === TransactionType.Transfer && transaction.destinationAccount && transaction.sourceAccount.id !== transaction.destinationAccount.id"></f7-icon>
                                                 <span v-if="transaction.sourceAccount && transaction.type === TransactionType.Transfer && transaction.destinationAccount && transaction.sourceAccount.id !== transaction.destinationAccount.id">{{ transaction.destinationAccount.name }}</span>
                                             </div>
@@ -296,7 +299,8 @@
                                     </div>
                                 </div>
                             </template>
-                            <f7-swipeout-actions :left="textDirection === TextDirection.RTL"
+                            <f7-swipeout-actions v-if="!transaction.investmentEventId"
+                                                 :left="textDirection === TextDirection.RTL"
                                                  :right="textDirection === TextDirection.LTR">
                                 <f7-swipeout-button color="primary" close
                                                     :text="tt('Duplicate')"
@@ -325,7 +329,7 @@
                                     <div class="transaction-picture-cell" :key="pictureInfo.pictureId"
                                          v-for="[transaction, pictureInfo] in allTransactionPictures(transactionMonthList.items)">
                                         <image-box class="transaction-picture-img" alt="picture"
-                                                   :link="`/transaction/detail?id=${transaction.id}&type=${transaction.type}`"
+                                                   :link="transaction.investmentEventId ? `/investments/record?action=revise&eventId=${encodeURIComponent(transaction.investmentEventId)}` : `/transaction/detail?id=${transaction.id}&type=${transaction.type}`"
                                                    :src="getTransactionPictureUrl(pictureInfo)">
                                             <template #error>
                                                 {{ tt('Failed to load image, please check whether the config "domain" and "root_url" are set correctly.') }}
@@ -646,6 +650,8 @@
 
 <script setup lang="ts">
 import LedgerNavigation from '@/components/mobile/LedgerNavigation.vue';
+import BookScopeControl from '@/components/common/BookScopeControl.vue';
+import BookMoveControl from '@/components/common/BookMoveControl.vue';
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
 import type { Router } from 'framework7/types';
 

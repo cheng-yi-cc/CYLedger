@@ -6,7 +6,7 @@
 
 <script setup lang="ts">
 import '@/styles/mobile/cyledger.scss';
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 
 import type { Framework7Parameters, Notification, Actions, Dialog, Popover, Popup, Sheet } from 'framework7/types';
 import { f7ready } from 'framework7-vue';
@@ -26,6 +26,9 @@ import { ThemeType } from '@/core/theme.ts';
 
 import { isFunction } from '@/lib/common.ts';
 import { isProduction } from '@/lib/version.ts';
+import { isNativePersonalMode, syncNativeAppearance } from '@/lib/native.ts';
+import {syncAssetAutomationOnOpen} from '@/lib/asset-tools.ts';
+import { syncMonetaryIncomeOnOpen } from '@/lib/monetary-income.ts';
 import { getTheme, isEnableSwipeBack, isEnableAnimate } from '@/lib/settings.ts';
 import { initMapProvider } from '@/lib/map/index.ts';
 import { isUserLogined, isUserUnlocked } from '@/lib/userstate.ts';
@@ -34,6 +37,7 @@ import { setExpenseAndIncomeAmountColor } from '@/lib/ui/common.ts';
 import { isiOSHomeScreenMode, isModalShowing, setAppFontSize } from '@/lib/ui/mobile.ts';
 
 const { tt, getCurrentLanguageInfo, setLanguage, initLocale } = useI18n();
+document.documentElement.classList.toggle('cy-native',isNativePersonalMode());
 
 const rootStore = useRootStore();
 const settingsStore = useSettingsStore();
@@ -65,7 +69,7 @@ const f7params = ref<Framework7Parameters>({
         tapHold: true
     },
     serviceWorker: {
-        path: isProduction() ? './sw.js' : undefined,
+        path: isProduction() && !isNativePersonalMode() ? './sw.js' : undefined,
         scope: './',
     },
     actions: {
@@ -74,6 +78,8 @@ const f7params = ref<Framework7Parameters>({
         closeOnEscape: true
     },
     dialog: {
+        buttonOk: '确定',
+        buttonCancel: '取消',
         // @ts-expect-error there is an "animate" field in dialog parameters, but it is not declared in the type definition file
         animate: isEnableAnimate(),
         backdrop: true
@@ -116,6 +122,7 @@ const hasBackdrop = ref<boolean | undefined>(undefined);
 const currentNotificationContent = computed<string | null>(() => rootStore.currentNotification);
 
 function setThemeColorMeta(darkMode: boolean | undefined): void {
+    syncNativeAppearance();
     if (hasPushPopupBackdrop.value) {
         document.querySelector('meta[name=theme-color]')?.setAttribute('content', '#000');
         return;
@@ -146,10 +153,20 @@ function onBackdropChanged(element: { push?: boolean, opened?: boolean }): void 
     setThemeColorMeta(environmentsStore.framework7DarkMode);
 }
 
+function resumeMonetaryIncome(): void { syncNativeAppearance();void syncMonetaryIncomeOnOpen();void syncAssetAutomationOnOpen(settingsStore.appSettings.timeZone).catch(()=>{}); }
+onUnmounted(() => {
+    document.removeEventListener('visibilitychange', resumeMonetaryIncome);
+    window.removeEventListener('online', resumeMonetaryIncome);
+});
 onMounted(() => {
+    document.addEventListener('visibilitychange', resumeMonetaryIncome);
+    window.addEventListener('online', resumeMonetaryIncome);
     setAppFontSize(settingsStore.appSettings.fontSize);
 
     f7ready((f7) => {
+        f7.on('pageAfterIn', resumeMonetaryIncome);
+        void syncMonetaryIncomeOnOpen();
+        void syncAssetAutomationOnOpen(settingsStore.appSettings.timeZone).catch(()=>{});
         environmentsStore.framework7DarkMode = f7.darkMode;
         setThemeColorMeta(f7.darkMode);
 

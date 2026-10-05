@@ -1,6 +1,6 @@
 <template>
     <f7-sheet swipe-to-close swipe-handler=".swipe-handler" class="numpad-sheet" style="height: auto"
-              :opened="show" @sheet:open="onSheetOpen" @sheet:closed="onSheetClosed">
+              :opened="show" @sheet:open="onSheetOpen" @sheet:opened="revealField" @sheet:closed="onSheetClosed">
         <div class="swipe-handler"></div>
         <f7-page-content class="margin-top no-padding-top">
             <div class="margin-top padding-horizontal" v-if="hint">
@@ -80,7 +80,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
+import type { Sheet } from 'framework7/types';
 
 import { useI18n } from '@/locales/helpers.ts';
 import { useI18nUIComponents, isiOS } from '@/lib/ui/mobile.ts';
@@ -99,6 +100,7 @@ const props = defineProps<{
     currency?: string;
     flipNegative?: boolean;
     hint?: string;
+    revealTarget?: HTMLElement;
     show: boolean;
 }>();
 
@@ -443,13 +445,32 @@ function close(): void {
     emit('update:show', false);
 }
 
-function onSheetOpen(): void {
+let revealedContent:HTMLElement|undefined, previousPadding='', previousScroll=0;
+function revealField(sheet:Sheet.Sheet):void {
+    const target=props.revealTarget, content=target?.closest<HTMLElement>('.page-content');
+    if(!target || !content)return;
+    if(!revealedContent){revealedContent=content;previousPadding=content.style.paddingBottom;previousScroll=content.scrollTop;}
+    const height=sheet.el.offsetHeight;
+    content.style.paddingBottom=`${height+24}px`;
+    const bottom=window.innerHeight-height-16, rect=target.getBoundingClientRect();
+    if(rect.bottom>bottom)content.scrollTo({top:content.scrollTop+rect.bottom-bottom,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+}
+function restorePage():void {
+    if(!revealedContent)return;
+    revealedContent.style.paddingBottom=previousPadding;
+    revealedContent.scrollTo({top:previousScroll,behavior:'smooth'});revealedContent=undefined;
+}
+onBeforeUnmount(restorePage);
+function onSheetOpen(sheet:Sheet.Sheet): void {
+    if(document.activeElement instanceof HTMLElement)document.activeElement.blur();
     currentValue.value = getInitedStringValue(props.modelValue, props.flipNegative);
     previousValue.value = '';
     currentSymbol.value = '';
+    requestAnimationFrame(()=>revealField(sheet));
 }
 
 function onSheetClosed(): void {
+    restorePage();
     close();
 }
 

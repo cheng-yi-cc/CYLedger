@@ -21,6 +21,7 @@ type ImportTransactionRequest struct {
 
 // ImportTransactionRequestItem represents a single item of the imported transaction data
 type ImportTransactionRequestItem struct {
+	BookId                 string `json:"bookId,omitempty"`
 	Time                   string `json:"time"`
 	UtcOffset              string `json:"utcOffset"`
 	Type                   string `json:"type"`
@@ -36,6 +37,7 @@ type ImportTransactionRequestItem struct {
 
 // ImportTransactionResponse represents a view-object of the imported transaction data
 type ImportTransactionResponse struct {
+	BookId                             string                          `json:"bookId"`
 	Type                               TransactionType                 `json:"type"`
 	CategoryId                         int64                           `json:"categoryId,string"`
 	OriginalCategoryName               string                          `json:"originalCategoryName"`
@@ -79,6 +81,7 @@ func (t ImportTransaction) ToImportTransactionResponse() *ImportTransactionRespo
 	}
 
 	return &ImportTransactionResponse{
+		BookId:                             t.BookId,
 		Type:                               transactionType,
 		CategoryId:                         t.CategoryId,
 		OriginalCategoryName:               t.OriginalCategoryName,

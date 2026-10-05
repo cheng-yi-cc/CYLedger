@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
+import { useBooksStore } from './books.ts';
 
 import { useSettingsStore } from './setting.ts';
 import { useUserStore } from './user.ts';
@@ -168,6 +169,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
     const noTransaction = computed<boolean>(() => {
         for (const transactionMonthList of transactions.value) {
             for (const transaction of transactionMonthList.items) {
+            if (transaction.excludeFromStatistics || (transaction.reimbursementAccountId && transaction.reimbursementAccountId !== '0')) continue;
                 if (transaction) {
                     return false;
                 }
@@ -356,6 +358,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
         }
 
         for (const transaction of transactionMonthList.items) {
+            if (transaction.excludeFromStatistics || (transaction.reimbursementAccountId && transaction.reimbursementAccountId !== '0')) continue;
             const transactionDay = isNumber(transaction.gregorianCalendarDayOfMonth) ? transaction.gregorianCalendarDayOfMonth.toString() : '0';
             let dailyTotalAmount = dailyTotalAmounts[transactionDay];
 
@@ -651,7 +654,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
             accountsStore.updateAccountListInvalidState(true);
         }
 
-        if (options.overview && !overviewStore.transactionOverviewStateInvalid) {
+        if (options.overview) {
             overviewStore.updateTransactionOverviewInvalidState(true);
         }
 
@@ -870,6 +873,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
     }
 
     function loadTransactions({ reload, count, page, mustHavePictures, withCount, withPictures, autoExpand, defaultCurrency }: { reload?: boolean, count?: number, page?: number, mustHavePictures?: boolean, withCount?: boolean, withPictures?: boolean, autoExpand: boolean, defaultCurrency: string }): Promise<TransactionPageWrapper> {
+        const isCurrentBookScope = useBooksStore().captureReportScope();
         let actualMaxTime = transactionsNextTimeId.value;
 
         if (reload && transactionsFilter.value.maxTime > 0) {
@@ -895,6 +899,11 @@ export const useTransactionsStore = defineStore('transactions', () => {
                 keyword: transactionsFilter.value.keyword,
                 matchMode: transactionsFilter.value.matchMode
             }).then(response => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 const data = response.data;
 
                 if (!data || !data.success || !data.result) {
@@ -936,6 +945,11 @@ export const useTransactionsStore = defineStore('transactions', () => {
 
                 resolve(transactionPageWrapper);
             }).catch(error => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 logger.error('failed to load transaction list', error);
 
                 if (reload) {
@@ -963,6 +977,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
     }
 
     function loadMonthlyAllTransactions({ year, month, mustHavePictures, withPictures, autoExpand, defaultCurrency }: { year: number, month: number, mustHavePictures?: boolean, withPictures?: boolean, autoExpand: boolean, defaultCurrency: string }): Promise<TransactionPageWrapper> {
+        const isCurrentBookScope = useBooksStore().captureReportScope();
         return new Promise((resolve, reject) => {
             services.getAllTransactionsByMonth({
                 year: year,
@@ -977,6 +992,11 @@ export const useTransactionsStore = defineStore('transactions', () => {
                 mustHavePictures: !!mustHavePictures,
                 withPictures: !!withPictures
             }).then(response => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 const data = response.data;
 
                 if (!data || !data.success || !data.result) {
@@ -1013,6 +1033,11 @@ export const useTransactionsStore = defineStore('transactions', () => {
 
                 resolve(transactionPageWrapper);
             }).catch(error => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 logger.error('failed to load monthly all transaction list', error);
 
                 loadTransactionList({
@@ -1581,7 +1606,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
         });
     }
 
-    function importTransactions({ transactions, clientSessionId }: { transactions: ImportTransaction[], clientSessionId: string }): Promise<number> {
+    function importTransactions({ transactions, clientSessionId, bookId }: { transactions: ImportTransaction[], clientSessionId: string, bookId?: string }): Promise<number> {
         const submitTransactions: TransactionCreateRequest[] = [];
 
         if (transactions) {
@@ -1593,6 +1618,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
 
         return new Promise((resolve, reject) => {
             services.importTransactions({
+                bookId: bookId,
                 transactions: submitTransactions,
                 clientSessionId: clientSessionId
             }).then(response => {
@@ -1733,6 +1759,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
         setTransactionSuitableDestinationAmount,
         updateTransactionListInvalidState,
         updateTransactionReconciliationStatementInvalidState,
+        updateStoreInvalidState,
         resetTransactions,
         clearTransactions,
         initTransactionListFilter,

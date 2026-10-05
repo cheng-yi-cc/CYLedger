@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
+import { useBooksStore } from './books.ts';
 
 import { useSettingsStore } from './setting.ts';
 import { useUserStore } from './user.ts';
@@ -1974,6 +1975,7 @@ export const useStatisticsStore = defineStore('statistics', () => {
     }
 
     function loadCategoricalAnalysis({ force }: { force: boolean }): Promise<TransactionStatisticResponse> {
+        const isCurrentBookScope = useBooksStore().captureReportScope();
         return new Promise((resolve, reject) => {
             services.getTransactionStatistics({
                 startTime: transactionStatisticsFilter.value.categoricalChartStartTime,
@@ -1983,6 +1985,11 @@ export const useStatisticsStore = defineStore('statistics', () => {
                 matchMode: transactionStatisticsFilter.value.matchMode,
                 useTransactionTimezone: settingsStore.appSettings.statistics.defaultTimezoneType === TimezoneTypeForStatistics.TransactionTimezone.type
             }).then(response => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 const data = response.data;
 
                 if (!data || !data.success || !data.result) {
@@ -2003,6 +2010,11 @@ export const useStatisticsStore = defineStore('statistics', () => {
 
                 resolve(data.result);
             }).catch(error => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 logger.error('failed to retrieve transaction statistics', error);
 
                 if (error.response && error.response.data && error.response.data.errorMessage) {
@@ -2017,6 +2029,7 @@ export const useStatisticsStore = defineStore('statistics', () => {
     }
 
     function loadTrendAnalysis({ force }: { force: boolean }): Promise<TransactionStatisticTrendsResponseItem[]> {
+        const isCurrentBookScope = useBooksStore().captureReportScope();
         return new Promise((resolve, reject) => {
             services.getTransactionStatisticsTrends({
                 startYearMonth: transactionStatisticsFilter.value.trendChartStartYearMonth,
@@ -2026,6 +2039,11 @@ export const useStatisticsStore = defineStore('statistics', () => {
                 matchMode: transactionStatisticsFilter.value.matchMode,
                 useTransactionTimezone: settingsStore.appSettings.statistics.defaultTimezoneType === TimezoneTypeForStatistics.TransactionTimezone.type
             }).then(response => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 const data = response.data;
 
                 if (!data || !data.success || !data.result) {
@@ -2046,6 +2064,11 @@ export const useStatisticsStore = defineStore('statistics', () => {
 
                 resolve(data.result);
             }).catch(error => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 logger.error('failed to retrieve transaction statistics', error);
 
                 if (error.response && error.response.data && error.response.data.errorMessage) {
@@ -2060,11 +2083,17 @@ export const useStatisticsStore = defineStore('statistics', () => {
     }
 
     function loadAssetTrends({ force }: { force: boolean }): Promise<TransactionStatisticAssetTrendsResponseItem[]> {
+        const isCurrentBookScope = useBooksStore().captureReportScope();
         return new Promise((resolve, reject) => {
             services.getTransactionStatisticsAssetTrends({
                 startTime: transactionStatisticsFilter.value.assetTrendsChartStartTime,
                 endTime: transactionStatisticsFilter.value.assetTrendsChartEndTime
             }).then(response => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 const data = response.data;
 
                 if (!data || !data.success || !data.result) {
@@ -2085,6 +2114,11 @@ export const useStatisticsStore = defineStore('statistics', () => {
 
                 resolve(data.result);
             }).catch(error => {
+                if (!isCurrentBookScope()) {
+                    reject({ processed: true, isStaleScope: true });
+                    return;
+                }
+
                 logger.error('failed to retrieve transaction statistics', error);
 
                 if (error.response && error.response.data && error.response.data.errorMessage) {

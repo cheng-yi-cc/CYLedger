@@ -4,6 +4,7 @@ import { TRANSACTION_MAX_COMMENT_LENGTH } from '@/consts/transaction.ts';
 import type { TransactionCreateRequest, TransactionGeoLocationResponse } from './transaction.ts';
 
 export class ImportTransaction implements ImportTransactionResponse {
+    public bookId: string;
     public type: number;
     public categoryId: string;
     public originalCategoryName: string;
@@ -30,6 +31,7 @@ export class ImportTransaction implements ImportTransactionResponse {
     public valid: boolean;
 
     private constructor(response: ImportTransactionResponse, index: number) {
+        this.bookId = response.bookId || '';
         this.type = response.type;
         this.categoryId = response.categoryId;
         this.originalCategoryName = response.originalCategoryName;
@@ -58,6 +60,7 @@ export class ImportTransaction implements ImportTransactionResponse {
 
     public toCreateRequest(): TransactionCreateRequest {
         return {
+            bookId: this.bookId || undefined,
             type: this.type,
             categoryId: this.categoryId,
             time: this.time,
@@ -113,6 +116,7 @@ export interface ImportTransactionRequest {
 }
 
 export interface ImportTransactionRequestItem {
+    readonly bookId?: string;
     readonly time: string;
     readonly utcOffset: string;
     readonly type: string;
@@ -127,6 +131,7 @@ export interface ImportTransactionRequestItem {
 }
 
 export interface ImportTransactionResponse {
+    readonly bookId?: string;
     readonly type: number;
     readonly categoryId: string;
     readonly originalCategoryName: string;

@@ -12,6 +12,7 @@
                 <f7-link icon-f7="ellipsis" :aria-label="tt('More')" @click="showMoreActionSheet = true"></f7-link>
             </f7-nav-right>
         </f7-navbar>
+        <BookScopeControl :disabled="loading || reloading" @change="reload()" />
 
         <f7-popover class="chart-data-type-popover-menu"
                     @popover:open="scrollPopoverToSelectedItem">
@@ -394,6 +395,7 @@
 
 <script setup lang="ts">
 import LedgerNavigation from '@/components/mobile/LedgerNavigation.vue';
+import BookScopeControl from '@/components/common/BookScopeControl.vue';
 import { ref, computed } from 'vue';
 import type { Router } from 'framework7/types';
 

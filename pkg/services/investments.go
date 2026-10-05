@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -15,6 +16,7 @@ import (
 	"github.com/mayswind/ezbookkeeping/pkg/datastore"
 	"github.com/mayswind/ezbookkeeping/pkg/errs"
 	"github.com/mayswind/ezbookkeeping/pkg/investments"
+	"github.com/mayswind/ezbookkeeping/pkg/marketquotes"
 	"github.com/mayswind/ezbookkeeping/pkg/models"
 	"github.com/mayswind/ezbookkeeping/pkg/utils"
 	"github.com/mayswind/ezbookkeeping/pkg/uuid"
@@ -29,7 +31,9 @@ var ErrInvestmentConflict = errs.NewNormalError(21, 2, 409, "记录已变更，�
 
 type InvestmentEvent struct {
 	investments.Event
-	CashAccountID string `json:"cashAccountId"`
+	CashAccountID string                `json:"cashAccountId"`
+	BookID        string                `json:"bookId,omitempty"`
+	Conversion    *InvestmentConversion `json:"conversion,omitempty"`
 }
 type InvestmentPreview struct {
 	Event     InvestmentEvent           `json:"event"`
@@ -98,8 +102,57 @@ func (s *InvestmentService) Instruments(c core.Context, uid int64) ([]models.Inv
 	items := append([]models.InvestmentInstrument{}, investmentPresets...)
 	var own []models.InvestmentInstrument
 	err := s.UserDataDB(uid).NewSession(c).Where("uid=?", uid).Find(&own)
+	for _, item := range own {
+		if item.Provider != "" {
+			_ = marketquotes.Default.Register(instrumentBinding(item))
+		}
+	}
 	return append(items, own...), err
 }
+
+func instrumentBinding(item models.InvestmentInstrument) marketquotes.Binding {
+	return marketquotes.Binding{Market: item.Market, Provider: item.Provider, ProviderID: item.ProviderID, Currency: item.Currency}
+}
+
+func investmentContext(c core.Context) context.Context {
+	if c != nil {
+		return c
+	}
+	return context.Background()
+}
+
+func (s *InvestmentService) SearchInstruments(c core.Context, query, market string) ([]marketquotes.Candidate, error) {
+	result, err := marketquotes.Default.Search(investmentContext(c), query, market)
+	if err != nil {
+		return nil, investmentError(err.Error())
+	}
+	return result, nil
+}
+
+func (s *InvestmentService) BindInstrument(c core.Context, uid int64, id string, binding marketquotes.Binding) (*models.InvestmentInstrument, error) {
+	item := new(models.InvestmentInstrument)
+	sess := s.UserDataDB(uid).NewSession(c)
+	defer sess.Close()
+	has, err := sess.Where("uid=? AND id=?", uid, id).Get(item)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, investmentError("请选择属于当前账本的自定义资产")
+	}
+	confirmed, err := marketquotes.Default.Resolve(investmentContext(c), binding)
+	if err != nil {
+		return nil, investmentError(err.Error())
+	}
+	if item.Type != confirmed.Type && !(binding.Provider == "tencent" && (item.Type == "FUND" || item.Type == "STOCK") && (confirmed.Type == "FUND" || confirmed.Type == "STOCK")) {
+		return nil, investmentError("资产类型与所选行情不一致")
+	}
+	defer s.lock(uid)()
+	item.Market, item.Provider, item.ProviderID, item.Currency = binding.Market, binding.Provider, binding.ProviderID, binding.Currency
+	_, err = sess.Where("uid=? AND id=?", uid, id).Cols("market", "provider", "provider_id", "currency").Update(item)
+	return item, err
+}
+
 func (s *InvestmentService) CreateInstrument(c core.Context, uid int64, item models.InvestmentInstrument) (*models.InvestmentInstrument, error) {
 	if item.Type != "CRYPTO" && item.Type != "STOCK" && item.Type != "FUND" && item.Type != "OTHER" {
 		return nil, investmentError("资产类型无效")
@@ -108,6 +161,15 @@ func (s *InvestmentService) CreateInstrument(c core.Context, uid int64, item mod
 	item.Symbol = strings.TrimSpace(item.Symbol)
 	if len([]rune(item.Name)) == 0 || len([]rune(item.Name)) > 64 || len(item.Symbol) == 0 || len(item.Symbol) > 24 {
 		return nil, investmentError("请填写有效的资产名称与代码")
+	}
+	if item.Provider != "" || item.ProviderID != "" || item.Market != "" || item.Currency != "" {
+		confirmed, err := marketquotes.Default.Resolve(investmentContext(c), instrumentBinding(item))
+		if err != nil {
+			return nil, investmentError(err.Error())
+		}
+		if item.Type != confirmed.Type && !(confirmed.Provider == "tencent" && (item.Type == "STOCK" || item.Type == "FUND")) {
+			return nil, investmentError("资产类型与所选行情不一致")
+		}
 	}
 	item.Id = "custom:" + investmentID()
 	item.Uid = uid
@@ -121,6 +183,8 @@ func (s *InvestmentService) Accounts(c core.Context, uid int64) ([]models.Portfo
 	return items, err
 }
 func (s *InvestmentService) CreateAccount(c core.Context, uid int64, item models.PortfolioAccount) (*models.PortfolioAccount, error) {
+	// Platform and initial crypto selections are saved through the atomic setup endpoint.
+	item.Platform, item.Instruments = "", nil
 	item.Name = strings.TrimSpace(item.Name)
 	if len([]rune(item.Name)) == 0 || len([]rune(item.Name)) > 64 || len(item.Kind) > 32 {
 		return nil, investmentError("请填写有效的投资账户名称")
@@ -287,7 +351,13 @@ func (s *InvestmentService) Mutate(c core.Context, uid int64, input InvestmentEv
 					return ErrInvestmentConflict
 				}
 				response = new(InvestmentPreview)
-				return json.Unmarshal([]byte(record.Response), response)
+				if err := json.Unmarshal([]byte(record.Response), response); err != nil {
+					return err
+				}
+				if response.Event.BookID == "" {
+					response.Event.BookID = DefaultBookID(uid)
+				}
+				return nil
 			}
 		}
 		events, err := readInvestmentEvents(sess, uid)
@@ -316,6 +386,25 @@ func (s *InvestmentService) Mutate(c core.Context, uid int64, input InvestmentEv
 			input.Voided = true
 		} else {
 			input.Voided = false
+			if operation == "revise" {
+				// A manual correction is not a new automatic market conversion.
+				// The original observation remains in the previous audit revision.
+				input.Conversion = nil
+			}
+			if input.Conversion != nil && operation == "create" {
+				quote := input.Conversion
+				now := time.Now().Unix()
+				if quote.ObservedAt > now+5 || quote.ExpiresAt < now || quote.ExpiresAt > quote.ObservedAt+120 || quote.ObservedAt < now-120 {
+					return investmentError("换算行情已过期，请刷新行情后重新确认")
+				}
+			}
+			if index >= 0 && input.BookID == "" {
+				input.BookID = old.BookID
+			}
+			input.BookID, err = Books.ResolveInSession(sess, uid, input.BookID, index >= 0 && input.BookID == old.BookID)
+			if err != nil {
+				return err
+			}
 			if err = s.validateEvent(sess, uid, &input); err != nil {
 				return err
 			}
@@ -439,7 +528,7 @@ func (s *InvestmentService) settleCash(c core.Context, sess *xorm.Session, uid i
 		return err
 	}
 	_, offset := time.Unix(e.OccurredAt, 0).In(loc).Zone()
-	tx := &models.Transaction{Uid: uid, Type: models.TRANSACTION_DB_TYPE_TRANSFER_OUT, AccountId: from, RelatedAccountId: to, Amount: minor.Abs().IntPart(), RelatedAccountAmount: minor.Abs().IntPart(), TransactionTime: utils.GetMinTransactionTimeFromUnixTime(e.OccurredAt), TimezoneUtcOffset: int16(offset / 60), Comment: "投资" + map[string]string{"BUY": "买入", "SELL": "卖出"}[e.Type], InvestmentEventId: e.ID}
+	tx := &models.Transaction{Uid: uid, BookId: e.BookID, Type: models.TRANSACTION_DB_TYPE_TRANSFER_OUT, AccountId: from, RelatedAccountId: to, Amount: minor.Abs().IntPart(), RelatedAccountAmount: minor.Abs().IntPart(), TransactionTime: utils.GetMinTransactionTimeFromUnixTime(e.OccurredAt), TimezoneUtcOffset: int16(offset / 60), Comment: "投资" + map[string]string{"BUY": "买入", "SELL": "卖出"}[e.Type], InvestmentEventId: e.ID}
 	if err = Transactions.createTransactionInSession(c, sess, tx, nil, nil); err != nil {
 		return err
 	}
@@ -462,6 +551,33 @@ func (s *InvestmentService) reverseSettlement(sess *xorm.Session, uid int64, eve
 	}
 	_, err := sess.Where("uid=? AND investment_event_id=? AND deleted=?", uid, eventID, false).Cols("deleted", "deleted_unix_time").Update(&models.Transaction{Deleted: true, DeletedUnixTime: time.Now().Unix()})
 	return err
+}
+
+// Account deletion retains audit revisions while voiding all related facts in
+// one transaction, after the caller validates the remaining investment replay.
+func (s *InvestmentService) voidAccountInvestments(sess *xorm.Session, uid int64, events []InvestmentEvent, ids map[string]bool) error {
+	for _, event := range events {
+		if !ids[event.ID] {
+			continue
+		}
+		oldVersion := event.Version
+		event.Version++
+		payload, err := json.Marshal(event)
+		if err != nil {
+			return err
+		}
+		n, err := sess.Where("uid=? AND id=? AND version=?", uid, event.ID, oldVersion).Cols("version", "voided", "payload").Update(&models.InvestmentEventRecord{Version: event.Version, Voided: true, Payload: string(payload)})
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return ErrInvestmentConflict
+		}
+		if _, err := sess.Insert(&models.InvestmentEventRevision{Id: investmentID(), Uid: uid, EventId: event.ID, Version: event.Version, RecordedAt: time.Now().Unix(), Payload: string(payload)}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 func InvalidateWealthSnapshots(sess *xorm.Session, uid, from int64) error {
 	_, err := sess.Where("uid=? AND recorded_at>=?", uid, from).Cols("invalidated").Update(&models.WealthSnapshot{Invalidated: true})

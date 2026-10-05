@@ -368,8 +368,16 @@ func (c *DataTableTransactionDataImporter) ParseImportedData(ctx core.Context, u
 			description = dataRow.GetData(datatable.TRANSACTION_DATA_TABLE_PAYEE)
 		}
 
+		bookID := ""
+		if dataTable.HasColumn(datatable.TRANSACTION_DATA_TABLE_BOOK_ID) {
+			bookID = dataRow.GetData(datatable.TRANSACTION_DATA_TABLE_BOOK_ID)
+		}
+		if len(bookID) > 64 {
+			return nil, nil, nil, nil, nil, nil, errs.ErrIncompleteOrIncorrectSubmission
+		}
 		transaction := &models.ImportTransaction{
 			Transaction: &models.Transaction{
+				BookId:               bookID,
 				Uid:                  user.Uid,
 				Type:                 transactionDbType,
 				CategoryId:           categoryId,

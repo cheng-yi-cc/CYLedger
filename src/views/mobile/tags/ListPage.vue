@@ -1,5 +1,5 @@
 <template>
-    <f7-page :ptr="!sortable && !hasEditingTag" @ptr:refresh="reload" @page:afterin="onPageAfterIn">
+    <f7-page class="cy-mobile-surface" :ptr="!sortable && !hasEditingTag" @ptr:refresh="reload" @page:afterin="onPageAfterIn">
         <f7-navbar>
             <f7-nav-left :class="{ 'disabled': loading }" :back-link="tt('Back')" v-if="!sortable"></f7-nav-left>
             <f7-nav-left v-else-if="sortable">
@@ -17,6 +17,14 @@
                 <f7-link icon-f7="checkmark_alt" :class="{ 'disabled': displayOrderSaving || !displayOrderModified || hasEditingTag }" :aria-label="tt('Save')" @click="saveSortResult" v-else-if="sortable"></f7-link>
             </f7-nav-right>
         </f7-navbar>
+
+        <section v-if="!loading" class="cy-tag-tools">
+            <nav class="cy-tag-groups" aria-label="标签分组"><button v-for="group in allTagGroupsWithDefault" :key="group.id" :aria-pressed="activeTagGroupId === group.id" :disabled="sortable || hasEditingTag" @click="searchText = ''; switchTagGroup(group.id)">{{ group.name }}</button><f7-link href="/tag/group/list">管理分组</f7-link></nav>
+            <label class="cy-management-search"><f7-icon f7="search" /><input v-model="searchText" :disabled="sortable || hasEditingTag" type="search" placeholder="查找标签" aria-label="查找标签" /></label>
+            <div class="cy-management-actions"><button :aria-pressed="showHidden" :disabled="sortable || hasEditingTag" @click="showHidden = !showHidden">{{ showHidden ? '收起隐藏标签' : '显示隐藏标签' }}</button><button :disabled="sortable || hasEditingTag || tags.length < 2" @click="setSortable()">调整顺序</button><f7-link href="/category/all">管理分类</f7-link></div>
+            <p class="cy-management-hint">{{ sortable ? '拖动右侧把手排序，完成后点右上角保存。' : '标签可跨分类使用。一笔账可以同时标记多人、项目或场景。' }}</p>
+            <p v-if="searchText && !filteredTagCount" class="cy-management-hint">没有找到匹配的标签。</p>
+        </section>
 
         <f7-popover class="tag-group-popover-menu"
                     @popover:open="scrollPopoverToSelectedItem">
@@ -59,7 +67,7 @@
                           :id="getTagDomId(tag)"
                           :key="tag.id"
                           v-for="tag in tags"
-                          v-show="showHidden || !tag.hidden"
+                          v-show="(showHidden || !tag.hidden) && matchesSearch(tag)"
                           @taphold="setSortable()">
                 <template #media>
                     <f7-icon class="transaction-tag-icon" f7="number">
@@ -84,6 +92,8 @@
                     </div>
                 </template>
                 <template #after>
+                    <button v-if="!sortable && !hasEditingTag" class="cy-tag-edit" :aria-label="`编辑${tag.name}`" @click="edit(tag)"><f7-icon f7="pencil" /></button>
+                    <button v-if="!sortable && !hasEditingTag" class="cy-tag-edit" :aria-label="`${tag.hidden ? '显示' : '隐藏'}${tag.name}`" @click="hide(tag, !tag.hidden)"><f7-icon :f7="tag.hidden ? 'eye_slash' : 'eye'" /></button>
                     <f7-button raised fill icon-f7="checkmark_alt" color="blue"
                                :class="{ 'no-padding': true, 'disabled': !isTagModified(tag) }"
                                :aria-label="tt('Save')"
@@ -266,6 +276,7 @@ const newTagItem = useTemplateRef<{ $el: HTMLElement }>('newTagItem');
 
 const loadingError = ref<unknown | null>(null);
 const sortable = ref<boolean>(false);
+const searchText = ref('');
 const moveToTagGroupId = ref<string | undefined>(undefined);
 const tagToMove = ref<TransactionTag | null>(null);
 const tagToDelete = ref<TransactionTag | null>(null);
@@ -277,6 +288,10 @@ const displayOrderSaving = ref<boolean>(false);
 const textDirection = computed<TextDirection>(() => getCurrentLanguageTextDirection());
 const firstShowingId = computed<string | null>(() => getFirstShowingId(tags.value, showHidden.value));
 const lastShowingId = computed<string | null>(() => getLastShowingId(tags.value, showHidden.value));
+const filteredTagCount = computed(() => tags.value.filter(tag => (showHidden.value || !tag.hidden) && matchesSearch(tag)).length);
+function matchesSearch(tag: TransactionTag): boolean {
+    return !searchText.value.trim() || tag.name.toLocaleLowerCase().includes(searchText.value.trim().toLocaleLowerCase());
+}
 
 const displayTagGroupName = computed<string>(() => {
     const tagGroup = transactionTagsStore.allTransactionTagGroupsMap[activeTagGroupId.value];
@@ -338,6 +353,7 @@ function reload(done?: () => void): void {
 }
 
 function add(): void {
+    searchText.value = '';
     createNewTag();
 
     nextTick(() => {
@@ -493,6 +509,7 @@ function setSortable(): void {
         return;
     }
 
+    searchText.value = '';
     showHidden.value = true;
     sortable.value = true;
     displayOrderModified.value = false;
@@ -680,6 +697,10 @@ function onPageAfterIn(): void {
 
 init();
 </script>
+
+<style scoped>
+.cy-tag-tools{padding:12px 16px 0}.cy-tag-groups{display:flex;gap:7px;align-items:center;overflow:auto;margin-bottom:14px;padding-bottom:3px}.cy-tag-groups button{border:1px solid var(--cy-line);background:var(--cy-card);border-radius:9px;font-size:12px;padding:8px 12px;white-space:nowrap}.cy-tag-groups button[aria-pressed=true]{background:var(--cy-accent);border-color:var(--cy-accent);color:var(--cy-card)}.cy-tag-groups a{color:var(--cy-accent);font-size:12px;white-space:nowrap;padding:8px}.cy-management-search{display:flex;gap:8px;align-items:center;border:1px solid var(--cy-line);border-radius:11px;background:var(--cy-card);padding:0 12px}.cy-management-search .f7-icons{font-size:17px;color:var(--cy-muted)}.cy-management-search input{min-width:0;width:100%;height:42px;border:0;background:transparent;font-size:14px}.cy-management-actions{display:flex;justify-content:space-between;gap:8px;margin:12px 0}.cy-management-actions button,.cy-management-actions a{border:0;background:transparent;color:var(--cy-accent);font-size:12px;padding:5px 0}.cy-management-hint{font-size:11px;line-height:1.6;color:var(--cy-muted);margin-bottom:10px!important}.cy-tag-edit{border:0;background:transparent;color:var(--cy-accent);padding:8px;min-height:36px}.cy-tag-edit .f7-icons{font-size:17px}
+</style>
 
 <style>
 .tag-item-list.list .item-media + .item-inner {

@@ -98,13 +98,15 @@ type Account struct {
 
 // AccountExtend represents account extend data stored in database
 type AccountExtend struct {
-	LastReconciledTime      *int64 `json:"lastReconciledTime,omitempty"`
-	CreditCardStatementDate *int   `json:"creditCardStatementDate,omitempty"`
-	CreditCardLimit         *int64 `json:"creditCardLimit,string,omitempty"`
+	AssetProfile            *AccountAssetProfile `json:"assetProfile,omitempty"`
+	LastReconciledTime      *int64               `json:"lastReconciledTime,omitempty"`
+	CreditCardStatementDate *int                 `json:"creditCardStatementDate,omitempty"`
+	CreditCardLimit         *int64               `json:"creditCardLimit,string,omitempty"`
 }
 
 // AccountCreateRequest represents all parameters of account creation request
 type AccountCreateRequest struct {
+	AssetProfile            *AccountAssetProfile    `json:"assetProfile,omitempty"`
 	Name                    string                  `json:"name" binding:"required,notBlank,max=64"`
 	Category                AccountCategory         `json:"category" binding:"required"`
 	Type                    AccountType             `json:"type" binding:"required"`
@@ -115,7 +117,7 @@ type AccountCreateRequest struct {
 	Balance                 string                  `json:"balance" binding:"validTransactionAmount"`
 	BalanceTime             int64                   `json:"balanceTime"`
 	Comment                 string                  `json:"comment" binding:"max=255"`
-	CreditCardStatementDate int                     `json:"creditCardStatementDate" binding:"min=0,max=28"`
+	CreditCardStatementDate int                     `json:"creditCardStatementDate" binding:"min=0,max=31"`
 	CreditCardLimit         string                  `json:"creditCardLimit" binding:"omitempty,validTransactionAmount"`
 	SubAccounts             []*AccountCreateRequest `json:"subAccounts" binding:"omitempty"`
 	ClientSessionId         string                  `json:"clientSessionId"`
@@ -123,6 +125,7 @@ type AccountCreateRequest struct {
 
 // AccountModifyRequest represents all parameters of account modification request
 type AccountModifyRequest struct {
+	AssetProfile            *AccountAssetProfile    `json:"assetProfile,omitempty"`
 	Id                      int64                   `json:"id,string" binding:"required,min=0"`
 	Name                    string                  `json:"name" binding:"required,notBlank,max=64"`
 	Category                AccountCategory         `json:"category" binding:"required"`
@@ -134,7 +137,7 @@ type AccountModifyRequest struct {
 	BalanceTime             *int64                  `json:"balanceTime" binding:"omitempty"`
 	LastReconciledTime      *int64                  `json:"lastReconciledTime" binding:"omitempty"`
 	Comment                 string                  `json:"comment" binding:"max=255"`
-	CreditCardStatementDate int                     `json:"creditCardStatementDate" binding:"min=0,max=28"`
+	CreditCardStatementDate int                     `json:"creditCardStatementDate" binding:"min=0,max=31"`
 	CreditCardLimit         string                  `json:"creditCardLimit" binding:"omitempty,validTransactionAmount"`
 	Hidden                  bool                    `json:"hidden"`
 	SubAccounts             []*AccountModifyRequest `json:"subAccounts" binding:"omitempty"`
@@ -181,6 +184,7 @@ type AccountDeleteRequest struct {
 
 // AccountInfoResponse represents a view-object of account
 type AccountInfoResponse struct {
+	AssetProfile            *AccountAssetProfile     `json:"assetProfile,omitempty"`
 	Id                      int64                    `json:"id,string"`
 	Name                    string                   `json:"name"`
 	ParentId                int64                    `json:"parentId,string"`
@@ -213,11 +217,13 @@ func (a *Account) GetLastReconciledTime() int64 {
 
 // ToAccountInfoResponse returns a view-object according to database model
 func (a *Account) ToAccountInfoResponse() *AccountInfoResponse {
+	var assetProfile *AccountAssetProfile
 	var lastReconciledTime *int64
 	var creditCardStatementDate *int
 	var creditCardLimit *string
 
 	if a.Extend != nil {
+		assetProfile = a.Extend.AssetProfile
 		lastReconciledTime = a.Extend.LastReconciledTime
 	}
 
@@ -237,6 +243,7 @@ func (a *Account) ToAccountInfoResponse() *AccountInfoResponse {
 	}
 
 	return &AccountInfoResponse{
+		AssetProfile:            assetProfile,
 		Id:                      a.AccountId,
 		Name:                    a.Name,
 		ParentId:                a.ParentAccountId,
