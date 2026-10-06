@@ -78,7 +78,7 @@
             <template v-else-if="transaction.type === TransactionType.Transfer" #selection><div class="cy-transfer-accounts"><button @click="showSourceAccountSheet=true"><small>转出账户</small><strong>{{ sourceAccountName || '请选择账户' }}</strong><span>{{ sourceAccountCurrency }} {{ ledgerMoney(new LedgerDecimal(allAccountsMap[transaction.sourceAccountId]?.balance||0).div(100).toString(),false) }}</span></button><button class="cy-transfer-swap" aria-label="交换转出和转入账户" @click="swapTransactionData(true,true)"><f7-icon f7="arrow_up_arrow_down" /></button><button @click="showDestinationAccountSheet=true"><small>转入账户</small><strong>{{ destinationAccountName || '请选择账户' }}</strong><span>{{ destinationAccountCurrency }} {{ ledgerMoney(new LedgerDecimal(allAccountsMap[transaction.destinationAccountId]?.balance||0).div(100).toString(),false) }}</span></button><f7-link v-if="!allVisibleAccounts.length" href="/account/add">＋ 添加账户</f7-link><label>转账分类<select v-model="transaction.transferCategoryId"><option v-for="category in debtCategories.flatMap(c=>c.subCategories || [])" :key="category.id" :value="category.id">{{ category.name }}</option></select></label></div></template>
             <template #context>
                 <button class="cy-entry-chip" @click="showDateTimeDialog('date')"><f7-icon f7="calendar" />{{ quickDate }}</button>
-                <template v-if="!debtMode"><button v-if="allVisibleAccounts.length" class="cy-entry-chip" @click="showSourceAccountSheet = true"><f7-icon f7="creditcard" />{{ sourceAccountName || '选择账户' }}</button><f7-link v-else class="cy-entry-chip" href="/account/add">＋ 添加账户</f7-link>
+                <template v-if="!debtMode"><button v-if="allVisibleAccounts.length || walletChoices.length" class="cy-entry-chip" @click="showSourceAccountSheet = true"><f7-icon f7="creditcard" />{{ sourceAccountName || '选择账户' }}</button><f7-link v-else class="cy-entry-chip" href="/account/add">＋ 添加账户</f7-link>
                 <button v-if="transaction.type === TransactionType.Transfer" class="cy-entry-chip" :disabled="!allVisibleAccounts.length" @click="showDestinationAccountSheet = true"><f7-icon f7="arrow_right" />{{ destinationAccountName || '转入账户' }}</button></template>
                 <button v-if="transaction.type === TransactionType.Expense" class="cy-entry-chip" @click="showReimbursementSheet=true"><f7-icon f7="doc_text" />{{allAccountsMap[transaction.reimbursementAccountId]?.name||'不报销'}}</button>
                 <button v-if="isTransactionPicturesEnabled()" class="cy-entry-chip" :disabled="uploadingPicture || !canAddTransactionPicture" @click="showOpenPictureDialog"><f7-icon f7="paperclip" />{{ uploadingPicture ? '上传中' : '附件' }}</button>
@@ -90,18 +90,14 @@
             <template v-if="transaction.pictures?.length" #attachments><div class="cy-quick-attachments"><button v-for="picture in transaction.pictures" :key="picture.pictureId" aria-label="查看或移除附件" @click="viewOrRemovePicture(picture)"><img :src="getTransactionPictureUrl(picture)" alt="记账附件" /></button></div></template>
         </QuickTransactionEntry>
         <template v-if="!loading && useQuickEntry">
-            <two-column-list-item-selection-sheet primary-key-field="id" primary-value-field="category" primary-title-field="name" primary-footer-field="displayBalance"
-                                                  primary-icon-field="icon" primary-icon-type-field="iconType" primary-icon-type="account" primary-sub-items-field="accounts" :primary-title-i18n="true"
-                                                  secondary-key-field="id" secondary-value-field="id" secondary-title-field="name" secondary-footer-field="displayBalance"
-                                                  secondary-icon-field="icon" secondary-icon-type-field="iconType" secondary-icon-type="account" secondary-color-field="color"
-                                                  :enable-filter="true" :filter-placeholder="tt('Find account')" :filter-no-items-text="tt('No available account')"
-                                                  :items="allVisibleCategorizedAccounts" v-model:show="showSourceAccountSheet" v-model="transaction.sourceAccountId" />
-            <two-column-list-item-selection-sheet primary-key-field="id" primary-value-field="category" primary-title-field="name" primary-footer-field="displayBalance"
-                                                  primary-icon-field="icon" primary-icon-type-field="iconType" primary-icon-type="account" primary-sub-items-field="accounts" :primary-title-i18n="true"
-                                                  secondary-key-field="id" secondary-value-field="id" secondary-title-field="name" secondary-footer-field="displayBalance"
-                                                  secondary-icon-field="icon" secondary-icon-type-field="iconType" secondary-icon-type="account" secondary-color-field="color"
-                                                  :enable-filter="true" :filter-placeholder="tt('Find account')" :filter-no-items-text="tt('No available account')"
-                                                  :items="allVisibleCategorizedAccounts" v-model:show="showDestinationAccountSheet" v-model="transaction.destinationAccountId" />
+            <list-item-selection-sheet title="选择账户" value-type="item" key-field="id" value-field="id" title-field="name" footer-field="displayBalance"
+                                       icon-field="icon" icon-type-field="iconType" icon-type="account" color-field="color" image-field="imageUrl"
+                                       :enable-filter="true" :filter-placeholder="tt('Find account')" :filter-no-items-text="tt('No available account')"
+                                       :items="sourceAccountChoices" v-model:show="showSourceAccountSheet" v-model="sourceChoice" />
+            <list-item-selection-sheet title="选择账户" value-type="item" key-field="id" value-field="id" title-field="name" footer-field="displayBalance"
+                                       icon-field="icon" icon-type-field="iconType" icon-type="account" color-field="color" image-field="imageUrl"
+                                       :enable-filter="true" :filter-placeholder="tt('Find account')" :filter-no-items-text="tt('No available account')"
+                                       :items="cashAccountChoices" v-model:show="showDestinationAccountSheet" v-model="transaction.destinationAccountId" />
             <date-time-selection-sheet :init-mode="transactionDateTimeSheetMode" :timezone-utc-offset="transaction.utcOffset" :model-value="transaction.time"
                                        v-model:show="showTransactionDateTimeSheet" @update:model-value="updateTransactionTime" />
             <transaction-tag-selection-sheet :allow-add-new-tag="true" :enable-filter="true" v-model:show="showTransactionTagSheet" v-model="transaction.tagIds" />
@@ -259,24 +255,15 @@
             <f7-list-item
                 class="list-item-with-header-and-title"
                 link="#" no-chevron
-                :class="{ 'disabled': !allVisibleAccounts.length || (mode === TransactionEditPageMode.Edit && transaction.type === TransactionType.ModifyBalance), 'readonly': mode === TransactionEditPageMode.View }"
+                :class="{ 'disabled': !sourceAccountChoices.length || (mode === TransactionEditPageMode.Edit && transaction.type === TransactionType.ModifyBalance), 'readonly': mode === TransactionEditPageMode.View }"
                 :header="tt(sourceAccountTitle)"
                 :title="sourceAccountName"
                 @click="showSourceAccountSheet = true"
             >
-                <two-column-list-item-selection-sheet primary-key-field="id" primary-value-field="category"
-                                                      primary-title-field="name" primary-footer-field="displayBalance"
-                                                      primary-icon-field="icon" primary-icon-type-field="iconType" primary-icon-type="account"
-                                                      primary-sub-items-field="accounts"
-                                                      :primary-title-i18n="true"
-                                                      secondary-key-field="id" secondary-value-field="id"
-                                                      secondary-title-field="name" secondary-footer-field="displayBalance"
-                                                      secondary-icon-field="icon" secondary-icon-type-field="iconType" secondary-icon-type="account" secondary-color-field="color"
-                                                      :enable-filter="true" :filter-placeholder="tt('Find account')" :filter-no-items-text="tt('No available account')"
-                                                      :items="allVisibleCategorizedAccounts"
-                                                      v-model:show="showSourceAccountSheet"
-                                                      v-model="transaction.sourceAccountId">
-                </two-column-list-item-selection-sheet>
+                <list-item-selection-sheet title="选择账户" value-type="item" key-field="id" value-field="id" title-field="name" footer-field="displayBalance"
+                                       icon-field="icon" icon-type-field="iconType" icon-type="account" color-field="color" image-field="imageUrl"
+                                       :enable-filter="true" :filter-placeholder="tt('Find account')" :filter-no-items-text="tt('No available account')"
+                                       :items="sourceAccountChoices" v-model:show="showSourceAccountSheet" v-model="sourceChoice" />
             </f7-list-item>
 
             <f7-list-item
@@ -288,19 +275,10 @@
                 v-if="transaction.type === TransactionType.Transfer"
                 @click="showDestinationAccountSheet = true"
             >
-                <two-column-list-item-selection-sheet primary-key-field="id" primary-value-field="category"
-                                                      primary-title-field="name" primary-footer-field="displayBalance"
-                                                      primary-icon-field="icon" primary-icon-type-field="iconType" primary-icon-type="account"
-                                                      primary-sub-items-field="accounts"
-                                                      :primary-title-i18n="true"
-                                                      secondary-key-field="id" secondary-value-field="id"
-                                                      secondary-title-field="name" secondary-footer-field="displayBalance"
-                                                      secondary-icon-field="icon" secondary-icon-type-field="iconType" secondary-icon-type="account" secondary-color-field="color"
-                                                      :enable-filter="true" :filter-placeholder="tt('Find account')" :filter-no-items-text="tt('No available account')"
-                                                      :items="allVisibleCategorizedAccounts"
-                                                      v-model:show="showDestinationAccountSheet"
-                                                      v-model="transaction.destinationAccountId">
-                </two-column-list-item-selection-sheet>
+                <list-item-selection-sheet title="选择账户" value-type="item" key-field="id" value-field="id" title-field="name" footer-field="displayBalance"
+                                       icon-field="icon" icon-type-field="iconType" icon-type="account" color-field="color" image-field="imageUrl"
+                                       :enable-filter="true" :filter-placeholder="tt('Find account')" :filter-no-items-text="tt('No available account')"
+                                       :items="cashAccountChoices" v-model:show="showDestinationAccountSheet" v-model="transaction.destinationAccountId" />
             </f7-list-item>
 
             <f7-list-item
@@ -595,6 +573,12 @@ import BookPicker from '@/components/mobile/BookPicker.vue';
 import StatisticsSheet from '@/components/mobile/StatisticsSheet.vue';
 import { LedgerDecimal, ledgerMoney } from '@/lib/ledger-display.ts';
 import { useBooksStore } from '@/stores/books.ts';
+import { investments } from '@/lib/investments.ts';
+import { isCryptoAccount, platformIcon } from '@/lib/crypto-platforms.ts';
+import { assetAccountGroup, groupAssetAccountRows } from '@/lib/asset-tools.ts';
+import { currencyMoney, walletCurrency, walletValue } from '@/lib/wallet-entry.ts';
+import { useAssetToolsStore } from '@/stores/assetTools.ts';
+import type { InvestmentAccount, WealthSummary } from '@/models/investment.ts';
 import type { PhotoBrowser, Router } from 'framework7/types';
 
 import { useI18n } from '@/locales/helpers.ts';
@@ -779,6 +763,36 @@ const showSourceAmountSheet = ref<boolean>(false);
 const showDestinationAmountSheet = ref<boolean>(false);
 const showCategorySheet = ref<boolean>(false);
 const allVisibleCategorizedAccounts=computed(()=>experience.preferences.multiCurrency?baseVisibleCategorizedAccounts.value:baseVisibleCategorizedAccounts.value.map(group=>({...group,accounts:group.accounts.filter(a=>a.currency==='CNY'||(mode.value!==TransactionEditPageMode.Add&&[transaction.value.sourceAccountId,transaction.value.destinationAccountId].includes(a.id)))})).filter(group=>group.accounts.length));
+const walletAccounts=ref<InvestmentAccount[]>([]),accountSummary=ref<WealthSummary>(),assetRules=useAssetToolsStore();
+const walletChoices=computed(()=>mode.value===TransactionEditPageMode.Add && [TransactionType.Income,TransactionType.Expense].includes(transaction.value.type) ? walletAccounts.value.filter(a=>isCryptoAccount(a.kind)&&!assetRules.preferences.rules[`portfolio:${a.id}`]?.hidden&&assetRules.available('portfolio',a.id,transaction.value.bookId)) : []);
+interface AccountChoice { id:string;name:string;icon:string;iconType:number;color:string;displayBalance:string;group:string;imageUrl?:string }
+const cashAccountRows=computed<AccountChoice[]>(()=>{
+ const order=new Map((accountSummary.value?.cashAccounts||[]).map((a,index)=>[a.id,index]));
+ return allVisibleCategorizedAccounts.value.flatMap(group=>group.accounts)
+  .filter(a=>!assetRules.preferences.rules[`cash:${a.id}`]?.hidden || (mode.value!==TransactionEditPageMode.Add && [transaction.value.sourceAccountId,transaction.value.destinationAccountId].includes(a.id)))
+  .sort((a,b)=>(order.get(a.id)??Number.MAX_SAFE_INTEGER)-(order.get(b.id)??Number.MAX_SAFE_INTEGER))
+  .map(a=>({id:a.id,name:a.name,icon:a.icon,iconType:a.iconType,color:a.color,displayBalance:a.displayBalance,group:assetAccountGroup(allAccountsMap.value[a.id])}));
+});
+const cashAccountChoices=computed(()=>groupAssetAccountRows(cashAccountRows.value).flatMap(group=>group.accounts));
+const sourceAccountChoices=computed(()=>{
+ const wallets:AccountChoice[]=walletChoices.value.map(a=>{
+  const currency=walletCurrency(a),positions=accountSummary.value?.positions.filter(p=>p.accountId===a.id)||[];
+  const value=accountSummary.value?walletValue(positions,currency,accountSummary.value):null;
+  return {id:'portfolio:'+a.id,name:a.name,icon:'1',iconType:0,color:'68bfae',imageUrl:platformIcon(a.platform,a.kind),displayBalance:settingsStore.appSettings.showAccountBalance?`${currencyMoney(value,currency)} · ${currency}`:`默认 ${currency}`,group:'投资理财'};
+ });
+ return groupAssetAccountRows([...cashAccountRows.value,...wallets]).flatMap(group=>group.accounts);
+});
+const sourceChoice=computed({get:()=>transaction.value.sourceAccountId,set:(id:string)=>{
+ if(!id.startsWith('portfolio:')){transaction.value.sourceAccountId=id;return;}
+ showSourceAccountSheet.value=false;
+ const params=new URLSearchParams({accountId:id.slice(10),type:transaction.value.type===TransactionType.Income?'INCOME':'EXPENSE',bookId:transaction.value.bookId,categoryId:quickCategoryId.value,note:transaction.value.comment,time:String(transaction.value.time)});
+ // The wallet has its own default unit. Do not reinterpret an amount already
+ // entered in a different cash-account currency when changing the account.
+ const target=walletAccounts.value.find(a=>a.id===id.slice(10));
+ if(transaction.value.sourceAmount && (target?.currency||'CNY')===sourceAccountCurrency.value)params.set('amount',new LedgerDecimal(transaction.value.sourceAmount).div(100).toFixed());
+ submitted.value=true;
+ props.f7router.navigate('/crypto/entry?'+params.toString(),{reloadCurrent:true});
+}});
 const showSourceAccountSheet = ref<boolean>(false);
 const showDestinationAccountSheet = ref<boolean>(false);
 const showTransactionDateTimeSheet = ref<boolean>(false);
@@ -1574,6 +1588,10 @@ function onUploadPicture(event: Event): void {
 }
 
 function onPageAfterIn(): void {
+    void Promise.allSettled([investments.accounts(),investments.summary(),assetRules.load()]).then(([accounts,summary])=>{
+        if(accounts.status==='fulfilled')walletAccounts.value=accounts.value;
+        if(summary.status==='fulfilled')accountSummary.value=summary.value;
+    });
     routeBackOnError(props.f7router, loadingError);
 
     if (settingsStore.appSettings.autoGetCurrentGeoLocation && mode.value === TransactionEditPageMode.Add

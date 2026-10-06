@@ -1,10 +1,13 @@
 import { LedgerDecimal } from '@/lib/ledger-display.ts';
 import type { Instrument, InvestmentPosition, InvestmentConversion, InvestmentEvent } from '@/models/investment.ts';
 export type CryptoMode = 'cash' | 'coin' | 'redeem' | 'transfer' | 'opening';
+export type CashEntryMode = 'amount' | 'quantity';
 export interface CryptoDraft {
     mode: CryptoMode; fromAccount: string; toAccount: string; fromCoin: string; toCoin: string;
     amount: string; received: string; bookId: string; note: string;
+    cashEntryMode?: CashEntryMode; buyPrice?: string;
 }
+const PurchaseDecimal = LedgerDecimal.clone({ precision: 80 });
 /** Normalize keypad input without converting accounting values to floating point. */
 export function cryptoInput(value: string, precision = 18): string {
     let text = value.trim();
@@ -27,10 +30,28 @@ export function defaultCryptoCoin(coins: Instrument[], requested = ''): string {
 export function receivedAfterQuote(current: string, edited: boolean, estimate: string): string {
     return edited ? current : estimate;
 }
+/** Derive one settlement fact from the user's other fact and CNY unit price. */
+export function calculateCashPurchase(mode: CashEntryMode, amount: string, quantity: string, unitPrice: string): { amount: string; quantity: string } {
+    if (!unitPrice.trim()) throw Error('请填写买入单价');
+    const price = new PurchaseDecimal(cryptoInput(unitPrice));
+    let payment: string;
+    let received: string;
+    if (mode === 'quantity') {
+        received = cryptoInput(quantity);
+        payment = new PurchaseDecimal(received).mul(price).toDecimalPlaces(2, PurchaseDecimal.ROUND_HALF_UP).toFixed();
+        if (new PurchaseDecimal(payment).isZero()) throw Error('计算出的付款金额不足 0.01 元，请调整数量或单价');
+    } else {
+        payment = cryptoInput(amount, 2);
+        received = new PurchaseDecimal(payment).div(price).toDecimalPlaces(18, PurchaseDecimal.ROUND_DOWN).toFixed();
+        if (new PurchaseDecimal(received).isZero()) throw Error('计算出的数量低于支持的最小精度，请调整金额或单价');
+    }
+    return { amount: payment, quantity: received };
+}
 export function buildCryptoEvent(d: CryptoDraft, quote: InvestmentConversion | undefined, now: number): InvestmentEvent {
-    const amount = cryptoInput(d.amount, d.mode === 'cash' ? 2 : 18);
-    const needsQuote = ['cash', 'coin', 'redeem'].includes(d.mode);
-    const received = needsQuote ? cryptoInput(d.received, d.mode === 'redeem' ? 2 : 18) : amount;
+    const purchase = d.mode === 'cash' ? calculateCashPurchase(d.cashEntryMode || 'amount', d.amount, d.received, d.buyPrice || '') : undefined;
+    const amount = purchase?.amount || cryptoInput(d.amount, 18);
+    const needsQuote = ['coin', 'redeem'].includes(d.mode);
+    const received = purchase?.quantity || (needsQuote ? cryptoInput(d.received, d.mode === 'redeem' ? 2 : 18) : amount);
     if (!d.toAccount || (d.mode !== 'opening' && !d.fromAccount)) throw Error('请选择转出和转入账户');
     if (d.mode !== 'redeem' && !d.toCoin || !['opening', 'cash'].includes(d.mode) && !d.fromCoin) throw Error('请选择币种');
     if (d.mode === 'transfer' && d.fromAccount === d.toAccount) throw Error('请选择另一个转入账户');
@@ -46,7 +67,7 @@ export function buildCryptoEvent(d: CryptoDraft, quote: InvestmentConversion | u
         accountId: outgoing ? d.fromAccount : d.toAccount, instrumentId: outgoing ? d.fromCoin : d.toCoin,
         toAccountId: d.mode === 'transfer' ? d.toAccount : '', bookId: d.bookId,
         quantity: ['opening', 'redeem', 'transfer'].includes(d.mode) ? amount : received,
-        amount: d.mode === 'redeem' ? received : needsQuote ? amount : '0', fee: '0', cost: null,
+        amount: d.mode === 'redeem' ? received : d.mode === 'cash' || needsQuote ? amount : '0', fee: '0', cost: null,
         settlementInstrumentId: d.mode === 'coin' ? d.fromCoin : '', settlementAccountId: d.mode === 'coin' ? d.fromAccount : '',
         cashAccountId: d.mode === 'cash' ? d.fromAccount : d.mode === 'redeem' ? d.toAccount : '',
         exchangeRate: d.mode === 'coin' ? observed?.fromPrice || '' : d.mode === 'transfer' ? '' : '1',

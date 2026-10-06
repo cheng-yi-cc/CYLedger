@@ -81,6 +81,47 @@ func TestCryptoAccountSetupIsAtomicAndIdempotent(t *testing.T) {
 	_, err = f.s.CreateCryptoAccount(nil, f.uid, input, "crypto-invalid-platform")
 	require.Error(t, err)
 }
+
+func TestCryptoWalletOptionalBrandPreservesAtomicSetup(t *testing.T) {
+	for _, platform := range []string{"", "bitget-wallet"} {
+		t.Run("platform="+platform, func(t *testing.T) {
+			f := newInvestmentDBFixture(t)
+			before := f.balance()
+			input := CryptoAccountInput{Name: "自定义钱包", Kind: "WALLET", Platform: platform, Holdings: []CryptoHoldingInput{{InstrumentID: "crypto:tether", Quantity: "12.34"}}}
+			a, err := f.s.CreateCryptoAccount(nil, f.uid, input, "optional-wallet-setup")
+			require.NoError(t, err)
+			require.Equal(t, platform, a.Platform)
+			again, err := f.s.CreateCryptoAccount(nil, f.uid, input, "optional-wallet-setup")
+			require.NoError(t, err)
+			require.Equal(t, a.Id, again.Id)
+			events, err := f.s.Events(nil, f.uid)
+			require.NoError(t, err)
+			require.Len(t, events, 1)
+			require.Equal(t, "12.34", events[0].Quantity)
+			require.Nil(t, events[0].Cost)
+			require.Equal(t, before, f.balance())
+			input.Holdings[0].Quantity = "-1"
+			_, err = f.s.CreateCryptoAccount(nil, f.uid, input, "optional-wallet-invalid")
+			require.Error(t, err)
+			require.Equal(t, int64(2), f.count(&models.PortfolioAccount{}))
+			require.Equal(t, int64(1), f.count(&models.InvestmentEventRecord{}))
+		})
+	}
+	f := newInvestmentDBFixture(t)
+	for _, input := range []CryptoAccountInput{
+		{Name: "钱包", Kind: "WALLET", Platform: "bitget"},
+		{Name: "钱包", Kind: "WALLET", Platform: "unknown-wallet"},
+		{Name: "交易所", Kind: "EXCHANGE", Platform: "bitget-wallet"},
+		{Name: "交易所", Kind: "EXCHANGE"},
+		{Name: "其他", Kind: "OTHER"},
+		{Kind: "WALLET"},
+	} {
+		_, err := f.s.CreateCryptoAccount(nil, f.uid, input, "invalid-wallet-brand")
+		require.Error(t, err)
+	}
+	require.Equal(t, int64(1), f.count(&models.PortfolioAccount{}))
+	require.Zero(t, f.count(&models.InvestmentEventRecord{}))
+}
 func TestCryptoConversionSettlementAndExpiredQuote(t *testing.T) {
 	f := newInvestmentDBFixture(t)
 	now := time.Now().Unix()

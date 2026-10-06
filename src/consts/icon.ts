@@ -1,8 +1,10 @@
 import type { SystemIconInfo } from '@/core/icon.ts';
+import { BANK_BRANDS } from '@/lib/banks.ts';
 
 export const DEFAULT_ACCOUNT_ICON_ID = '1';
 
 export const ALL_ACCOUNT_ICONS: Record<string, SystemIconInfo> = {
+    ...Object.fromEntries(BANK_BRANDS.map(bank => [bank.icon, {icon:'las la-university'}])),
     // 1 - 99 : Cash Symbols
     '1': {
         icon: 'las la-wallet'

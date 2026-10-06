@@ -12,20 +12,21 @@ export interface MonetaryFund { name: string; symbol: string; providerId: string
 export type MonetaryInput = Pick<MonetaryBinding, 'accountId' | 'code' | 'startDate' | 'bookId' | 'categoryId' | 'timeZone' | 'enabled'>;
 export type MonetaryDraft = Omit<MonetaryInput,'accountId'> & { fund:MonetaryFund };
 export interface MonetarySync { created: number; bindings: MonetaryBinding[] }
+const publicFundTimeout = 25000;
 
-async function request<T>(method: 'get' | 'post', path: string, data?: unknown): Promise<T> {
-    const response = await axios.request<ApiResponse<T> & { errorMessage?: string }>({ method, url: `v1/monetary-income/${path}`, data });
+async function request<T>(method: 'get' | 'post', path: string, data?: unknown, timeout?: number): Promise<T> {
+    const response = await axios.request<ApiResponse<T> & { errorMessage?: string }>({ method, url: `v1/monetary-income/${path}`, data, ...(timeout ? { timeout } : {}) });
     if (!response.data.success) throw new Error(response.data.errorMessage || '自动收益操作失败，请重试');
     return response.data.result;
 }
 
 export const monetaryIncome = {
     list: () => request<MonetaryBinding[]>('get', 'list'),
-    search: (query: string) => request<MonetaryFund[]>('get', `search?q=${encodeURIComponent(query)}`),
-    save: (input: MonetaryInput) => request<MonetaryBinding>('post', 'save', input),
+    search: (query: string) => request<MonetaryFund[]>('get', `search?q=${encodeURIComponent(query)}`, undefined, publicFundTimeout),
+    save: (input: MonetaryInput) => request<MonetaryBinding>('post', 'save', input, publicFundTimeout),
     pause: (accountId: string) => request<boolean>('post', 'pause', { accountId }),
     async sync(accountId = '', force = false): Promise<MonetarySync> {
-        const result = await request<MonetarySync>('post', 'sync', { accountId, force });
+        const result = await request<MonetarySync>('post', 'sync', { accountId, force }, publicFundTimeout);
         if (result.created > 0) useTransactionsStore().updateStoreInvalidState({ transactionList: true, accountList: true, overview: true, statistics: true, explorer: true, reconciliationStatement: true });
         return result;
     }

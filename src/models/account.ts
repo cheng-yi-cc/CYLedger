@@ -4,6 +4,7 @@ import { IconType } from '@/core/icon.ts';
 import { AccountType, AccountCategory } from '@/core/account.ts';
 import { ACCOUNT_CURRENCY_NOT_SET_VALUE } from '@/consts/currency.ts';
 import { DEFAULT_ACCOUNT_COLOR } from '@/consts/color.ts';
+import { automaticBankIcon } from '@/lib/banks.ts';
 
 export interface AccountAssetProfile {
     kind?: '' | 'prepaid' | 'secondhand' | 'insurance' | 'reimbursement';
@@ -21,10 +22,13 @@ export class Account implements AccountInfoResponse {
     public parentId: string;
     public category: number;
     public type: number;
-    public icon: string;
+    private _icon?: string;
+    public get icon(): string { return automaticBankIcon(this.name, this.category, this.iconType) || this._icon || '1'; }
+    public set icon(value: string) { this._icon = value; }
     public iconType: number;
     public color: ColorValue;
     public currency: string;
+    public currencyEditable = false;
     public balanceTime?: number;
     public lastReconciledTime?: number;
     public comment: string;
@@ -41,7 +45,7 @@ export class Account implements AccountInfoResponse {
     private readonly _isAsset?: boolean;
     private readonly _isLiability?: boolean;
 
-    protected constructor(id: string, name: string, parentId: string, category: number, type: number, icon: string, iconType: number, color: string, currency: string, initialBalance: string, comment: string, displayOrder: number, visible: boolean, balanceTime?: number, lastReconciledTime?: number, creditCardStatementDate?: number, initialCreditCardLimit?: string, isAsset?: boolean, isLiability?: boolean, subAccounts?: Account[], assetProfile?: AccountAssetProfile) {
+    protected constructor(id: string, name: string, parentId: string, category: number, type: number, icon: string, iconType: number, color: string, currency: string, initialBalance: string, comment: string, displayOrder: number, visible: boolean, balanceTime?: number, lastReconciledTime?: number, creditCardStatementDate?: number, initialCreditCardLimit?: string, isAsset?: boolean, isLiability?: boolean, subAccounts?: Account[], assetProfile?: AccountAssetProfile, currencyEditable = false) {
         this.assetProfile = JSON.parse(JSON.stringify(assetProfile || {}));
         this.id = id;
         this.name = name;
@@ -52,6 +56,7 @@ export class Account implements AccountInfoResponse {
         this.iconType = iconType;
         this.color = color;
         this.currency = currency;
+        this.currencyEditable = currencyEditable;
         this.balanceTime = balanceTime;
         this.lastReconciledTime = lastReconciledTime;
         this.comment = comment;
@@ -223,6 +228,7 @@ export class Account implements AccountInfoResponse {
         this.iconType = other.iconType;
         this.color = other.color;
         this.currency = other.currency;
+        this.currencyEditable = other.currencyEditable;
         this.balanceTime = other.balanceTime;
         this.lastReconciledTime = other.lastReconciledTime;
         this.comment = other.comment;
@@ -317,7 +323,7 @@ export class Account implements AccountInfoResponse {
             icon: this.icon,
             iconType: this.iconType,
             color: this.color,
-            currency: (parentAccount && (!this.id || this.id === '0')) || (!parentAccount && this.category === AccountCategory.CreditCard.type) ? this.currency : undefined,
+            currency: (parentAccount && (!this.id || this.id === '0')) || (!parentAccount && (this.category === AccountCategory.CreditCard.type || this.currencyEditable)) ? this.currency : undefined,
             balance: parentAccount && (!this.id || this.id === '0') ? this.balance : undefined,
             balanceTime: parentAccount && (!this.id || this.id === '0') ? this.balanceTime : undefined,
             lastReconciledTime: this.lastReconciledTime,
@@ -480,7 +486,7 @@ export class Account implements AccountInfoResponse {
             this.isAsset,
             this.isLiability,
             undefined,
-            this.assetProfile
+            this.assetProfile, this.currencyEditable
         );
     }
 
@@ -506,7 +512,7 @@ export class Account implements AccountInfoResponse {
             this.isAsset,
             this.isLiability,
             typeof(this.subAccounts) !== 'undefined' ? Account.cloneAccounts(this.subAccounts) : undefined,
-            this.assetProfile);
+            this.assetProfile, this.currencyEditable);
     }
 
     public createNewSubAccount(currency: string, balanceTime: number): Account {
@@ -575,7 +581,7 @@ export class Account implements AccountInfoResponse {
             accountResponse.isAsset,
             accountResponse.isLiability,
             accountResponse.subAccounts ? Account.ofMulti(accountResponse.subAccounts) : undefined,
-            accountResponse.assetProfile
+            accountResponse.assetProfile, accountResponse.currencyEditable
         );
     }
 
@@ -747,6 +753,7 @@ export interface AccountUpdateLastReconciledTimeRequest {
 }
 
 export interface AccountInfoResponse {
+    readonly currencyEditable?: boolean;
     assetProfile?: AccountAssetProfile;
     readonly id: string;
     readonly name: string;

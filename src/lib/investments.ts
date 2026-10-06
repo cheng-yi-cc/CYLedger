@@ -18,7 +18,7 @@ export const investments = {
     accounts: () => request<InvestmentAccount[]>('get', 'investments/accounts'),
     createAccount: (name: string, kind: string) => request<InvestmentAccount>('post', 'investments/accounts', { name, kind }),
     updateAccount: (data:InvestmentAccount) => request<InvestmentAccount>('post','investments/accounts/update',data),
-    createCryptoAccount: (data: { name:string; kind:string; platform:string; bookId:string; holdings:{instrumentId:string;quantity:string}[] }, key:string) => request<InvestmentAccount>('post', 'investments/accounts/crypto',data,key),
+    createCryptoAccount: (data: { name:string; kind:string; platform:string; bookId:string; currency?:string; paymentInstruments?:string[]; holdings:{instrumentId:string;quantity:string}[] }, key:string) => request<InvestmentAccount>('post', 'investments/accounts/crypto',data,key),
     conversion: (data:ConversionInput) => request<InvestmentConversion>('post','investments/conversion',data,undefined,45000),
     instruments: () => request<Instrument[]>('get', 'investments/instruments'),
     createInstrument: (data: { name: string; symbol: string; type: string } & Partial<InstrumentBinding>) => request<Instrument>('post', 'investments/instruments', data),
@@ -36,7 +36,7 @@ export const investments = {
     voidEvent: (data: InvestmentEvent) => request<InvestmentEvent>('post', `investments/events/${encodeURIComponent(data.id)}/void`, { version: data.version }),
     summary: () => request<WealthSummary>('get', 'wealth/summary'),
     history: () => request<WealthSnapshot[]>('get', 'wealth/history'),
-    manualQuote: (instrumentId: string, price: string, asOf: number) => request<unknown>('post', 'investments/quotes/manual', { instrumentId, price, asOf }),
+    manualQuote: (instrumentId: string, price: string, asOf: number, currency: 'CNY' | 'USD' = 'CNY') => request<unknown>('post', 'investments/quotes/manual', { instrumentId, price, asOf, currency }),
     automaticQuote: (instrumentId: string) => request<unknown>('post', 'investments/quotes/manual', { instrumentId, automatic: true }),
     export: () => request<string>('get', 'investments/export')
 };

@@ -7,6 +7,7 @@ import { DEFAULT_ICON_COLOR, DEFAULT_ACCOUNT_COLOR, DEFAULT_CATEGORY_COLOR, DEFA
 
 import { isNumber } from '@/lib/common.ts';
 import services from '@/lib/services.ts';
+import { bankLogo } from '@/lib/banks.ts';
 
 type IconItemStyleName = string;
 type IconItemStyleValue = ColorValue | string | number | undefined;
@@ -23,6 +24,7 @@ export interface CommonIconProps {
 
 export function useItemIconBase(props: CommonIconProps) {
     const customIconUrl = computed<string | undefined>(() => {
+        if (props.iconType === 'account') return bankLogo(props.iconId);
         if (props.iconType !== 'user-custom') {
             return undefined;
         }

@@ -42,19 +42,20 @@ type WealthCashAccount struct {
 	FX                *marketquotes.FXRate `json:"fx,omitempty"`
 }
 type WealthSummary struct {
-	BaseCurrency    string              `json:"baseCurrency"`
-	NetAssets       *string             `json:"netAssets"`
-	ValuedAssets    string              `json:"valuedAssets"`
-	CashAssets      string              `json:"cashAssets"`
-	InvestmentValue string              `json:"investmentValue"`
-	Liabilities     string              `json:"liabilities"`
-	MissingPrices   int                 `json:"missingPrices"`
-	StalePrices     int                 `json:"stalePrices"`
-	UnrealizedPNL   *string             `json:"unrealizedPnl"`
-	RealizedPNL     *string             `json:"realizedPnl"`
-	CostComplete    bool                `json:"costComplete"`
-	CashAccounts    []WealthCashAccount `json:"cashAccounts"`
-	Positions       []ValuedPosition    `json:"positions"`
+	FXRates         []marketquotes.FXRate `json:"fxRates"`
+	BaseCurrency    string                `json:"baseCurrency"`
+	NetAssets       *string               `json:"netAssets"`
+	ValuedAssets    string                `json:"valuedAssets"`
+	CashAssets      string                `json:"cashAssets"`
+	InvestmentValue string                `json:"investmentValue"`
+	Liabilities     string                `json:"liabilities"`
+	MissingPrices   int                   `json:"missingPrices"`
+	StalePrices     int                   `json:"stalePrices"`
+	UnrealizedPNL   *string               `json:"unrealizedPnl"`
+	RealizedPNL     *string               `json:"realizedPnl"`
+	CostComplete    bool                  `json:"costComplete"`
+	CashAccounts    []WealthCashAccount   `json:"cashAccounts"`
+	Positions       []ValuedPosition      `json:"positions"`
 }
 
 type wealthObservation struct {
@@ -64,6 +65,16 @@ type wealthObservation struct {
 }
 
 func decimalPointer(d decimal.Decimal) *string { v := d.String(); return &v }
+
+func withValuationFX(q InvestmentValuationQuote, rates map[string]marketquotes.FXRate) InvestmentValuationQuote {
+	q.FXRate, q.FXDate, q.FXSource, q.FXState, q.FXReceivedAt = "", "", "", "", 0
+	if q.Currency == "CNY" {
+		q.FXRate = "1"
+	} else if fx, ok := rates[q.Currency]; ok {
+		q.FXRate, q.FXDate, q.FXSource, q.FXState, q.FXReceivedAt = fx.Rate, fx.Date, fx.Source, fx.State, fx.ReceivedAt
+	}
+	return q
+}
 
 func (s *InvestmentService) quotesInSession(sess *xorm.Session, uid int64) ([]InvestmentValuationQuote, error) {
 	quotes := make([]marketquotes.Quote, 0)
@@ -102,17 +113,7 @@ func (s *InvestmentService) quotesInSession(sess *xorm.Session, uid int64) ([]In
 	}
 	result := make([]InvestmentValuationQuote, 0, len(quotes))
 	for _, q := range quotes {
-		v := InvestmentValuationQuote{Quote: q}
-		if fx, ok := fxByCurrency[q.Currency]; ok {
-			v.FXRate = fx.Rate
-			v.FXDate = fx.Date
-			v.FXSource = fx.Source
-			v.FXState = fx.State
-			v.FXReceivedAt = fx.ReceivedAt
-		} else if q.Currency == "CNY" {
-			v.FXRate = "1"
-		}
-		result = append(result, v)
+		result = append(result, withValuationFX(InvestmentValuationQuote{Quote: q}, fxByCurrency))
 	}
 	var manual []models.InvestmentQuote
 	if err := sess.Where("uid=?", uid).Find(&manual); err != nil {
@@ -123,6 +124,9 @@ func (s *InvestmentService) quotesInSession(sess *xorm.Session, uid int64) ([]In
 		if err := json.Unmarshal([]byte(row.Payload), &q); err != nil {
 			return nil, err
 		}
+		// The manual unit price remains in its original currency. Live valuation
+		// uses the latest FX; historical rebuilds use the FX saved in snapshots.
+		q = withValuationFX(q, fxByCurrency)
 		found := false
 		for i, auto := range result {
 			if auto.InstrumentID == q.InstrumentID {
@@ -142,7 +146,13 @@ func (s *InvestmentService) Quotes(c core.Context, uid int64) ([]InvestmentValua
 	defer sess.Close()
 	return s.quotesInSession(sess, uid)
 }
-func (s *InvestmentService) ManualQuote(c core.Context, uid int64, id, price string, asOf int64) (any, error) {
+func (s *InvestmentService) ManualQuote(c core.Context, uid int64, id, price string, asOf int64, currency string) (any, error) {
+	if currency == "" {
+		currency = "CNY" // Existing API clients and saved CNY quotes keep their meaning.
+	}
+	if currency != "CNY" && currency != "USD" {
+		return nil, investmentError("手动报价仅支持人民币或美元")
+	}
 	if asOf <= 0 || asOf > time.Now().Unix()+60 {
 		return nil, investmentError("请填写有效的报价时间")
 	}
@@ -160,6 +170,9 @@ func (s *InvestmentService) ManualQuote(c core.Context, uid int64, id, price str
 	found := false
 	for _, v := range instruments {
 		if v.Id == id {
+			if currency == "USD" && v.Type != "CRYPTO" {
+				return nil, investmentError("仅加密货币支持美元手动报价")
+			}
 			found = true
 			break
 		}
@@ -167,7 +180,10 @@ func (s *InvestmentService) ManualQuote(c core.Context, uid int64, id, price str
 	if !found {
 		return nil, investmentError("资产不存在")
 	}
-	q := InvestmentValuationQuote{Quote: marketquotes.Quote{InstrumentID: id, Price: d.String(), Currency: "CNY", Source: "手动估值", SourceTime: asOf, ReceivedAt: time.Now().Unix(), State: "manual"}, FXRate: "1"}
+	q := InvestmentValuationQuote{Quote: marketquotes.Quote{InstrumentID: id, Price: d.String(), Currency: currency, Source: "手动估值", SourceTime: asOf, ReceivedAt: time.Now().Unix(), State: "manual"}}
+	if currency == "CNY" {
+		q.FXRate = "1"
+	}
 	payload, _ := json.Marshal(q)
 	defer s.lock(uid)()
 	err = s.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
@@ -192,6 +208,7 @@ func (s *InvestmentService) RemoveManualQuote(c core.Context, uid int64, id stri
 
 func buildWealth(result *investments.Result, cash []models.Account, quotes []InvestmentValuationQuote, fxs []marketquotes.FXRate) *WealthSummary {
 	out := &WealthSummary{BaseCurrency: "CNY", CostComplete: true, RealizedPNL: result.RealizedPNL, CashAccounts: make([]WealthCashAccount, 0), Positions: make([]ValuedPosition, 0)}
+	out.FXRates = append([]marketquotes.FXRate{}, fxs...)
 	quoteMap := map[string]InvestmentValuationQuote{}
 	for _, q := range quotes {
 		quoteMap[q.InstrumentID] = q

@@ -8,6 +8,8 @@
 - 新接口所有数量、金额、价格和汇率均为十进制字符串。输入先限制格式和长度，再交给十进制库；禁止浮点参与成本运算。
 - 未知成本、缺失报价或历史汇率保持未知，不能当成零。普通估值行情不能生成收入或修改持仓数量；用户显式绑定的货币基金自动收益由 `pkg/services/monetary_income.go` 独立逐日结算，万份收益不得当作净值。
 - 系统结算账户必须在旧接口、批量操作、账户合并、普通列表和资产汇总中受保护。
+- 钱包收支复用投资事件，在同一事务更新实际币种持仓及一笔人民币统计账单；系统账单不重复计入资产，原币展示来自原事件，禁止普通账单接口单独改删。账户单位切换不得重写历史币种，普通资金账户须由 `account_currency.go` 复核可改条件。
+- 稳定币每枚约 1 美元只能用于可修改的收付数量预填，不能作为行情或历史汇率；手动价格保留原币，历史快照重建沿用原有价格与汇率。
 - 不记录密钥或完整财务数据，不把 `.runtime`、`runtime`、备份和测试令牌提交到仓库。
 - 报销到账、债务本金/利息、余额校准、分期费用与定存收益必须在对应服务中原子提交并防重；定存和分期不能再次增加本金，普通行情不能驱动这些入账。
 - `Account.Extend.AssetProfile` 只存展示与账户规则，不维护第二份余额；新增表模型为 `Book`、`CalendarEvent`、`AssetPresentation`、`ReimbursementReceipt`、`AssetAdjustment`、`DebtMovement`、`CreditInstallment`、`FixedDeposit`、`MonetaryIncomeBinding`、`MonetaryIncomeDay`、`StatisticsBudget`、`StatisticsNote`、`StatisticsPreference`、`LocalLedgerItem`，与投资模型统一在 `cmd/database.go` 注册。

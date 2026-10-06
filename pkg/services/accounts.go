@@ -471,6 +471,23 @@ func (s *AccountService) ModifyAccounts(c core.Context, mainAccount *models.Acco
 			updateColumns := []string{"name", "display_order", "category", "icon", "icon_type", "color", "comment", "extend", "hidden", "updated_unix_time"}
 
 			if updateMainAccountCurrency && account.AccountId == mainAccount.AccountId {
+				var current models.Account
+				// Acquire a write lock before deciding whether the original unit is unused.
+				if _, err := sess.ID(account.AccountId).Where("uid=?", account.Uid).SetExpr("updated_unix_time", "updated_unix_time").Update(&models.Account{}); err != nil {
+					return err
+				}
+				if _, err := sess.ID(account.AccountId).Where("uid=?", account.Uid).Get(&current); err != nil {
+					return err
+				}
+				if current.Type == models.ACCOUNT_TYPE_SINGLE_ACCOUNT && current.Currency != account.Currency {
+					allowed, err := accountCurrencyEditable(sess, &current)
+					if err != nil {
+						return err
+					}
+					if !allowed {
+						return investmentError("该账户已有余额、历史记录或金额规则，不能更改原币种")
+					}
+				}
 				updateColumns = append(updateColumns, "currency")
 			}
 

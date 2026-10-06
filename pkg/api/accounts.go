@@ -125,6 +125,10 @@ func (a *AccountsApi) AccountGetHandler(c *core.WebContext) (any, *errs.Error) {
 
 	for i := 0; i < len(accountAndSubAccounts); i++ {
 		accountResp := accountAndSubAccounts[i].ToAccountInfoResponse()
+		accountResp.CurrencyEditable, err = a.accounts.CurrencyEditable(c, accountAndSubAccounts[i])
+		if err != nil {
+			return nil, errs.Or(err, errs.ErrOperationFailed)
+		}
 		accountRespMap[accountResp.Id] = accountResp
 	}
 
@@ -452,7 +456,10 @@ func (a *AccountsApi) AccountModifyHandler(c *core.WebContext) (any, *errs.Error
 		}
 
 		if accountModifyReq.Currency != nil && mainAccount.Currency != *accountModifyReq.Currency {
-			return nil, errs.ErrNotSupportedChangeCurrency
+			if *accountModifyReq.Currency == core.AccountCurrencyNotSetValue {
+				return nil, errs.ErrAccountCurrencyInvalid
+			}
+			updateMainAccountCurrency = true // Rechecked against current facts inside the transaction.
 		}
 	} else if mainAccount.Type == models.ACCOUNT_TYPE_MULTI_SUB_ACCOUNTS {
 		if len(accountModifyReq.SubAccounts) < 1 {

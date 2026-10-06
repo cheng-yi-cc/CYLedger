@@ -441,6 +441,7 @@ type TransactionGeoLocationResponse struct {
 
 // TransactionInfoResponse represents a view-object of transaction
 type TransactionInfoResponse struct {
+	Wallet                 *WalletTransactionInfo                   `json:"wallet,omitempty"`
 	TransferFeeAmount      string                                   `json:"transferFeeAmount"`
 	TransferFeeCategoryId  int64                                    `json:"transferFeeCategoryId,string"`
 	TransferFeeParentId    int64                                    `json:"transferFeeParentId,string"`
@@ -473,6 +474,15 @@ type TransactionInfoResponse struct {
 	Comment                string                                   `json:"comment"`
 	GeoLocation            *TransactionGeoLocationResponse          `json:"geoLocation,omitempty"`
 	Editable               bool                                     `json:"editable"`
+}
+
+type WalletTransactionInfo struct {
+	AccountID    string `json:"accountId"`
+	AccountName  string `json:"accountName"`
+	Currency     string `json:"currency"`
+	Amount       string `json:"amount"`
+	ExchangeRate string `json:"exchangeRate"`
+	FXDate       string `json:"fxDate"`
 }
 
 // TransactionCountResponse represents transaction count response

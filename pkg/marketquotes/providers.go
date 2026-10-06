@@ -11,7 +11,9 @@ import (
 func (s *Service) coinGeckoLoop(ctx context.Context) {
 	for ctx.Err() == nil {
 		s.refreshCoinGecko(ctx)
-		if !waitContext(ctx, s.config.CoinGeckoInterval) {
+		// Check for newly unavailable primary quotes without spending another
+		// upstream request before the shared fifteen-minute budget allows it.
+		if !waitContext(ctx, 30*time.Second) {
 			return
 		}
 	}
@@ -21,10 +23,11 @@ func (s *Service) refreshCoinGecko(ctx context.Context) {
 	s.mu.Lock()
 	bindings := make([]Binding, 0)
 	seen := make(map[string]bool)
-	// Keyless deployments only poll explicit, verified custom bindings. The
-	// preset fallback remains opt-in through a server-side Demo key.
-	if s.config.CoinGeckoAPIKey != "" {
-		for _, candidate := range instruments {
+	// Public fallback also serves preset assets when Coinbase is unavailable.
+	// Keep refreshing an active fallback, but leave healthy primary feeds alone.
+	for _, candidate := range instruments {
+		quote, exists := s.quotes[candidate.id]
+		if s.config.CoinGeckoAPIKey != "" || !exists || quote.quote.Source == SourceCoinGecko || s.quoteViewLocked(quote).State == StateStale {
 			bindings = append(bindings, Binding{Market: "CRYPTO", Provider: "coingecko", ProviderID: candidate.geckoID, Currency: "USD"})
 			seen[candidate.geckoID] = true
 		}
@@ -56,9 +59,6 @@ func (s *Service) refreshCoinGecko(ctx context.Context) {
 	for _, q := range quotes {
 		// putReferenceQuote only accepts registered public identities.
 		s.putReferenceQuote(q)
-	}
-	if s.config.CoinGeckoAPIKey == "" {
-		return
 	}
 	for _, candidate := range instruments {
 		b := Binding{Provider: "coingecko", ProviderID: candidate.geckoID}

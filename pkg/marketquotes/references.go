@@ -66,6 +66,9 @@ func configureReferenceSources(c *Config) {
 	if c.CoinGeckoSearchURL == "" {
 		c.CoinGeckoSearchURL = "https://api.coingecko.com/api/v3/search"
 	}
+	if c.CoinGeckoCoinURL == "" {
+		c.CoinGeckoCoinURL = "https://api.coingecko.com/api/v3/coins"
+	}
 	if c.HKDFXURL == "" {
 		c.HKDFXURL = "https://api.frankfurter.dev/v2/providers/ecb/rate/hkd/cny"
 	}
@@ -514,22 +517,20 @@ func (s *Service) Resolve(ctx context.Context, b Binding) (*Candidate, error) {
 		}
 		if err == nil {
 			var response struct {
-				Coins []struct {
-					ID     string `json:"id"`
-					Name   string `json:"name"`
-					Symbol string `json:"symbol"`
-				} `json:"coins"`
+				ID     string `json:"id"`
+				Name   string `json:"name"`
+				Symbol string `json:"symbol"`
 			}
 			headers := map[string]string{}
 			if s.config.CoinGeckoAPIKey != "" {
 				headers["x-cg-demo-api-key"] = s.config.CoinGeckoAPIKey
 			}
-			err = s.getJSON(ctx, queryURL(s.config.CoinGeckoSearchURL, url.Values{"query": {b.ProviderID}}), headers, &response)
-			for _, c := range response.Coins {
-				if c.ID == b.ProviderID {
-					item = &Candidate{Binding: b, Name: c.Name, Symbol: strings.ToUpper(c.Symbol), Type: "CRYPTO"}
-					break
-				}
+			// Search matches names and symbols, not stable IDs (BNB's ID is
+			// binancecoin). Verify the exact selected ID through coin metadata.
+			address := strings.TrimRight(s.config.CoinGeckoCoinURL, "/") + "/" + url.PathEscape(b.ProviderID)
+			err = s.getJSON(ctx, queryURL(address, url.Values{"localization": {"false"}, "tickers": {"false"}, "market_data": {"false"}, "community_data": {"false"}, "developer_data": {"false"}}), headers, &response)
+			if response.ID == b.ProviderID && strings.TrimSpace(response.Name) != "" && strings.TrimSpace(response.Symbol) != "" && len(response.Symbol) <= 24 {
+				item = &Candidate{Binding: b, Name: response.Name, Symbol: strings.ToUpper(response.Symbol), Type: "CRYPTO"}
 			}
 		}
 	}

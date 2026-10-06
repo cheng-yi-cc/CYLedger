@@ -155,6 +155,7 @@ func (a *InvestmentsApi) ManualQuote(c *core.WebContext) (any, *errs.Error) {
 	var v struct {
 		InstrumentID string `json:"instrumentId"`
 		Price        string `json:"price"`
+		Currency     string `json:"currency"`
 		AsOf         int64  `json:"asOf"`
 		Automatic    bool   `json:"automatic"`
 	}
@@ -164,7 +165,7 @@ func (a *InvestmentsApi) ManualQuote(c *core.WebContext) (any, *errs.Error) {
 	if v.Automatic {
 		return investmentResponse(true, services.Investments.RemoveManualQuote(c, c.GetCurrentUid(), v.InstrumentID))
 	}
-	return investmentResponse(services.Investments.ManualQuote(c, c.GetCurrentUid(), v.InstrumentID, v.Price, v.AsOf))
+	return investmentResponse(services.Investments.ManualQuote(c, c.GetCurrentUid(), v.InstrumentID, v.Price, v.AsOf, v.Currency))
 }
 func (a *InvestmentsApi) Export(c *core.WebContext) (any, *errs.Error) {
 	return investmentResponse(services.Investments.Export(c, c.GetCurrentUid()))

@@ -2,12 +2,14 @@ package models
 
 // Investment tables keep decimal values in JSON/text, never SQLite floating point.
 type PortfolioAccount struct {
-	Id          string   `xorm:"VARCHAR(64) PK" json:"id"`
-	Uid         int64    `xorm:"INDEX NOT NULL" json:"-"`
-	Name        string   `xorm:"VARCHAR(64) NOT NULL" json:"name"`
-	Kind        string   `xorm:"VARCHAR(32) NOT NULL" json:"kind"`
-	Platform    string   `xorm:"VARCHAR(32)" json:"platform,omitempty"`
-	Instruments []string `xorm:"TEXT" json:"instruments,omitempty"`
+	Id                 string   `xorm:"VARCHAR(64) PK" json:"id"`
+	Uid                int64    `xorm:"INDEX NOT NULL" json:"-"`
+	Name               string   `xorm:"VARCHAR(64) NOT NULL" json:"name"`
+	Kind               string   `xorm:"VARCHAR(32) NOT NULL" json:"kind"`
+	Platform           string   `xorm:"VARCHAR(32)" json:"platform,omitempty"`
+	Instruments        []string `xorm:"TEXT" json:"instruments,omitempty"`
+	Currency           string   `xorm:"VARCHAR(3) NOT NULL DEFAULT 'CNY'" json:"currency"`
+	PaymentInstruments []string `xorm:"TEXT" json:"paymentInstruments"`
 }
 
 type InvestmentInstrument struct {

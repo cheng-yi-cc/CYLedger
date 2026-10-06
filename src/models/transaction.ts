@@ -750,6 +750,7 @@ export interface TransactionReconciliationStatementRequest {
 export type TransactionGeoLocationResponse = Coordinate;
 
 export interface TransactionInfoResponse {
+    readonly wallet?: { accountId: string; accountName: string; currency: string; amount: string; exchangeRate: string; fxDate: string };
     readonly debtDueDate?: string;
     readonly locationName?: string;
     readonly discountAmount?: string;

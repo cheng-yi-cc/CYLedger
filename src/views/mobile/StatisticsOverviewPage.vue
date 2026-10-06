@@ -3,7 +3,7 @@
   <template #fixed><LedgerNavigation active="statistics" /></template>
   <header class="stat-top">
    <nav aria-label="统计周期"><button v-for="tab in periods" :key="tab.id" :aria-pressed="period === tab.id" @click="period = tab.id">{{ tab.name }}</button><button class="stat-more" aria-label="统计更多操作" @click="sheet = 'menu'">⋮</button></nav>
-   <div v-if="period === 'month'" class="stat-date-strip"><button @click="sheet = 'date'">{{ month.slice(0,4) }}⌄</button><button v-for="item in monthChoices" :key="item.value" :aria-pressed="month === item.value" @click="month = item.value">{{ item.label }}</button></div>
+   <div v-if="period === 'month'" class="stat-date-strip"><button aria-label="选择年月" @click="monthDialogOpen = true">{{ month.slice(0,4) }}</button><button v-for="item in monthChoices" :key="item.value" :aria-pressed="month === item.value" @click="month = item.value">{{ item.label }}</button></div>
    <div v-else-if="period === 'year'" class="stat-date-strip"><button :aria-pressed="year === 'all'" @click="year = 'all'">所有</button><button v-for="item in yearChoices" :key="item.value" :aria-pressed="year === item.value" @click="year = item.value">{{ item.label }}</button><button @click="sheet = 'date'">选择年份⌄</button></div>
    <div v-else-if="period === 'custom'" class="stat-custom"><button @click="sheet = 'date'">{{ start }} — {{ end }} <span>日期设置⌄</span></button></div>
    <button v-if="filterActive" class="stat-scope" @click="sheet = 'filters'">{{ books.scopeName }} · 已筛选 ⌄</button>
@@ -45,6 +45,7 @@
    </template>
    <p class="cy-muted stat-center">{{ books.scopeName }} · 人民币 · {{ scope.timeZone }}</p>
   </main>
+  <StatisticsMonthDialog v-model:open="monthDialogOpen" v-model="month" />
   <StatisticsSheet :open="!!sheet" :title="sheetTitle" :compact="sheet === 'menu'" @update:open="value => { if (!value) sheet = ''; }">
    <template #action><button v-if="sheet === 'modules'" :disabled="saving" @click="saveModules">确定</button><button v-else-if="sheet === 'note'" :disabled="saving" @click="saveNote">保存</button></template>
    <p v-if="actionError" class="cy-message" role="alert">{{ actionError }}</p>
@@ -61,14 +62,17 @@
  </f7-page>
 </template>
 <script setup lang="ts">
+import { ref } from 'vue';
 import { f7 } from 'framework7-vue';
 import draggable from 'vuedraggable';
 import BookScope from '@/components/mobile/BookScope.vue';
 import LedgerFilters from '@/components/mobile/LedgerFilters.vue';
 import StatisticsChart from '@/components/mobile/StatisticsChart.vue';
 import StatisticsSheet from '@/components/mobile/StatisticsSheet.vue';
+import StatisticsMonthDialog from '@/components/mobile/StatisticsMonthDialog.vue';
 import LedgerNavigation from '@/components/mobile/LedgerNavigation.vue';
 import { useStatisticsOverview } from '@/lib/use-statistics-overview.ts';
+const monthDialogOpen = ref(false);
 const {books,scope,loading,error,period,month,year,start,end,dailyMode,dailyTagRange,periods,metricKeys,metric,chartKind,primary,flowPrimary,summaryExpanded,rankDetailed,rankMetric,shareMetrics,showAmounts,tagMode,tagSort,heatMetric,tagModes,sheet,saving,actionError,feedback,auxiliaryError,sheetTitle,moduleDraft,noteDraft,visibleModules,monthChoices,yearChoices,range,rangeError,totals,dayCount,periodLabel,filterActive,selectedBucket,cashOption,selectBucket,money,detail,bookName,flowGroups,flowOption,flowUnavailable,pieGroups,pieBreakdown,pieOption,groupLink,ranking,comparisonText,reportUnit,reportSort,reportDescending,allReport,reportColumns,reportRows,shownReport,sortReport,tagRange,tagRows,heatmaps,wealth,wealthError,wealthMetric,historyRows,wealthOption,dailyBudgets,budgetWidth,auxiliaryRows,notePeriod,currentNote,editNote,saveNote,openModules,moveModule,saveModules,setRange,analysisText,copyText,copyNote,exportAnalysis,refresh,statisticsModuleNames,chartColors,metricLabels,ledgerMoney,LedgerDecimal}=useStatisticsOverview();
 function selectGroup(id:string,name:string){const group=pieGroups(id).find(item=>item.name===name);if(group)f7.views.main.router.navigate(groupLink(id,group));}
 </script>

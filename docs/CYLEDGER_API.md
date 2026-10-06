@@ -26,6 +26,33 @@
 `mode` 可选 `manual/schedule/income/balance/asset`，`cycle` 为 `day/week/month/year`；`target` 大于零，`ratio` 在 0–100 之间。`logs` 最多 300 条，金额允许带负号表示取出，手动模式累计不能为负。关键词 `data` 为 `{keywords,categoryId,accountId,tagIds,enabled}`：至少一个关键词、有效分类，账户可为空字符串，标签最多 10 个。引用必须属于当前用户。每种公开类型最多 500 项，`data` 上限 60 KiB；完整 JSON 上限 64 KiB。保存返回分配的 ID 和递增修订号，后续保存/删除必须使用最新修订号。
 
 
+## 加密账户与钱包品牌
+
+`POST /investments/accounts/crypto` 接收 `{name, kind, platform, bookId, holdings:[{instrumentId, quantity}]}`，须携带 `Idempotency-Key`；账户与已有持仓在同一事务保存，重试不能重复增加数量。`kind="WALLET"` 时 `platform` 可省略或传空字符串；选 Bitget Wallet 时为 `bitget-wallet`。`kind="EXCHANGE"` 仍须提供匹配的交易所，Bitget 交易所为 `bitget`。非空的未知品牌或类型不匹配仍被拒绝。
+
+`POST /investments/accounts/update` 提交 `{id,name,kind,platform,instruments}` 及可选的货币/收付设置；钱包品牌采用相同规则，传 `platform=""` 可取消品牌选择。编辑品牌不改变账户类型、已有数量与交易流水；持有中的币种不能移除。
+
+加密账户创建及修改支持 `currency: "CNY" | "USD"` 和 `paymentInstruments: string[]`。旧账户默认人民币；创建时省略币种按人民币，修改时省略则保留原值。付款币种至多两项，顺序为优先/备用，须在账户选择的币种中且不得重复；第一项也是默认收款币种。修改时省略 `paymentInstruments` 保留原设置，传 `[]` 清空默认选择。切换账户货币单位只改变市值显示和新增收支默认值，历史金额及汇率保留。
+
+钱包收支复用 `/investments/events`、`/preview`、`/{id}/revise`、`/{id}/void`，创建须带 `Idempotency-Key`，修订和撤销须带最新 `version`。事件 `type` 为 `INCOME` 或 `EXPENSE`，`amount` 为原币金额（正数、最多两位小数），`exchangeRate` 为原币到人民币的历史汇率；人民币为 `1`。`instrumentId/quantity` 表示第一种实际收付币种，可附 `additionalMovements:[{instrumentId,quantity}]` 表示第二种支出币种，收入只允许一种。须提供 `wallet:{currency,categoryId,fxDate,fxSource}`，日期为 `YYYY-MM-DD`，分类须为对应收支的有效子分类。数量/汇率为受限十进制字符串；`fee="0"`、`cost=null`，无现金账户或兑换结算字段，费用计入实际金额及数量。
+
+收支、币种成本回放、一笔人民币统计账单和快照失效原子完成；修订/撤销同步重建持仓和关联账单。系统统计账户不计入资产余额，普通账单接口不能单独改删这笔关联记录。账单响应附 `wallet:{accountId,accountName,currency,amount,exchangeRate,fxDate}`，从原投资事实解析；人民币统计金额按分四舍五入，前端显示原币金额。`GET /wealth/summary` 的 `fxRates` 提供估值所用汇率，不能据当前行情改写历史收支。
+
+钱包支出示例：将账户、账本、分类和币种 ID 换为当前用户的有效值，先提交 `/investments/events/preview`，确认后用相同内容提交 `/investments/events`，后者携带 `Idempotency-Key`。此例扣除 10 USD24 和 5 USDC，以实际确认的 7.2 汇率生成一笔 108 元支出。
+
+```json
+{
+  "type":"EXPENSE", "accountId":"wallet-id", "bookId":"book-id",
+  "instrumentId":"private-usd24-id", "quantity":"10",
+  "additionalMovements":[{"instrumentId":"crypto:usd-coin","quantity":"5"}],
+  "amount":"15.00", "exchangeRate":"7.2", "fee":"0", "cost":null,
+  "occurredAt":1791162000, "note":"美元消费",
+  "wallet":{"currency":"USD","categoryId":"category-id","fxDate":"2026-10-05","fxSource":"用户确认"}
+}
+```
+
+普通单币账户的 `GET /accounts/get.json` 返回 `currencyEditable`。只有零余额、无任何账单历史（含已删除）、无相关模板/收益绑定/定存或计价金额规则的账户可改币种；共享信用额度的关联账户也锁定。`POST /accounts/modify.json` 在事务内重新校验条件，有历史的账户继续使用原币种。
+
 ## 路由清单
 
 | 方法 | 路径（省略 `/api/v1`） |
@@ -98,7 +125,7 @@
 - 新增账务 API 中金额、数量、价格、汇率和大整数 ID 以字符串传递，例如 `"100.25"`；时间戳为 Unix 秒，业务日期为 `YYYY-MM-DD`，时区为 IANA 名称。旧流水接口仍使用其整数分格式，不能混用。
 - 投资类 JSON 绑定限制请求体 64 KiB；格式/长度验证先于十进制解析。普通资金支持两位小数，投资数量/价格上限为 18 位；不接收指数表示或浮点替代。
 - 返回使用现有成功/错误信封。先处理 HTTP 状态及业务错误，再读取结果；失败不能当作空列表或零余额。
-- 投资创建/修订/撤销及加密账户创建使用 `Idempotency-Key` 请求头；余额校准、报销到账、债务和分期使用请求体 `requestId`。重试保持同一键及同一内容，改内容须创建新请求。
+- 投资事件创建及加密账户创建使用 `Idempotency-Key` 请求头；余额校准、报销到账、债务和分期使用请求体 `requestId`。创建重试保持同一键及同一内容，改内容须创建新请求；事件修订/撤销使用版本比较，不缓存幂等键结果。
 - 投资修订、分期更新、资产偏好及预算/总结/统计偏好使用返回的版本/修订号。冲突后重新读取与预览，不盲目覆盖。
 - `GET /wealth/summary` 可能保存估值快照；`POST */sync` 可能写入到期费用/收益，不能当作无副作用的健康检查。健康检查使用 `/healthz.json`。
 
@@ -138,6 +165,8 @@ Invoke-RestMethod "$ledgerBase/monetary-income/search?q=000198" -Headers $ledger
 
 必须先搜索、核对实际基金并由用户明确绑定。仅人民币可用资金账户允许绑定。`bookId`、`categoryId` 可省略；首次使用有效默认值，后续收益继承前一条记录。暂停/解绑使用 `POST /monetary-income/pause` 的 `accountId`，保留历史流水与逐日防重。同步接收 `accountId` 和可选 `force`，缺数据时等待，不能绕过防重。
 
+`GET /monetary-income/search` 无法访问公开数据源时返回 HTTP 502、`errorCode=224004` 和中文重试提示。限定基金域名优先使用应用内 HTTPS 解析；经数据源确认的货币基金身份缓存 10 分钟，可用于紧随其后的绑定核验，过期后必须重新查询。具体边界见[行情模块](../pkg/marketquotes/README.md)。
+
 
 ## 资产写入字段
 
@@ -157,9 +186,13 @@ Invoke-RestMethod "$ledgerBase/monetary-income/search?q=000198" -Headers $ledger
 
 ## 投资、账本与历史
 
-投资先调用 `/investments/events/preview` 核对持仓/资金效果，再按相同事实提交；预览不落账。修订/撤销使用路径中的事件 ID、原版本和新的幂等键。字段定义为 `services.InvestmentEvent` 内嵌的 `investments.Event`，并带 `cashAccountId`、`bookId` 和可选转换快照。
+投资先调用 `/investments/events/preview` 核对持仓/资金效果，再按相同事实提交；预览不落账。修订/撤销使用路径中的事件 ID 和已读 `version`；重复提交旧版本返回冲突，遇到未知提交结果应先读取当前事件及修订号。字段定义为 `services.InvestmentEvent` 内嵌的 `investments.Event`，并带 `cashAccountId`、`bookId` 和可选转换快照。
+
+手动加密资产通过 `POST /investments/instruments` 提交 `{name,symbol,type:"CRYPTO"}`，省略公开行情绑定字段。名称最多 64 字、显示代码最多 24 个 UTF-8 字节；返回当前用户独立的资产 ID，不按同名代码自动合并或获取行情，再以此 ID 录入持有数量和手动价格。
 
 加密参考兑换 `/investments/conversion` 保存 120 秒有效快照，实际到账可手动修正；过期/不匹配报价不得成为有效历史汇率。缺成本、价格或历史汇率不返回虚构零值。
+
+手动报价 `POST /investments/quotes/manual` 接收 `{instrumentId, price, currency, asOf}`。`price` 为大于零的十进制字符串，`asOf` 为源报价时间；`currency` 为 `CNY` 或 `USD`，省略/空串按 `CNY` 兼容旧客户端，`USD` 仅用于加密资产。私人报价保存原币价格，当前估值读取最新缓存的美元/人民币汇率，保留实际日期、来源和过期状态；缺汇率时仍可保存美元报价，但人民币金额未知。历史快照继续保存当时价格和汇率，历史事实修订后的重建不使用当前汇率。`{instrumentId, automatic:true}` 删除手动覆盖，恢复已有自动来源；没有自动来源时保持未知。
 
 `books/move` 移动流水归属，最多 1000 笔，转账双边同步且不改余额；投资结算不通过普通批量移动修改。归档账本只供查询，成本回放始终包含全部有效历史。
 

@@ -23,6 +23,15 @@ func (s *Service) SearchMonetaryFunds(ctx context.Context, query string) ([]Cand
 	if utf8.RuneCountInString(query) < 2 || len(query) > 100 {
 		return nil, errors.New("请输入基金代码或至少两个字的名称")
 	}
+	key := strings.ToLower(query)
+	// A selected public catalogue result remains valid for the following save.
+	// This caches identities only, never yields, prices, or account data.
+	s.monetarySearchMu.Lock()
+	cached, ok := s.monetarySearchCache[key]
+	s.monetarySearchMu.Unlock()
+	if ok && s.config.Now().Sub(cached.at) < 10*time.Minute {
+		return append([]Candidate{}, cached.items...), nil
+	}
 	var response fundSearchResponse
 	if err := s.getJSON(ctx, queryURL(s.config.FundSearchURL, url.Values{"m": {"1"}, "key": {query}}), nil, &response); err != nil {
 		return nil, err
@@ -34,6 +43,21 @@ func (s *Service) SearchMonetaryFunds(ctx context.Context, query string) ([]Cand
 	for _, f := range response.Data {
 		if f.Category == 700 && f.Info != nil && f.Info.Type == "005" && f.Code == f.Info.Code && sixDigits.MatchString(f.Code) && f.Name != "" {
 			items = append(items, Candidate{Binding: Binding{Market: "CN_FUND", Provider: "eastmoney", ProviderID: f.Code, Currency: "CNY"}, Symbol: f.Code, Name: f.Name, Type: "MONETARY_FUND"})
+		}
+		if len(items) >= 50 {
+			break
+		}
+	}
+	if len(items) > 0 {
+		s.monetarySearchMu.Lock()
+		defer s.monetarySearchMu.Unlock()
+		if len(s.monetarySearchCache)+len(items)+1 > 200 {
+			s.monetarySearchCache = make(map[string]searchEntry)
+		}
+		now := s.config.Now()
+		s.monetarySearchCache[key] = searchEntry{items: append([]Candidate{}, items...), at: now}
+		for _, item := range items {
+			s.monetarySearchCache[item.ProviderID] = searchEntry{items: []Candidate{item}, at: now}
 		}
 	}
 	return items, nil

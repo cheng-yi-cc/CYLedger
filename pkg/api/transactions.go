@@ -1158,6 +1158,13 @@ func (a *TransactionsApi) TransactionGetHandler(c *core.WebContext) (any, *errs.
 	transactionEditable := transaction.IsEditable(user, clientTimezone, accountMap[transaction.AccountId], accountMap[transaction.RelatedAccountId])
 	transactionTagIds := allTransactionTagIds[transaction.TransactionId]
 	transactionResp := transaction.ToTransactionInfoResponse(transactionTagIds, transactionEditable)
+	if transaction.InvestmentEventId != "" {
+		wallets, err := services.Investments.WalletTransactionDetails(c, uid, []string{transaction.InvestmentEventId})
+		if err != nil {
+			return nil, errs.Or(err, errs.ErrOperationFailed)
+		}
+		transactionResp.Wallet = wallets[transaction.InvestmentEventId]
+	}
 
 	if !transactionGetReq.TrimAccount {
 		if sourceAccount := accountMap[transaction.AccountId]; sourceAccount != nil {
@@ -3164,6 +3171,16 @@ func (a *TransactionsApi) getTransactionUsedAccounts(c *core.WebContext, uid int
 
 func (a *TransactionsApi) getTransactionResponseListResult(c *core.WebContext, user *models.User, transactions []*models.Transaction, allAccounts map[int64]*models.Account, categoryMap map[int64]*models.TransactionCategory, tagMap map[int64]*models.TransactionTag, allTransactionTagIds map[int64][]int64, pictureInfoMap map[int64][]*models.TransactionPictureInfo, clientTimezone *time.Location, withPictures bool, trimAccount bool, trimCategory bool, trimTag bool) (models.TransactionInfoResponseSlice, error) {
 	result := make(models.TransactionInfoResponseSlice, len(transactions))
+	eventIDs := []string{}
+	for _, tx := range transactions {
+		if tx.InvestmentEventId != "" && (tx.Type == models.TRANSACTION_DB_TYPE_INCOME || tx.Type == models.TRANSACTION_DB_TYPE_EXPENSE) {
+			eventIDs = append(eventIDs, tx.InvestmentEventId)
+		}
+	}
+	wallets, err := services.Investments.WalletTransactionDetails(c, user.Uid, eventIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	for i := 0; i < len(transactions); i++ {
 		transaction := transactions[i]
@@ -3175,6 +3192,7 @@ func (a *TransactionsApi) getTransactionResponseListResult(c *core.WebContext, u
 		transactionEditable := transaction.IsEditable(user, clientTimezone, allAccounts[transaction.AccountId], allAccounts[transaction.RelatedAccountId])
 		transactionTagIds := allTransactionTagIds[transaction.TransactionId]
 		result[i] = transaction.ToTransactionInfoResponse(transactionTagIds, transactionEditable)
+		result[i].Wallet = wallets[transaction.InvestmentEventId]
 
 		if !trimAccount {
 			if sourceAccount := allAccounts[transaction.AccountId]; sourceAccount != nil {

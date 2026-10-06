@@ -10,11 +10,20 @@
       <label v-if="mode!=='cash'">转出币种<select v-model="fromCoin" required><option disabled value="">暂无可转出持仓</option><option v-for="c in sourceCoins" :key="c.id" :value="c.id">{{ c.symbol }} · {{ c.name }}</option></select></label>
       <div class="available"><span>可用 {{ available }} {{ mode==='cash'?'CNY':symbol(fromCoin) }}</span><button v-if="fromCoin && mode!=='cash'" type="button" @click="amount=available">全部</button></div>
      </template>
-     <label class="amount-label">{{ mode==='opening'?'持有数量':mode==='cash'?'实际付款（元）':`转出数量（${symbol(fromCoin)}）` }}<input v-model="amount" required inputmode="decimal" autocomplete="off" placeholder="0" aria-label="转出金额或数量" class="amount-input" /></label>
+     <label v-if="mode!=='cash'" class="amount-label">{{ mode==='opening'?'持有数量':`转出数量（${symbol(fromCoin)}）` }}<input v-model="amount" required inputmode="decimal" autocomplete="off" placeholder="0" aria-label="转出金额或数量" class="amount-input" /></label>
     </section>
     <section class="cy-panel">
      <label v-if="mode!=='opening'">{{ mode==='redeem'?'收款账户':'转入账户' }}<select v-model="toAccount" required><option disabled value="">选择账户</option><option v-for="a in destinationAccounts" :key="a.id" :value="a.id">{{ a.name }}</option></select></label>
      <label v-if="mode!=='redeem'">{{ mode==='opening'?'币种':'转入币种' }}<select v-model="toCoin" required :disabled="mode==='transfer'"><option v-for="c in targetCoins" :key="c.id" :value="c.id">{{ c.symbol }} · {{ c.name }}</option></select></label>
+     <template v-if="mode==='cash'">
+      <div class="cash-entry-modes" role="group" aria-label="买入计算方式"><button type="button" :aria-pressed="cashEntryMode==='amount'" @click="changeCashEntryMode('amount')">按付款金额</button><button type="button" :aria-pressed="cashEntryMode==='quantity'" @click="changeCashEntryMode('quantity')">按买入数量</button></div>
+      <label v-if="cashEntryMode==='amount'">实际付款（元）<input v-model="amount" required inputmode="decimal" autocomplete="off" placeholder="填写实际支付金额" aria-label="实际付款金额" /></label>
+      <label v-else>买入数量（{{ symbol(toCoin) }}）<input v-model="received" required inputmode="decimal" autocomplete="off" placeholder="填写买入数量" aria-label="买入数量" /></label>
+      <label>买入单价（元 / {{ symbol(toCoin) }}）<input v-model="buyPrice" required inputmode="decimal" autocomplete="off" placeholder="填写广告或实际成交单价" aria-label="买入单价" /></label>
+      <label v-if="cashEntryMode==='amount'">买入数量（{{ symbol(toCoin) }}，自动计算）<input :value="cashPurchase?.quantity || ''" readonly placeholder="付款金额 ÷ 买入单价" aria-label="自动计算买入数量" /></label>
+      <label v-else>实际付款（元，自动计算）<input :value="cashPurchase?.amount || ''" readonly placeholder="买入数量 × 买入单价" aria-label="自动计算付款金额" /></label>
+      <p class="hint">{{ cashEntryMode==='amount'?'按填写的单价计算数量，最多保留 18 位小数，超出部分舍去。':'按填写的单价计算付款金额，四舍五入到分，买入数量保持不变。' }}</p>
+     </template>
      <template v-if="needsQuote"><label>实际到账（{{ mode==='redeem'?'元':symbol(toCoin) }}）<input v-model="received" @input="receivedEdited=true" required inputmode="decimal" autocomplete="off" placeholder="填写实收，或使用参考换算" aria-label="实际到账" /></label>
       <div class="quote-line"><span v-if="quoteLoading" role="status">正在获取参考行情…</span><span v-else-if="quote">1 {{ mode==='cash'?'CNY':symbol(fromCoin) }} ≈ {{ rate }} {{ mode==='redeem'?'CNY':symbol(toCoin) }}</span><span v-else>可直接填写实际到账</span><button type="button" :disabled="quoteLoading || !amount" @click="refreshQuote">参考换算</button></div>
       <p v-if="quoteError" class="hint" role="status">行情暂不可用，仍可按实际成交记账。</p><p v-else-if="quote" class="hint">{{ quoteTime }} · 参考换算，可按实收修改。</p>
@@ -37,7 +46,7 @@ import moment from 'moment-timezone';
 import { investments, investmentError } from '@/lib/investments.ts';
 import { isCryptoAccount } from '@/lib/crypto-platforms.ts';
 import { LedgerDecimal } from '@/lib/ledger-display.ts';
-import { cryptoInput, heldCryptoCoins, defaultCryptoCoin, receivedAfterQuote, buildCryptoEvent, type CryptoMode } from '@/lib/crypto-entry.ts';
+import { cryptoInput, heldCryptoCoins, defaultCryptoCoin, receivedAfterQuote, calculateCashPurchase, buildCryptoEvent, type CryptoMode, type CashEntryMode } from '@/lib/crypto-entry.ts';
 import { generateRandomUUID } from '@/lib/misc.ts';
 import { useBooksStore } from '@/stores/books.ts';
 import { useTransactionsStore } from '@/stores/transaction.ts';
@@ -47,9 +56,11 @@ import CryptoCoinSearch from '@/components/mobile/CryptoCoinSearch.vue';
 const props=defineProps<{f7route:Router.Route;f7router:Router.Router}>();
 const mode=computed<CryptoMode>(()=>{const value=props.f7route.query['mode'] || '';return ['cash','coin','redeem','transfer','opening'].includes(value)?value as CryptoMode:'cash';});
 const title=computed(()=>({cash:'人民币买币',coin:'币币兑换',redeem:'卖币到账',transfer:'转移币种',opening:'录入已有持仓'}[mode.value]));
-const needsQuote=computed(()=>['cash','coin','redeem'].includes(mode.value));
+const needsQuote=computed(()=>['coin','redeem'].includes(mode.value));
 const accounts=ref<InvestmentAccount[]>([]), coins=ref<Instrument[]>([]), summary=ref<WealthSummary>();
 const fromAccount=ref(''), toAccount=ref(''), fromCoin=ref(''), toCoin=ref('crypto:tether'), amount=ref(''), received=ref(''), bookId=ref(''), note=ref(''), zone=ref('Asia/Shanghai');
+const cashEntryMode=ref<CashEntryMode>('amount'),buyPrice=ref('');
+const cashPurchase=computed(()=>{if(mode.value!=='cash')return undefined;try{return calculateCashPurchase(cashEntryMode.value,amount.value,received.value,buyPrice.value);}catch{return undefined;}});
 const quote=ref<InvestmentConversion>(), receivedEdited=ref(false), busy=ref(false), quoteLoading=ref(false), error=ref(''), loadError=ref(''), quoteError=ref(''), errorElement=ref<HTMLElement>(), initialized=ref(false);
 const books=useBooksStore(); let active=true, sequence=0, timer:ReturnType<typeof setTimeout>|undefined, pending:InvestmentEvent|null=null, requestKey='', pendingSignature='';
 const cashAccounts=computed(()=>summary.value?.cashAccounts.filter(a=>a.currency==='CNY') || []);
@@ -63,6 +74,7 @@ const rate=computed(()=>quote.value?new LedgerDecimal(quote.value.fromPrice).div
 const quoteTime=computed(()=>quote.value?moment.unix(quote.value.observedAt).tz(zone.value).format('HH:mm:ss'):'');
 function symbol(id:string):string{return coins.value.find(c=>c.id===id)?.symbol || '—';}
 function addCoin(coin:Instrument):void { if(!coins.value.some(c=>c.id===coin.id)) coins.value.push(coin); toCoin.value=coin.id; }
+function changeCashEntryMode(value:CashEntryMode):void{if(value===cashEntryMode.value)return;const current=cashPurchase.value;if(current){amount.value=current.amount;received.value=current.quantity;}cashEntryMode.value=value;}
 async function load():Promise<void> {
  active=true; busy.value=true; loadError.value='';
  try {
@@ -84,17 +96,18 @@ async function load():Promise<void> {
  } catch(cause) { loadError.value=investmentError(cause); } finally { busy.value=false; }
 }
 watch(fromAccount,()=>{
- if(!initialized.value)return; fromCoin.value=defaultCryptoCoin(sourceCoins.value,fromCoin.value);
+ if(!initialized.value || mode.value==='cash')return; fromCoin.value=defaultCryptoCoin(sourceCoins.value,fromCoin.value);
  if(mode.value==='transfer'&&toAccount.value===fromAccount.value)toAccount.value=destinationAccounts.value[0]?.id || '';
 });
 watch([amount,fromCoin,toCoin,fromAccount,toAccount],()=>{
  quote.value=undefined; quoteError.value=''; sequence++; quoteLoading.value=false; clearTimeout(timer);
- if(!receivedEdited.value)received.value='';
+ if(mode.value!=='cash'&&!receivedEdited.value)received.value='';
  if(mode.value==='transfer'&&toCoin.value!==fromCoin.value)toCoin.value=fromCoin.value;
  if(mode.value==='coin'&&toCoin.value===fromCoin.value)toCoin.value=targetCoins.value[0]?.id || '';
  try { cryptoInput(amount.value,mode.value==='cash'?2:18); if(active&&needsQuote.value)timer=setTimeout(()=>void refreshQuote(),650); } catch { /* Wait for a complete input before requesting a quote. */ }
 });
 watch([fromCoin,toCoin],()=>{receivedEdited.value=false; received.value='';});
+watch(toCoin,()=>{buyPrice.value='';});
 async function refreshQuote():Promise<void> {
  clearTimeout(timer); const version=++sequence; quote.value=undefined; quoteError.value='';
  if(!needsQuote.value || !amount.value || busy.value)return;
@@ -108,7 +121,7 @@ async function refreshQuote():Promise<void> {
 async function save():Promise<void> {
  if(busy.value || !initialized.value)return; busy.value=true; error.value=''; clearTimeout(timer); sequence++; quoteLoading.value=false;
  try {
-  const draft={mode:mode.value,fromAccount:fromAccount.value,toAccount:toAccount.value,fromCoin:fromCoin.value,toCoin:toCoin.value,amount:amount.value,received:received.value,bookId:bookId.value,note:note.value};
+  const draft={mode:mode.value,fromAccount:fromAccount.value,toAccount:toAccount.value,fromCoin:fromCoin.value,toCoin:toCoin.value,amount:amount.value,received:received.value,bookId:bookId.value,note:note.value,cashEntryMode:cashEntryMode.value,buyPrice:buyPrice.value};
   const signature=JSON.stringify(draft);
   if(!pending || signature!==pendingSignature){
    pending=buildCryptoEvent(draft,quote.value,Math.floor(Date.now()/1000)); pendingSignature=signature; requestKey=generateRandomUUID();
@@ -136,4 +149,5 @@ input,select{box-sizing:border-box;width:100%;min-height:46px;border:1px solid v
 .hint{font-size:12px;color:var(--cy-muted);line-height:1.7;margin:10px 0!important}.hint a{color:var(--cy-accent)}
 .error{color:var(--cy-expense);font-size:13px;padding:12px 0;line-height:1.7}.primary{width:100%;min-height:48px;border:0;border-radius:11px;background:var(--cy-accent);color:white;padding:14px;font:inherit}
 .primary:disabled{opacity:.5}.more-coins{margin-top:14px;font-size:12px;color:var(--cy-accent)}.more-coins summary{cursor:pointer;padding:8px 0}
+.cash-entry-modes{display:flex;gap:8px;margin:18px 0}.cash-entry-modes button{flex:1;min-height:42px;padding:9px 6px;border:1px solid var(--cy-line);border-radius:9px;background:var(--cy-card);color:var(--cy-muted);font:inherit;font-size:13px}.cash-entry-modes button[aria-pressed=true]{border-color:var(--cy-accent);background:var(--cy-soft);color:var(--cy-accent)}input[readonly]{background:var(--cy-soft);font-variant-numeric:tabular-nums}
 </style>

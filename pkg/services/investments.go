@@ -31,6 +31,7 @@ var ErrInvestmentConflict = errs.NewNormalError(21, 2, 409, "记录已变更，�
 
 type InvestmentEvent struct {
 	investments.Event
+	Wallet        *WalletEntry          `json:"wallet,omitempty"`
 	CashAccountID string                `json:"cashAccountId"`
 	BookID        string                `json:"bookId,omitempty"`
 	Conversion    *InvestmentConversion `json:"conversion,omitempty"`
@@ -185,6 +186,13 @@ func (s *InvestmentService) Accounts(c core.Context, uid int64) ([]models.Portfo
 func (s *InvestmentService) CreateAccount(c core.Context, uid int64, item models.PortfolioAccount) (*models.PortfolioAccount, error) {
 	// Platform and initial crypto selections are saved through the atomic setup endpoint.
 	item.Platform, item.Instruments = "", nil
+	item.PaymentInstruments = nil
+	if !validatePortfolioCurrency(item.Currency) {
+		return nil, investmentError("账户计量币种无效")
+	}
+	if item.Currency == "" {
+		item.Currency = "CNY"
+	}
 	item.Name = strings.TrimSpace(item.Name)
 	if len([]rune(item.Name)) == 0 || len([]rune(item.Name)) > 64 || len(item.Kind) > 32 {
 		return nil, investmentError("请填写有效的投资账户名称")
@@ -226,6 +234,12 @@ func replayInvestments(events []InvestmentEvent) (*investments.Result, error) {
 	return investments.Replay(facts)
 }
 func (s *InvestmentService) validateEvent(sess *xorm.Session, uid int64, e *InvestmentEvent) error {
+	if e.Type == investments.Income || e.Type == investments.Expense {
+		return s.validateWalletEntry(sess, uid, e)
+	}
+	if e.Wallet != nil {
+		return investmentError("普通投资记录不能携带钱包收支信息")
+	}
 	if len(e.Note) > 1000 {
 		return investmentError("备注过长")
 	}
@@ -385,6 +399,9 @@ func (s *InvestmentService) Mutate(c core.Context, uid int64, input InvestmentEv
 			input = old
 			input.Voided = true
 		} else {
+			if index >= 0 && ((old.Wallet != nil) != (input.Wallet != nil)) {
+				return investmentError("不能在钱包收支和投资交易之间转换记录")
+			}
 			input.Voided = false
 			if operation == "revise" {
 				// A manual correction is not a new automatic market conversion.
@@ -441,7 +458,17 @@ func (s *InvestmentService) Mutate(c core.Context, uid int64, input InvestmentEv
 			}
 		}
 		if preview {
+			if !input.Voided && input.Wallet != nil {
+				if err = s.settleWallet(c, sess, uid, input, settings.TimeZone); err != nil {
+					return err
+				}
+			}
 			return errInvestmentPreviewRollback
+		}
+		if !input.Voided && input.Wallet != nil {
+			if err = s.settleWallet(c, sess, uid, input, settings.TimeZone); err != nil {
+				return err
+			}
 		}
 		payload, _ := json.Marshal(input)
 		record := &models.InvestmentEventRecord{Id: input.ID, Uid: uid, OccurredAt: input.OccurredAt, Version: input.Version, Voided: input.Voided, Payload: string(payload)}
@@ -542,7 +569,7 @@ func (s *InvestmentService) reverseSettlement(sess *xorm.Session, uid int64, eve
 	}
 	for _, tx := range txs {
 		delta := tx.Amount
-		if tx.Type == models.TRANSACTION_DB_TYPE_TRANSFER_IN {
+		if tx.Type == models.TRANSACTION_DB_TYPE_TRANSFER_IN || tx.Type == models.TRANSACTION_DB_TYPE_INCOME {
 			delta = -delta
 		}
 		if _, err := sess.Where("uid=? AND account_id=?", uid, tx.AccountId).Incr("balance", delta).Update(&models.Account{}); err != nil {

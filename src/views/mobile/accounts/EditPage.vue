@@ -384,6 +384,7 @@ import { ALL_ACCOUNT_COLORS } from '@/consts/color.ts';
 import { ACCOUNT_CURRENCY_NOT_SET_VALUE } from '@/consts/currency.ts';
 import { TRANSACTION_MIN_AMOUNT, TRANSACTION_MAX_AMOUNT } from '@/consts/transaction.ts';
 import type { Account } from '@/models/account.ts';
+import type { ErrorResponse } from '@/core/api.ts';
 
 import { isDefined } from '@/lib/common.ts';
 import { parseBigDecimal } from '@/lib/numeral.ts';
@@ -414,6 +415,7 @@ const props = defineProps<{
 
 const {
     tt,
+    te,
     getAllCurrencies,
     getCurrencyName,
     formatDateTimeToLongDate,
@@ -553,7 +555,7 @@ async function save(): Promise<void> {
     submitting.value=true;showLoading(()=>submitting.value);
     let metadataSaved=false;
     try {
-        const savedAccount=await accountsStore.saveAccount({account:account.value,subAccounts:subAccounts.value,isEdit:!wasNew,clientSessionId:clientSessionId.value});
+        const savedAccount=await accountsStore.saveAccount({account:account.value,subAccounts:subAccounts.value,isEdit:!wasNew,clientSessionId:clientSessionId.value,allowUnchanged:true});
         metadataSaved=true;
         if(wasNew){editAccountId.value=savedAccount.id;account.value.id=savedAccount.id;initialBalance.value=savedAccount.balance;}
         if(!wasNew && account.value.type===AccountType.SingleAccount.type && desiredBalance!==initialBalance.value){
@@ -570,7 +572,11 @@ async function save(): Promise<void> {
         }
         if(incomeDraft.value){await monetaryIncome.save({...incomeDraft.value,accountId:savedAccount.id});incomeDraft.value=undefined;}
         showToast(wasNew?'You have added a new account':'You have saved this account');props.f7router.back();
-    } catch(cause) {showAlert(`${metadataSaved?'账户资料已保存，后续设置尚未完成：':''}${investmentError(cause)}`);}
+    } catch(cause) {
+        const wrapped=cause as {error?:ErrorResponse;message?:string}|null;
+        const message=wrapped?.error?.errorMessage ? te({error:wrapped.error}) : wrapped?.message ? te(wrapped.message) : investmentError(cause);
+        showAlert(`${metadataSaved?'账户资料已保存，后续设置尚未完成：':''}${message}`);
+    }
     finally {submitting.value=false;hideLoading();}
 }
 

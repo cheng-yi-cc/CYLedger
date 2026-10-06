@@ -104,7 +104,7 @@ func (f *investmentDBFixture) count(bean interface{}) int64 {
 
 func (f *investmentDBFixture) quote(price string) {
 	f.t.Helper()
-	_, err := f.s.ManualQuote(nil, f.uid, "crypto:bitcoin", price, time.Now().Unix())
+	_, err := f.s.ManualQuote(nil, f.uid, "crypto:bitcoin", price, time.Now().Unix(), "")
 	require.NoError(f.t, err)
 }
 
@@ -316,7 +316,7 @@ func TestInvestmentDBUserIsolationAndMissingCostOrPrice(t *testing.T) {
 	require.Nil(t, unpriced.Positions[0].MarketValue)
 	require.Nil(t, unpriced.Positions[0].Cost)
 	require.Nil(t, unpriced.UnrealizedPNL)
-	_, err = f.s.ManualQuote(nil, f.uid, custom.Id, "2.4", time.Now().Unix())
+	_, err = f.s.ManualQuote(nil, f.uid, custom.Id, "2.4", time.Now().Unix(), "")
 	require.NoError(t, err)
 	priced := f.summary(false)
 	requireMoney(t, "20030", priced.NetAssets)
@@ -352,7 +352,7 @@ func TestInvestmentDBUserIsolationAndMissingCostOrPrice(t *testing.T) {
 	require.Error(t, err)
 	_, err = f.s.Mutate(nil, otherUID, created.Event, "", "void", false)
 	require.Error(t, err)
-	_, err = f.s.ManualQuote(nil, otherUID, custom.Id, "100", time.Now().Unix())
+	_, err = f.s.ManualQuote(nil, otherUID, custom.Id, "100", time.Now().Unix(), "")
 	require.Error(t, err)
 	otherEvents, err := f.s.Events(nil, otherUID)
 	require.NoError(t, err)

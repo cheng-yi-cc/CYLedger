@@ -25,7 +25,7 @@
                         <span class="cy-row-icon" :style="{ color: account.color }"><img v-if="account.platformIcon" :src="account.platformIcon" alt="" width="30" height="30" /><item-icon v-else :icon-type="account.customIcon ? 'user-custom' : 'account'" :icon-id="account.icon" /></span>
                         <div class="cy-account-content"><div class="cy-account-line"><span class="cy-row-name">{{ account.name }}</span><span class="cy-row-amount" :class="amountClass(account.balance)">{{ currencyMoney(account.balance, account.currency) }}</span></div>
                             <template v-if="account.credit"><div class="cy-credit-track" :aria-label="visible ? `已用额度 ${account.credit.percent}%` : '信用额度已隐藏'"><span :style="{ width: visible ? `${account.credit.percent}%` : '0%' }"></span></div><small>可用：{{ currencyMoney(account.credit.available, account.currency) }}<span class="cy-credit-limit">额度 {{ money(account.credit.limit) }}</span></small></template>
-                            <small v-else-if="account.portfolio">{{ account.subtitle }}</small>
+                            <small v-else-if="account.portfolio">{{ account.subtitle }}<template v-if="account.currency!=='CNY'"> · 折合 ¥{{ money(account.value) }}</template></small>
                             <small v-else-if="account.currency !== 'CNY'">{{ account.currency }} · 折合 ¥{{ money(account.value) }}</small>
                             <small v-else-if="account.category === 3">未设置信用额度</small><small v-if="account.excluded">不计入总资产</small>
                         </div>
@@ -44,6 +44,7 @@
 </template>
 <script setup lang="ts">
 import { computed, ref, onUnmounted } from 'vue';
+import { walletCurrency, walletValue } from '@/lib/wallet-entry.ts';
 import { investments, investmentError } from '@/lib/investments.ts';
 import { LedgerDecimal, ledgerMoney, keepUpToDate } from '@/lib/mobile-ledger.ts';
 import { isCryptoAccount, platformIcon } from '@/lib/crypto-platforms.ts';
@@ -53,7 +54,7 @@ import { IconType } from '@/core/icon.ts';
 import type { WealthSummary, InvestmentAccount, WealthCashAccount } from '@/models/investment.ts';
 import LedgerNavigation from '@/components/mobile/LedgerNavigation.vue';
 import AccountDeletionSheet from '@/components/mobile/AccountDeletionSheet.vue';
-import {assetItems,assetTotals} from '@/lib/asset-tools.ts';
+import {assetItems,assetTotals,assetAccountGroup,groupAssetAccountRows} from '@/lib/asset-tools.ts';
 import {reimbursements,type ReimbursementClaim} from '@/lib/reimbursements.ts';
 import {useAssetToolsStore} from '@/stores/assetTools.ts';
 import {useBooksStore} from '@/stores/books.ts';
@@ -122,7 +123,7 @@ interface AccountRow {
 function cashRow(item: WealthCashAccount): AccountRow {
     const account = accounts.allAccountsMap[item.id];
     const profile=account?.assetProfile, night=document.documentElement.classList.contains('dark');
-    const row: AccountRow = { ...item, category: account?.category || 0, icon: (night&&profile?.nightIcon)||account?.icon||'1', customIcon: (night&&profile?.nightIcon?profile.nightIconType:account?.iconType)===IconType.UserCustom, color:'#'+((night&&profile?.nightColor)||account?.color||'68bfae'), href:profile?.kind==='reimbursement'?`/assets/reimbursements?id=${item.id}`:`/account/detail?id=${item.id}`,group:profile?.group||(profile?.kind==='prepaid'?'预付账户':profile?.kind==='secondhand'?'二手资产':profile?.kind==='reimbursement'?'报销':account?.category===3?'信贷账户':[5,6].includes(account?.category||0)?'债务':[7,9].includes(account?.category||0)?'投资理财':'资金账户'),excluded:!!profile?.excludeFromTotal };
+    const row: AccountRow = { ...item, category: account?.category || 0, icon: (night&&profile?.nightIcon)||account?.icon||'1', customIcon: (night&&profile?.nightIcon?profile.nightIconType:account?.iconType)===IconType.UserCustom, color:'#'+((night&&profile?.nightColor)||account?.color||'68bfae'), href:profile?.kind==='reimbursement'?`/assets/reimbursements?id=${item.id}`:`/account/detail?id=${item.id}`,group:assetAccountGroup(account),excluded:!!profile?.excludeFromTotal };
     const main=account?.assetProfile.sharedLimitAccount?accounts.allAccountsMap[account.assetProfile.sharedLimitAccount]:account;
     if (account?.category === 3 && main && new LedgerDecimal(main.creditCardLimit).gt(0)) {
         const limit = new LedgerDecimal(main.creditCardLimit).div(100);
@@ -135,15 +136,12 @@ function cashRow(item: WealthCashAccount): AccountRow {
 const portfolios = computed<AccountRow[]>(() => investmentAccounts.value.map(account => {
     const positions = summary.value?.positions.filter(position => position.accountId === account.id && new LedgerDecimal(position.quantity).gt(0)) || [];
     const value = sum(positions.map(position => position.marketValue));
-    return { id: account.id, name: account.name, balance: value, value, currency: 'CNY', category: 7, icon: account.kind === 'EXCHANGE' ? '1500' : account.kind === 'WALLET' ? '1' : '801', customIcon: false, color: account.kind === 'EXCHANGE' ? '#bf82ca' : '', portfolio: true, platformIcon: platformIcon(account.platform), subtitle: `${accountKinds[account.kind] || '其他'} · ${positions.length} 项持仓`, href: isCryptoAccount(account.kind) ? `/crypto/account?id=${encodeURIComponent(account.id)}` : `/investments/ledger?accountId=${encodeURIComponent(account.id)}` };
+    return { id: account.id, name: account.name, balance: walletValue(positions,walletCurrency(account),summary.value), value, currency: walletCurrency(account), category: 7, icon: account.kind === 'EXCHANGE' ? '1500' : account.kind === 'WALLET' ? '1' : '801', customIcon: false, color: account.kind === 'EXCHANGE' ? '#bf82ca' : '', portfolio: true, platformIcon: platformIcon(account.platform, account.kind), subtitle: `${accountKinds[account.kind] || '其他'} · ${positions.length} 项持仓`, href: isCryptoAccount(account.kind) ? `/crypto/account?id=${encodeURIComponent(account.id)}` : `/investments/ledger?accountId=${encodeURIComponent(account.id)}` };
 }));
 const groups = computed(() => {
-    const ordered=['信贷账户','投资理财','资金账户','预付账户','二手资产','债务','报销'];
     const rows=(summary.value?.cashAccounts||[]).filter(a=>shownKeys.value.has('cash:'+a.id)&&![5,6].includes(accounts.allAccountsMap[a.id]?.category||0)).map(cashRow);
     rows.push(...portfolios.value.filter(a=>shownKeys.value.has('portfolio:'+a.id)).map(a=>({...a,group:'投资理财'})));
-    const map=new Map<string,AccountRow[]>();
-    for(const row of rows){const group=row.group||'其他';map.set(group,[...(map.get(group)||[]),row]);}
-    return [...map].sort(([a],[b])=>(ordered.indexOf(a)<0?99:ordered.indexOf(a))-(ordered.indexOf(b)<0?99:ordered.indexOf(b))).map(([name,accounts])=>({name,accounts,total:sum(accounts.map(a=>a.value))}));
+    return groupAssetAccountRows(rows).map(group=>({...group,total:sum(group.accounts.map(a=>a.value))}));
 });
 function money(value: string | null | undefined): string { return visible.value ? ledgerMoney(value,false) : '••••'; }
 function currencyMoney(value: string | null, currency: string): string { return `${({ CNY:'¥',USD:'$',EUR:'€',HKD:'HK$',JPY:'JP¥' } as Record<string,string>)[currency] || currency + ' '}${money(value)}`; }

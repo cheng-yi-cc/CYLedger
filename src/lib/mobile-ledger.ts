@@ -19,6 +19,7 @@ export interface LedgerEntry {
     categoryId: string; primaryCategoryId: string; primaryCategory: string; comment: string; tags: string[];
     bookId: string; accountId: string; destinationAccountId: string; tagIds: string[]; investment: boolean;
     investmentEventId?: string; excludeFromStatistics?: boolean; reimbursementAccountId?: string; reimbursementReceiptId?: string;
+    wallet?: boolean;
     discountAmount?: string; transferFeeParentId?: string;
     bookName?: string; icon?: string; iconType?: number; color?: string; transferDirection?: 'in'|'out';
     accountIcon?: string; accountIconType?: number; pictures?: TransactionPictureInfoBasicResponse[];
@@ -58,18 +59,18 @@ export function useMobileLedger(options: { applyFilters?: () => boolean; account
         const category = categories.allTransactionCategoriesMap[item.categoryId] || item.category;
         const parent = category?.parentId ? categories.allTransactionCategoriesMap[category.parentId] : undefined;
         const incoming = !!options.accountId && item.type === 4 && item.destinationAccountId === options.accountId();
-        const currency = (incoming ? destination : account)?.currency || '';
-        const amount = new LedgerDecimal((incoming ? item.destinationAmount : item.sourceAmount).toString()).div(100).toString();
+        const currency = item.wallet?.currency || (incoming ? destination : account)?.currency || '';
+        const amount = item.wallet?.amount || new LedgerDecimal((incoming ? item.destinationAmount : item.sourceAmount).toString()).div(100).toString();
         // Legacy daily transactions have no confirmed historical FX. Never substitute today's FX.
-        const converted = currency === 'CNY' ? amount : null;
+        const converted = item.wallet ? new LedgerDecimal(item.sourceAmount).div(100).toFixed() : currency === 'CNY' ? amount : null;
         return {
             id: item.id, type: item.type, excludeFromStatistics: !!item.excludeFromStatistics || (!!item.reimbursementAccountId && item.reimbursementAccountId !== '0'), reimbursementAccountId: item.reimbursementAccountId, reimbursementReceiptId: item.reimbursementReceiptId, day: moment.unix(item.time).tz(scope.timeZone).format('YYYY-MM-DD'), time: item.time,
             discountAmount: item.discountAmount || '0', transferFeeParentId:item.transferFeeParentId,
-            title: item.investmentEventId ? '投资结算' : category?.name || ({ 1: '余额调整', 2: '收入', 3: '支出', 4: '账户转账' }[item.type] || '账户转账'),
+            title: item.investmentEventId && !item.wallet ? '投资结算' : category?.name || ({ 1: '余额调整', 2: '收入', 3: '支出', 4: '账户转账' }[item.type] || '账户转账'),
             primaryCategory: parent?.name || category?.name || '未分类', primaryCategoryId: parent?.id || item.categoryId, categoryId: item.categoryId,
-            bookId: item.bookId || '', accountId: item.sourceAccountId, destinationAccountId: item.destinationAccountId,
-            tagIds: item.tagIds || [], investment: !!item.investmentEventId, investmentEventId: item.investmentEventId,
-            account: `${account?.assetProfile?.shortName || account?.name || '账户'}${item.type === 4 && destination && !item.investmentEventId ? ` → ${destination.assetProfile?.shortName||destination.name}` : ''}`,
+            bookId: item.bookId || '', accountId: item.wallet?.accountId || item.sourceAccountId, destinationAccountId: item.destinationAccountId,
+            tagIds: item.tagIds || [], investment: !!item.investmentEventId && !item.wallet, investmentEventId: item.investmentEventId, wallet:!!item.wallet,
+            account: item.wallet?.accountName || `${account?.assetProfile?.shortName || account?.name || '账户'}${item.type === 4 && destination && !item.investmentEventId ? ` → ${destination.assetProfile?.shortName||destination.name}` : ''}`,
             currency, amount, cny: converted, hidden: item.hideAmount, comment: item.comment,
             tags: (item.tagIds || []).map(id => tags.allTransactionTagsMap[id]?.name).filter((name): name is string => !!name),
             bookName: books.allBooks.find(b=>b.id===item.bookId)?.name || '日常账本', icon: category?.icon, iconType: category?.iconType, color: category?.color,

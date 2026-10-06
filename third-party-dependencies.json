@@ -475,5 +475,13 @@
         "url": "https://github.com/101arrowz/fflate",
         "license": "MIT",
         "licenseUrl": "https://github.com/101arrowz/fflate/blob/master/LICENSE"
+    },
+    {
+        "name": "IconGo bank-logos (selected bank marks)",
+        "version": "ffca539a043900fbf2a4fd6a5d32f1706ae5dfd1",
+        "copyright": "Copyright (c) 2022 IconGo",
+        "url": "https://github.com/icongo/bank-logos",
+        "license": "MIT; bank trademarks remain with their respective owners",
+        "licenseUrl": "https://github.com/icongo/bank-logos/blob/ffca539a043900fbf2a4fd6a5d32f1706ae5dfd1/LICENSE"
     }
 ]

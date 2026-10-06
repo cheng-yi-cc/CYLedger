@@ -21,6 +21,16 @@ func TestPortfolioAccountEditPreservesFactsAndHeldCoins(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, before, after)
 	require.Equal(t, balance, f.balance())
+	for _, platform := range []string{"bitget-wallet", ""} {
+		input.Platform = platform
+		result, err = f.s.UpdatePortfolioAccount(nil, f.uid, input)
+		require.NoError(t, err)
+		require.Equal(t, platform, result.Platform)
+		after, err = f.s.Events(nil, f.uid)
+		require.NoError(t, err)
+		require.Equal(t, before, after)
+		require.Equal(t, balance, f.balance())
+	}
 	for _, mutate := range []func(*models.PortfolioAccount){func(a *models.PortfolioAccount) { a.Instruments = []string{"crypto:ethereum"} }, func(a *models.PortfolioAccount) { a.Kind = "EXCHANGE" }, func(a *models.PortfolioAccount) { a.Platform = "binance" }, func(a *models.PortfolioAccount) { a.Instruments = []string{"private:other-user"} }, func(a *models.PortfolioAccount) { a.Name = "" }} {
 		bad := input
 		mutate(&bad)

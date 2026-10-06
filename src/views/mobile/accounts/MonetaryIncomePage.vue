@@ -5,7 +5,7 @@
             <f7-nav-right><f7-link aria-label="保存基金绑定" :disabled="working || loading || !selected" @click="save"><f7-preloader v-if="working" /><f7-icon v-else f7="checkmark" /></f7-link></f7-nav-right>
         </f7-navbar>
         <main class="cy-fund-body">
-            <p v-if="error" class="cy-fund-error" role="alert">{{ error }}</p>
+            <p v-if="error" class="cy-fund-error" role="alert">{{ error }} <button v-if="searchQuery && !selected" type="button" :disabled="searching || working" @click="searchLater(searchQuery)">重新查询</button></p>
             <div v-if="loading" class="cy-fund-loading"><f7-preloader /></div>
             <form v-else @submit.prevent="save">
                 <section class="cy-fund-card">
@@ -47,7 +47,7 @@ const accounts = useAccountsStore();
 const accountId = computed(() => props.f7route?.query['id'] || '');
 const account = computed(() => props.draftAccount || accounts.allAccountsMap[accountId.value]);
 const saved = ref<MonetaryBinding>(), selected = ref<MonetaryFund>(), candidates = ref<MonetaryFund[]>([]);
-const name = ref(''), code = ref(''), startDate = ref(''), error = ref('');
+const name = ref(''), code = ref(''), startDate = ref(''), error = ref(''), searchQuery = ref('');
 const loading = ref(false), working = ref(false), searching = ref(false);
 const zone = getTimeZone() || getBrowserTimezoneName();
 const today = moment().tz(zone).format('YYYY-MM-DD');
@@ -70,6 +70,7 @@ async function load(): Promise<void> {
     finally { loading.value = false; }
 }
 function searchLater(query: string): void {
+    searchQuery.value = query.trim();
     clearTimeout(timer); selected.value = undefined; candidates.value = []; error.value = '';
     const version = ++searchVersion;
     if (query.trim().length < 2) { searching.value = false; return; }
@@ -108,4 +109,5 @@ function unbind(): void {
 </script>
 <style scoped>
 .cy-fund-body{max-width:640px;margin:auto;padding:14px 14px 40px}.cy-fund-card{background:var(--cy-card);border-radius:12px;overflow:hidden;margin-bottom:15px}.cy-fund-card label{display:flex;align-items:center;gap:14px;min-height:53px;padding:0 15px;font-size:16px}.cy-fund-card label>span{flex:0 0 auto;letter-spacing:1px}.cy-fund-card input{min-width:0;width:100%;border:0;outline:0;background:transparent;color:var(--cy-ink);font:inherit;caret-color:var(--cy-accent);padding:14px 0}.cy-fund-card input::placeholder{color:var(--cy-muted)}.cy-fund-date{margin-top:16px}.cy-fund-date input{text-align:right;font-size:15px}.cy-fund-date .icon{font-size:16px;color:var(--cy-muted);margin-left:-7px}.cy-fund-hint{color:var(--cy-muted);font-size:14px;line-height:1.9;margin-top:14px}.cy-fund-hint p{margin:0 0 3px}.cy-fund-results button{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;gap:12px;min-height:48px;padding:12px 15px;background:transparent;border:0;color:var(--cy-ink);font:inherit}.cy-fund-results small{color:var(--cy-muted)}.cy-fund-results p{padding:0 15px;color:var(--cy-muted)}.cy-fund-unbind{display:block;background:none;border:0;color:var(--cy-muted);padding:16px;margin:28px auto 0}.cy-fund-error{color:var(--cy-expense);font-size:14px}.cy-fund-loading{padding:30px;text-align:center}
+.cy-fund-error button{border:0;background:none;color:var(--cy-accent);font:inherit;padding:4px 6px;text-decoration:underline}
 </style>

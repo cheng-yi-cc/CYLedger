@@ -36,7 +36,7 @@ function category(item: LedgerEntry): string { if(item.type===1)return '余额�
 function title(item: LedgerEntry): string { return prefs.value.remarkFirst && item.comment ? item.comment : category(item); }
 function subtitle(item: LedgerEntry): string { return prefs.value.remarkFirst && item.comment ? category(item) : item.comment; }
 function hasDiscount(item: LedgerEntry): boolean { return !!item.discountAmount && new LedgerDecimal(item.discountAmount).gt(0); }
-function entryLink(item: LedgerEntry): string { if(item.transferFeeParentId && item.transferFeeParentId!=='0')return `/transaction/detail?id=${item.transferFeeParentId}&type=4`; return item.investmentEventId ? `/investments/record?action=revise&eventId=${encodeURIComponent(item.investmentEventId)}` : `/transaction/detail?id=${item.id}&type=${item.type}`; }
+function entryLink(item: LedgerEntry): string { if(item.wallet)return `/crypto/entry?eventId=${encodeURIComponent(item.investmentEventId!)}`; if(item.transferFeeParentId && item.transferFeeParentId!=='0')return `/transaction/detail?id=${item.transferFeeParentId}&type=4`; return item.investmentEventId ? `/investments/record?action=revise&eventId=${encodeURIComponent(item.investmentEventId)}` : `/transaction/detail?id=${item.id}&type=${item.type}`; }
 function onClick(event: MouseEvent, item: LedgerEntry) { if (props.selectionMode) { event.preventDefault(); event.stopPropagation(); emit('select', item); } }
 function dayLabel(day: string): string {
     const date = moment(day, 'YYYY-MM-DD'), today = moment(scope.currentDay, 'YYYY-MM-DD');

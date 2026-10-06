@@ -80,6 +80,7 @@ type Config struct {
 	FundSearchURL      string
 	FundNAVURL         string
 	CoinGeckoSearchURL string
+	CoinGeckoCoinURL   string
 	HKDFXURL           string
 }
 
@@ -109,6 +110,7 @@ type cachedQuote struct {
 // Service can be safely shared by all users and HTTP handlers.
 type Service struct {
 	config               Config
+	fundHTTPClient       *http.Client
 	once                 sync.Once
 	mu                   sync.RWMutex
 	quotes               map[string]cachedQuote
@@ -124,6 +126,8 @@ type Service struct {
 	lastReferenceAttempt map[string]time.Time
 	searchCache          map[string]searchEntry
 	searchMu             sync.Mutex
+	monetarySearchMu     sync.Mutex
+	monetarySearchCache  map[string]searchEntry
 	conversionMu         sync.Mutex
 	hkdFX                FXRate
 	hkdFXRestored        bool
@@ -133,6 +137,7 @@ type Service struct {
 var Default = New(Config{CoinGeckoAPIKey: os.Getenv("CYLEDGER_COINGECKO_DEMO_API_KEY")})
 
 func New(config Config) *Service {
+	var fundHTTPClient *http.Client
 	if config.HTTPClient == nil {
 		config.HTTPClient = &http.Client{Timeout: 12 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) > 0 && req.URL.Host != via[0].URL.Host {
@@ -143,6 +148,15 @@ func New(config Config) *Service {
 			}
 			return nil
 		}}
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.DialContext = fundDNSDial(transport.DialContext, fundResolver.lookup)
+		// Some VPN paths take over ten seconds to complete the fund provider's
+		// TLS handshake. Keep a single total request budget and normal TLS checks.
+		transport.TLSHandshakeTimeout = 15 * time.Second
+		fundClient := *config.HTTPClient
+		fundClient.Transport = transport
+		fundClient.Timeout = 20 * time.Second
+		fundHTTPClient = &fundClient
 	}
 	if config.CoinbaseRESTURL == "" {
 		config.CoinbaseRESTURL = "https://api.coinbase.com/api/v3/brokerage/market"
@@ -190,7 +204,7 @@ func New(config Config) *Service {
 	}
 	config.CoinbaseRESTURL = strings.TrimRight(config.CoinbaseRESTURL, "/")
 	configureReferenceSources(&config)
-	return &Service{config: config, quotes: make(map[string]cachedQuote), products: make(map[string]string), references: make(map[string]Binding), lastReferenceAttempt: make(map[string]time.Time), searchCache: make(map[string]searchEntry)}
+	return &Service{config: config, fundHTTPClient: fundHTTPClient, quotes: make(map[string]cachedQuote), products: make(map[string]string), references: make(map[string]Binding), lastReferenceAttempt: make(map[string]time.Time), searchCache: make(map[string]searchEntry), monetarySearchCache: make(map[string]searchEntry)}
 }
 
 // Start starts background refreshes once and returns immediately. Cancelling ctx
@@ -403,7 +417,11 @@ func (s *Service) getJSON(ctx context.Context, address string, headers map[strin
 	for name, value := range headers {
 		req.Header.Set(name, value)
 	}
-	response, err := s.config.HTTPClient.Do(req)
+	client := s.config.HTTPClient
+	if isFundDNSHost(req.URL.Hostname()) && s.fundHTTPClient != nil {
+		client = s.fundHTTPClient
+	}
+	response, err := client.Do(req)
 	if err != nil {
 		return err
 	}

@@ -17,6 +17,8 @@ const (
 	Buy      = "BUY"
 	Sell     = "SELL"
 	Transfer = "TRANSFER"
+	Income   = "INCOME"
+	Expense  = "EXPENSE"
 
 	// CalculationPrecision applies explicitly to every division. Input facts
 	// accept 18 decimal places; derived costs retain 36 decimal places.
@@ -33,22 +35,30 @@ const (
 // unknown. An empty settlement instrument means fiat; otherwise settlement is
 // another independently costed investment position.
 type Event struct {
-	ID                     string  `json:"id"`
-	Type                   string  `json:"type"`
-	AccountID              string  `json:"accountId"`
-	InstrumentID           string  `json:"instrumentId"`
-	ToAccountID            string  `json:"toAccountId,omitempty"`
-	Quantity               string  `json:"quantity"`
-	Amount                 string  `json:"amount"`
-	Fee                    string  `json:"fee"`
-	Cost                   *string `json:"cost"`
-	SettlementInstrumentID string  `json:"settlementInstrumentId,omitempty"`
-	SettlementAccountID    string  `json:"settlementAccountId,omitempty"`
-	ExchangeRate           string  `json:"exchangeRate"`
-	OccurredAt             int64   `json:"occurredAt"`
-	Note                   string  `json:"note"`
-	Version                int     `json:"version"`
-	Voided                 bool    `json:"voided"`
+	ID                     string          `json:"id"`
+	Type                   string          `json:"type"`
+	AccountID              string          `json:"accountId"`
+	InstrumentID           string          `json:"instrumentId"`
+	ToAccountID            string          `json:"toAccountId,omitempty"`
+	Quantity               string          `json:"quantity"`
+	Amount                 string          `json:"amount"`
+	Fee                    string          `json:"fee"`
+	Cost                   *string         `json:"cost"`
+	SettlementInstrumentID string          `json:"settlementInstrumentId,omitempty"`
+	SettlementAccountID    string          `json:"settlementAccountId,omitempty"`
+	ExchangeRate           string          `json:"exchangeRate"`
+	OccurredAt             int64           `json:"occurredAt"`
+	Note                   string          `json:"note"`
+	Version                int             `json:"version"`
+	Voided                 bool            `json:"voided"`
+	AdditionalMovements    []AssetMovement `json:"additionalMovements,omitempty"`
+}
+
+// AdditionalMovements are the other assets actually received or spent in one
+// wallet receipt/payment. The first asset stays in InstrumentID/Quantity.
+type AssetMovement struct {
+	InstrumentID string `json:"instrumentId"`
+	Quantity     string `json:"quantity"`
 }
 
 type Position struct {
@@ -263,6 +273,12 @@ func Replay(events []Event) (*Result, error) {
 }
 
 func (r *replay) apply(e Event) error {
+	if e.Type == Income || e.Type == Expense {
+		return r.applyWallet(e)
+	}
+	if len(e.AdditionalMovements) != 0 {
+		return errorAt(e, "additionalMovements", "only supported for wallet income or expense")
+	}
 	if strings.TrimSpace(e.AccountID) == "" || strings.TrimSpace(e.InstrumentID) == "" {
 		return errorAt(e, "accountId/instrumentId", "both are required")
 	}

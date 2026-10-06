@@ -41,7 +41,7 @@ func TestInvestmentBindingManualPriorityAndUserIsolation(t *testing.T) {
 	priced := f.summary(false)
 	requireMoney(t, "3655", priced.Positions[0].MarketValue)
 	require.Equal(t, "HKD", priced.Positions[0].Quote.Currency)
-	_, err = f.s.ManualQuote(nil, f.uid, asset.Id, "400", time.Now().Unix())
+	_, err = f.s.ManualQuote(nil, f.uid, asset.Id, "400", time.Now().Unix(), "")
 	require.NoError(t, err)
 	manual := f.summary(false)
 	requireMoney(t, "4000", manual.Positions[0].MarketValue)

@@ -184,6 +184,7 @@ type AccountDeleteRequest struct {
 
 // AccountInfoResponse represents a view-object of account
 type AccountInfoResponse struct {
+	CurrencyEditable        bool                     `json:"currencyEditable"`
 	AssetProfile            *AccountAssetProfile     `json:"assetProfile,omitempty"`
 	Id                      int64                    `json:"id,string"`
 	Name                    string                   `json:"name"`

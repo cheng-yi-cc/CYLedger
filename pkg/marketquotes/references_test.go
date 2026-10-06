@@ -186,6 +186,80 @@ func TestReferenceFundRejectsMoneyYield(t *testing.T) {
 	}
 }
 
+func TestReferenceCoinGeckoResolvesStableIDAfterNameSearch(t *testing.T) {
+	clock := &testClock{now: time.Date(2026, 10, 6, 9, 0, 0, 0, time.UTC)}
+	for _, test := range []struct {
+		name, id, label, symbol string
+		price                   bool
+		wantSuccess             bool
+	}{
+		{"BNB legacy ID", "binancecoin", "BNB", "bnb", true, true},
+		{"different asset", "wrapped-bnb", "BNB", "bnb", true, false},
+		{"missing name", "binancecoin", "", "bnb", true, false},
+		{"missing symbol", "binancecoin", "BNB", "", true, false},
+		{"missing quote", "binancecoin", "BNB", "bnb", false, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var searchRequests, metadataRequests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/search":
+					searchRequests.Add(1)
+					if r.URL.Query().Get("query") != "BNB" {
+						// The provider does not return BNB when its stable ID is
+						// passed as a fuzzy name/symbol query.
+						writeJSON(w, map[string]any{"coins": []any{}})
+						return
+					}
+					writeJSON(w, map[string]any{"coins": []map[string]string{{"id": "binancecoin", "name": "BNB", "symbol": "BNB"}}})
+				case "/products":
+					writeJSON(w, map[string]any{"products": []any{}})
+				case "/price":
+					if r.URL.Query().Get("ids") != "binancecoin" || r.Header.Get("x-cg-demo-api-key") != "test-key" {
+						t.Error("quote request lost the exact ID or configured API key")
+					}
+					prices := map[string]any{}
+					if test.price {
+						prices["binancecoin"] = map[string]any{"usd": json.Number("612.12345678"), "last_updated_at": clock.Now().Unix()}
+					}
+					writeJSON(w, prices)
+				case "/coins/binancecoin":
+					metadataRequests.Add(1)
+					if r.Header.Get("x-cg-demo-api-key") != "test-key" || r.URL.Query().Get("market_data") != "false" || r.URL.Query().Get("tickers") != "false" {
+						t.Error("metadata request lost authentication or requested unnecessary price data")
+					}
+					writeJSON(w, map[string]string{"id": test.id, "name": test.label, "symbol": test.symbol})
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+			s := New(Config{Now: clock.Now, CoinGeckoSearchURL: server.URL + "/search", CoinGeckoURL: server.URL + "/price", CoinGeckoCoinURL: server.URL + "/coins", CoinbaseRESTURL: server.URL, CoinGeckoAPIKey: "test-key"})
+			items, err := s.Search(context.Background(), "BNB", "CRYPTO")
+			if err != nil || len(items) != 1 || items[0].ProviderID != "binancecoin" {
+				t.Fatalf("BNB search failed: %+v %v", items, err)
+			}
+			confirmed, err := s.Resolve(context.Background(), items[0].Binding)
+			if searchRequests.Load() != 1 {
+				t.Fatal("identity verification repeated a fuzzy search with the stable ID")
+			}
+			if !test.wantSuccess {
+				if err == nil || confirmed != nil || len(s.references) != 0 {
+					t.Fatalf("unverified identity/quote was registered: %+v %v", confirmed, err)
+				}
+				return
+			}
+			if err != nil || confirmed == nil || confirmed.ProviderID != "binancecoin" || confirmed.Name != "BNB" || confirmed.Symbol != "BNB" || metadataRequests.Load() != 1 {
+				t.Fatalf("exact BNB identity was not confirmed: %+v %v", confirmed, err)
+			}
+			quote, ok := s.Get(confirmed.Key())
+			if !ok || quote.Price != "612.12345678" || quote.Source != SourceCoinGecko || quote.Currency != "USD" {
+				t.Fatalf("verified BNB quote missing: %+v", quote)
+			}
+		})
+	}
+}
+
 func TestReferenceCryptoFallbackAndExplicitIdentity(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/search" {

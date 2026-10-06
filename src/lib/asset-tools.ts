@@ -15,6 +15,17 @@ export const defaultAssetPreferences=():AssetPreferences=>({revision:'0',rules:{
 async function request<T>(method:'get'|'post',path:string,data?:unknown):Promise<T>{const r=await axios.request<ApiResponse<T>>({method,url:`v1/${path}`,data});if(!r.data.success)throw Error('资产操作失败，请重试');return r.data.result;}
 export const assetTools={adjustBalance:(data:{accountId:string;balance:string;expectedBalance:string;bookId:string;countInStatistics:boolean;timeZone:string;requestId:string})=>request<{transactionId:string}>('post','assets/adjust-balance',data),preferences:()=>request<AssetPreferences>('get','assets/preferences'),savePreferences:(data:AssetPreferences)=>request<AssetPreferences>('post','assets/preferences',data),deposits:()=>request<FixedDeposit[]>('get','assets/deposits'),saveDeposit:(data:FixedDeposit)=>request<FixedDeposit>('post','assets/deposits/save',data),closeDeposit:(id:string)=>request<boolean>('post','assets/deposits/close',{id}),syncDeposits:()=>request<number>('post','assets/deposits/sync',{}),pending:()=>request<CalendarEvent[]>('get','calendar/pending')};
 export interface AssetItem {key:string;id:string;name:string;category:number;currency:string;balance:string|null;value:string|null;href:string;portfolio:boolean;hidden:boolean;unrealizedPnl:string|null;excluded?:boolean;group?:string;kind?:string}
+export function assetAccountGroup(account?: Pick<Account, 'category' | 'assetProfile'>): string {
+ const profile=account?.assetProfile;
+ return profile?.group||(profile?.kind==='prepaid'?'预付账户':profile?.kind==='secondhand'?'二手资产':profile?.kind==='reimbursement'?'报销':account?.category===3?'信贷账户':[5,6].includes(account?.category||0)?'债务':[7,9].includes(account?.category||0)?'投资理财':'资金账户');
+}
+export function groupAssetAccountRows<T extends {group?:string}>(rows:T[]):{name:string;accounts:T[]}[] {
+ const order=['信贷账户','投资理财','资金账户','预付账户','二手资产','债务','报销'];
+ const groups=new Map<string,T[]>();
+ for(const row of rows){const name=row.group||'其他';groups.set(name,[...(groups.get(name)||[]),row]);}
+ const rank=(name:string)=>order.indexOf(name)<0?99:order.indexOf(name);
+ return [...groups].sort(([a],[b])=>rank(a)-rank(b)).map(([name,accounts])=>({name,accounts}));
+}
 export function assetItems(summary:WealthSummary|undefined,portfolios:InvestmentAccount[],accounts:Record<string,Account>,preferences:AssetPreferences):AssetItem[]{
  if(!summary)return [];
  const result:AssetItem[]=summary.cashAccounts.map(a=>({key:`cash:${a.id}`,id:a.id,name:a.name,category:accounts[a.id]?.category||0,excluded:!!accounts[a.id]?.assetProfile.excludeFromTotal,group:accounts[a.id]?.assetProfile.group,kind:accounts[a.id]?.assetProfile.kind,currency:a.currency,balance:a.balance,value:a.value,href:accounts[a.id]?.assetProfile.kind==='reimbursement'?`/assets/reimbursements?id=${a.id}`:[5,6].includes(accounts[a.id]?.category||0)?`/account/debt?id=${a.id}`:`/account/detail?id=${a.id}`,portfolio:false,hidden:preferences.rules[`cash:${a.id}`]?.hidden||accounts[a.id]?.hidden||false,unrealizedPnl:'0'}));

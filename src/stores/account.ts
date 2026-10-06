@@ -11,6 +11,7 @@ import type { BigDecimal, HiddenAmount, BigDecimalWithSuffix } from '@/core/nume
 import { AccountType, AccountCategory } from '@/core/account.ts';
 import { DISPLAY_HIDDEN_AMOUNT, INCOMPLETE_AMOUNT_SUFFIX } from '@/consts/numeral.ts';
 import { ACCOUNT_CURRENCY_NOT_SET_VALUE } from '@/consts/currency.ts';
+import { KnownErrorCode } from '@/consts/api.ts';
 
 import {
     type AccountNewDisplayOrderRequest,
@@ -987,7 +988,7 @@ export const useAccountsStore = defineStore('accounts', () => {
         });
     }
 
-    function saveAccount({ account, subAccounts, isEdit, clientSessionId }: { account: Account, subAccounts: Account[], isEdit: boolean, clientSessionId: string }): Promise<Account> {
+    function saveAccount({ account, subAccounts, isEdit, clientSessionId, allowUnchanged = false }: { account: Account, subAccounts: Account[], isEdit: boolean, clientSessionId: string, allowUnchanged?: boolean }): Promise<Account> {
         return new Promise((resolve, reject) => {
             const oldAccount = isEdit ? allAccountsMap.value[account.id] : null;
             let promise = null;
@@ -1026,6 +1027,12 @@ export const useAccountsStore = defineStore('accounts', () => {
 
                 resolve(newAccount);
             }).catch(error => {
+                // Mobile account settings include separately saved balances and
+                // fund bindings. Unchanged metadata must not block those steps.
+                if (isEdit && allowUnchanged && error.response?.data?.errorCode === KnownErrorCode.NothingWillBeUpdated) {
+                    getAccount({ accountId: account.id }).then(resolve, reject);
+                    return;
+                }
                 logger.error('failed to save account', error);
 
                 if (error.response && error.response.data && error.response.data.errorMessage) {

@@ -258,11 +258,6 @@ func TestCoinGeckoOptionalKeySharedBudgetAndExactNumbers(t *testing.T) {
 		_, _ = fmt.Fprintf(w, `{"bitcoin":{"usd":12345.678901234567890123,"last_updated_at":%d},"usd-coin":{"usd":0.998765432109876543,"last_updated_at":%d}}`, clock.Now().Add(-time.Minute).Unix(), clock.Now().Add(-time.Minute).Unix())
 	}))
 	defer server.Close()
-	noKey := New(Config{CoinGeckoURL: server.URL, Now: clock.Now})
-	noKey.refreshCoinGecko(context.Background())
-	if calls.Load() != 0 {
-		t.Fatal("optional provider called without key")
-	}
 	s := New(Config{CoinGeckoURL: server.URL, CoinGeckoAPIKey: "demo-test-key", CoinGeckoInterval: time.Second, Now: clock.Now})
 	var group sync.WaitGroup
 	for i := 0; i < 10; i++ {
@@ -297,6 +292,65 @@ func TestCoinGeckoOptionalKeySharedBudgetAndExactNumbers(t *testing.T) {
 	stale, _ := s.Get("crypto:bitcoin")
 	if stale.State != StateStale || stale.ReceivedAt != quote.ReceivedAt || stale.SourceTime != quote.SourceTime || stale.Price != quote.Price {
 		t.Fatalf("failed fallback pretended to refresh: %+v", stale)
+	}
+}
+
+func TestCoinGeckoKeylessFallbackForUnavailablePresets(t *testing.T) {
+	clock := &testClock{now: time.Date(2026, 10, 6, 9, 0, 0, 0, time.UTC)}
+	var calls atomic.Int32
+	var fail atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.Header.Get("x-cg-demo-api-key") != "" {
+			t.Error("keyless fallback sent an unexpected credential")
+		}
+		if calls.Load() == 1 && r.URL.Query().Get("ids") != "bitcoin" {
+			t.Error("healthy primary quotes were unnecessarily requested")
+		}
+		if fail.Load() {
+			http.Error(w, "limited", http.StatusTooManyRequests)
+			return
+		}
+		writeJSON(w, map[string]any{"bitcoin": map[string]any{"usd": json.Number("60000.12345678"), "last_updated_at": clock.Now().Unix()}})
+	}))
+	defer server.Close()
+	s := New(Config{Now: clock.Now, CoinGeckoURL: server.URL})
+	primary := func() {
+		for _, candidate := range instruments {
+			s.putQuote(Quote{InstrumentID: candidate.id, Price: "500", Currency: "USD", Source: SourceCoinbaseREST, ReceivedAt: clock.Now().Unix()}, clock.Now())
+		}
+	}
+	primary()
+	s.refreshCoinGecko(context.Background())
+	if calls.Load() != 0 {
+		t.Fatal("healthy primary feeds used the keyless fallback")
+	}
+	delete(s.quotes, "crypto:bitcoin")
+	s.refreshCoinGecko(context.Background())
+	first, ok := s.Get("crypto:bitcoin")
+	if !ok || first.Price != "60000.12345678" || first.Source != SourceCoinGecko || first.State != StateDelayed {
+		t.Fatalf("missing BTC quote did not use public fallback: %+v", first)
+	}
+	s.refreshCoinGecko(context.Background())
+	clock.Advance(14 * time.Minute)
+	s.refreshCoinGecko(context.Background())
+	if calls.Load() != 1 {
+		t.Fatal("keyless requests escaped the shared fifteen-minute budget")
+	}
+	fail.Store(true)
+	clock.Advance(time.Minute)
+	s.refreshCoinGecko(context.Background())
+	s.refreshCoinGecko(context.Background())
+	old, _ := s.Get("crypto:bitcoin")
+	if calls.Load() != 2 || old.Price != first.Price || old.SourceTime != first.SourceTime || old.ReceivedAt != first.ReceivedAt {
+		t.Fatal("failed fallback changed the quote or escaped its retry budget")
+	}
+	clock.Advance(15 * time.Minute)
+	primary()
+	s.refreshCoinGecko(context.Background())
+	recovered, _ := s.Get("crypto:bitcoin")
+	if calls.Load() != 2 || recovered.Source != SourceCoinbaseREST || recovered.Price != "500" {
+		t.Fatal("recovered primary feed did not replace the fallback")
 	}
 }
 

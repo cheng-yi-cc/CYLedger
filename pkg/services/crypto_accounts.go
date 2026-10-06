@@ -18,7 +18,14 @@ import (
 
 var cryptoPlatforms = map[string]string{
 	"binance": "EXCHANGE", "okx": "EXCHANGE", "coinbase": "EXCHANGE", "kraken": "EXCHANGE", "bybit": "EXCHANGE", "bitget": "EXCHANGE",
-	"metamask": "WALLET", "trust": "WALLET", "phantom": "WALLET", "rabby": "WALLET", "ledger": "WALLET", "trezor": "WALLET",
+	"bitget-wallet": "WALLET", "metamask": "WALLET", "trust": "WALLET", "phantom": "WALLET", "rabby": "WALLET", "ledger": "WALLET", "trezor": "WALLET",
+}
+
+func validCryptoPlatform(kind, platform string) bool {
+	if kind != "EXCHANGE" && kind != "WALLET" {
+		return false
+	}
+	return kind == "WALLET" && platform == "" || cryptoPlatforms[platform] == kind
 }
 
 type CryptoHoldingInput struct {
@@ -26,17 +33,19 @@ type CryptoHoldingInput struct {
 	Quantity     string `json:"quantity"`
 }
 type CryptoAccountInput struct {
-	Name     string               `json:"name"`
-	Kind     string               `json:"kind"`
-	Platform string               `json:"platform"`
-	BookID   string               `json:"bookId"`
-	Holdings []CryptoHoldingInput `json:"holdings"`
+	Currency           string               `json:"currency,omitempty"`
+	PaymentInstruments []string             `json:"paymentInstruments,omitempty"`
+	Name               string               `json:"name"`
+	Kind               string               `json:"kind"`
+	Platform           string               `json:"platform"`
+	BookID             string               `json:"bookId"`
+	Holdings           []CryptoHoldingInput `json:"holdings"`
 }
 
 // UpdatePortfolioAccount edits account metadata without manufacturing or revising holdings.
 func (s *InvestmentService) UpdatePortfolioAccount(c core.Context, uid int64, input models.PortfolioAccount) (*models.PortfolioAccount, error) {
 	input.Name = strings.TrimSpace(input.Name)
-	if uid <= 0 || len(input.Id) == 0 || len(input.Id) > 64 || len([]rune(input.Name)) == 0 || len([]rune(input.Name)) > 64 || len(input.Instruments) > 100 || len(input.Platform) > 32 {
+	if uid <= 0 || len(input.Id) == 0 || len(input.Id) > 64 || len([]rune(input.Name)) == 0 || len([]rune(input.Name)) > 64 || len(input.Instruments) > 100 || len(input.Platform) > 32 || !validatePortfolioCurrency(input.Currency) {
 		return nil, investmentError("请填写有效的账户信息")
 	}
 	defer s.lock(uid)()
@@ -56,9 +65,12 @@ func (s *InvestmentService) UpdatePortfolioAccount(c core.Context, uid int64, in
 			return investmentError("已有账户的类型不能更改")
 		}
 		result.Name = input.Name
+		if input.Currency != "" {
+			result.Currency = input.Currency
+		}
 		if result.Kind == "EXCHANGE" || result.Kind == "WALLET" {
-			if cryptoPlatforms[input.Platform] != result.Kind {
-				return investmentError("请选择对应的交易所或钱包")
+			if !validCryptoPlatform(result.Kind, input.Platform) {
+				return investmentError("所选品牌与账户类型不一致；钱包品牌可留空")
 			}
 			known := map[string]bool{}
 			for _, v := range investmentPresets {
@@ -96,8 +108,16 @@ func (s *InvestmentService) UpdatePortfolioAccount(c core.Context, uid int64, in
 				}
 			}
 			result.Platform, result.Instruments = input.Platform, input.Instruments
+			if input.PaymentInstruments != nil {
+				if err := validatePaymentInstruments(input.PaymentInstruments, input.Instruments); err != nil {
+					return err
+				}
+				result.PaymentInstruments = input.PaymentInstruments
+			} else if err := validatePaymentInstruments(result.PaymentInstruments, input.Instruments); err != nil {
+				return err
+			}
 		}
-		_, err = sess.Where("uid=? AND id=?", uid, result.Id).Cols("name", "platform", "instruments").Update(&result)
+		_, err = sess.Where("uid=? AND id=?", uid, result.Id).Cols("name", "platform", "instruments", "currency", "payment_instruments").Update(&result)
 		return err
 	})
 	return &result, err
@@ -110,8 +130,8 @@ func (s *InvestmentService) CreateCryptoAccount(c core.Context, uid int64, input
 		return nil, investmentError("请求缺少有效的 Idempotency-Key")
 	}
 	input.Name = strings.TrimSpace(input.Name)
-	if len([]rune(input.Name)) == 0 || len([]rune(input.Name)) > 64 || len(input.Holdings) > 100 || (input.Kind != "EXCHANGE" && input.Kind != "WALLET") || cryptoPlatforms[input.Platform] != input.Kind {
-		return nil, investmentError("请选择交易所或钱包，并填写账户名称")
+	if len([]rune(input.Name)) == 0 || len([]rune(input.Name)) > 64 || len(input.Holdings) > 100 || !validCryptoPlatform(input.Kind, input.Platform) || !validatePortfolioCurrency(input.Currency) {
+		return nil, investmentError("请填写账户名称并核对账户类型；钱包品牌可留空")
 	}
 	raw, _ := json.Marshal(input)
 	hash := sha256.Sum256(append([]byte("crypto-account:"), raw...))
@@ -150,7 +170,11 @@ func (s *InvestmentService) CreateCryptoAccount(c core.Context, uid int64, input
 		for _, v := range own {
 			known[v.Id] = v.Type == "CRYPTO"
 		}
-		result = &models.PortfolioAccount{Id: investmentID(), Uid: uid, Name: input.Name, Kind: input.Kind, Platform: input.Platform, Instruments: []string{}}
+		currency := input.Currency
+		if currency == "" {
+			currency = "CNY"
+		}
+		result = &models.PortfolioAccount{Id: investmentID(), Uid: uid, Name: input.Name, Kind: input.Kind, Platform: input.Platform, Instruments: []string{}, Currency: currency, PaymentInstruments: input.PaymentInstruments}
 		seen := map[string]bool{}
 		for _, h := range input.Holdings {
 			if !known[h.InstrumentID] || seen[h.InstrumentID] {
@@ -158,6 +182,9 @@ func (s *InvestmentService) CreateCryptoAccount(c core.Context, uid int64, input
 			}
 			seen[h.InstrumentID] = true
 			result.Instruments = append(result.Instruments, h.InstrumentID)
+		}
+		if err = validatePaymentInstruments(input.PaymentInstruments, result.Instruments); err != nil {
+			return err
 		}
 		if _, err = sess.Insert(result); err != nil {
 			return err
