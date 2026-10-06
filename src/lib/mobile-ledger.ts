@@ -11,6 +11,7 @@ import { useBooksStore } from '@/stores/books.ts';
 import { useLedgerScopeStore } from '@/stores/ledgerScope.ts';
 import { useUserStore } from '@/stores/user.ts';
 import type { TransactionInfoResponse } from '@/models/transaction.ts';
+import type { TransactionPictureInfoBasicResponse } from '@/models/transaction_picture_info.ts';
 
 export interface LedgerEntry {
     id: string; type: number; day: string; time: number; title: string; account: string;
@@ -18,8 +19,10 @@ export interface LedgerEntry {
     categoryId: string; primaryCategoryId: string; primaryCategory: string; comment: string; tags: string[];
     bookId: string; accountId: string; destinationAccountId: string; tagIds: string[]; investment: boolean;
     investmentEventId?: string; excludeFromStatistics?: boolean; reimbursementAccountId?: string; reimbursementReceiptId?: string;
-    discountAmount?: string;
+    discountAmount?: string; transferFeeParentId?: string;
     bookName?: string; icon?: string; iconType?: number; color?: string; transferDirection?: 'in'|'out';
+    accountIcon?: string; accountIconType?: number; pictures?: TransactionPictureInfoBasicResponse[];
+    location?: string; reimbursementClosedAt?: number; destinationAccount?: string; sourceAccountName?:string; destinationCurrency?:string; destinationAmount?:string; transferFeeAmount?:string; debtDueDate?:string;
 }
 export function useMobileLedger(options: { applyFilters?: () => boolean; accountId?: () => string; bookIds?: () => string[] } = {}) {
     const accounts = useAccountsStore();
@@ -61,7 +64,7 @@ export function useMobileLedger(options: { applyFilters?: () => boolean; account
         const converted = currency === 'CNY' ? amount : null;
         return {
             id: item.id, type: item.type, excludeFromStatistics: !!item.excludeFromStatistics || (!!item.reimbursementAccountId && item.reimbursementAccountId !== '0'), reimbursementAccountId: item.reimbursementAccountId, reimbursementReceiptId: item.reimbursementReceiptId, day: moment.unix(item.time).tz(scope.timeZone).format('YYYY-MM-DD'), time: item.time,
-            discountAmount: item.discountAmount || '0',
+            discountAmount: item.discountAmount || '0', transferFeeParentId:item.transferFeeParentId,
             title: item.investmentEventId ? '投资结算' : category?.name || ({ 1: '余额调整', 2: '收入', 3: '支出', 4: '账户转账' }[item.type] || '账户转账'),
             primaryCategory: parent?.name || category?.name || '未分类', primaryCategoryId: parent?.id || item.categoryId, categoryId: item.categoryId,
             bookId: item.bookId || '', accountId: item.sourceAccountId, destinationAccountId: item.destinationAccountId,
@@ -70,6 +73,9 @@ export function useMobileLedger(options: { applyFilters?: () => boolean; account
             currency, amount, cny: converted, hidden: item.hideAmount, comment: item.comment,
             tags: (item.tagIds || []).map(id => tags.allTransactionTagsMap[id]?.name).filter((name): name is string => !!name),
             bookName: books.allBooks.find(b=>b.id===item.bookId)?.name || '日常账本', icon: category?.icon, iconType: category?.iconType, color: category?.color,
+            accountIcon: account?.icon, accountIconType: account?.iconType, pictures: item.pictures,
+            location: item.locationName || (item.geoLocation ? `${item.geoLocation.latitude}, ${item.geoLocation.longitude}` : ''),
+            reimbursementClosedAt: item.reimbursementClosedAt, destinationAccount: destination?.name, sourceAccountName:account?.name, destinationCurrency:destination?.currency, destinationAmount:item.type===4?new LedgerDecimal(item.destinationAmount).div(100).toString():undefined, transferFeeAmount:item.transferFeeAmount, debtDueDate:item.debtDueDate,
             transferDirection: options.accountId && item.type===4 ? incoming ? 'in' : 'out' : undefined
         };
     }
@@ -82,7 +88,7 @@ export function useMobileLedger(options: { applyFilters?: () => boolean; account
         try {
             const [, , , , response] = await Promise.all([
                 accounts.loadAllAccounts({ force: true }).catch(keepUpToDate), categories.loadAllCategories({ force: false }).catch(keepUpToDate),
-                tags.loadAllTags({ force: false }).catch(keepUpToDate), books.loadBooks(), services.getAllTransactions({ startTime: Math.max(0,startTime), endTime, bookIds: options.bookIds?.() || books.selectedBookIds })
+                tags.loadAllTags({ force: false }).catch(keepUpToDate), books.loadBooks(), services.getAllTransactions({ startTime: Math.max(0,startTime), endTime, withPictures: true, bookIds: options.bookIds?.() || books.selectedBookIds })
             ]);
             if (version !== requestNumber || !isCurrentScope()) return;
             if (!response.data.success) throw new Error('账单加载失败，请重试。');

@@ -1,23 +1,23 @@
 <template>
-    <f7-page class="cy-main-page cy-mobile-surface" :class="{'cy-calendar-page': isCalendar}" ptr @ptr:refresh="refresh" @page:afterin="onPageAfterIn" @page:beforeout="active = false">
+    <f7-page class="cy-main-page cy-mobile-surface" :class="{'cy-calendar-page': isCalendar, 'cy-home-page': !isCalendar}" :ptr="isCalendar || experience.preferences.pullAction !== 'none'" @ptr:refresh="pullRefresh" @page:afterin="onPageAfterIn" @page:beforeout="active = false">
         <f7-navbar :class="{'cy-calendar-navbar': isCalendar}">
             <f7-nav-left v-if="isCalendar" class="cy-calendar-nav-left"><div class="cy-calendar-caption"><button aria-label="选择月份" @click="showMonth = true">{{ date(month).format('YYYY年M月') }}<small>⌄</small></button><div class="cy-calendar-totals"><span>收 <b class="cy-income">{{ display(totals.income) }}</b></span><span>支 <b class="cy-expense">{{ display(totals.expense) }}</b></span><span>余 {{ display(totals.balance) }}</span></div></div></f7-nav-left>
             <f7-nav-left v-else class="cy-home-nav-left">
                 <button id="cy-home-book-menu" class="cy-book-trigger" aria-label="切换或添加账本" aria-haspopup="dialog" :aria-expanded="showBooks" @click="showBooks = true">
-                    <f7-icon f7="book_closed_fill" /><span>{{ books.selectedBookIds.length ? books.scopeName : '日常账本' }}</span><f7-icon class="cy-book-chevron" f7="chevron_down" />
+                    <f7-icon f7="book_closed_fill" /><span>{{ books.scopeName }}</span><f7-icon class="cy-book-chevron" f7="chevron_down" />
                 </button>
             </f7-nav-left>
             <f7-nav-right v-if="isCalendar" class="cy-calendar-tools"><button aria-label="回到今天" @click="today">今</button><f7-link :href="addLink" aria-label="添加记账"><svg viewBox="0 0 24 24" aria-hidden="true"><path :d="mdiNotePlusOutline" /></svg></f7-link><button id="cy-calendar-menu" aria-label="日历菜单" @click="showMenu = true"><f7-icon f7="ellipsis_vertical" /></button></f7-nav-right>
-            <f7-nav-right v-else><f7-link href="/transaction/list" icon-f7="search" aria-label="搜索账单" /></f7-nav-right>
+            <f7-nav-right v-else class="cy-home-tools"><f7-link v-if="experience.preferences.hideAdd" :href="addLink" icon-f7="plus" aria-label="添加记账" /><f7-link href="/transaction/list?search=true" icon-f7="search" aria-label="搜索账单" /><f7-link id="cy-home-menu" icon-f7="ellipsis_vertical" aria-label="首页更多功能" @click="showMenu = true" /></f7-nav-right>
         </f7-navbar>
         <main class="cy-page-body" :class="{'cy-calendar-body': isCalendar}">
             <p v-if="error" class="cy-message" role="alert">{{ error }} <button @click="refresh()">重试</button></p>
             <template v-if="!error">
-                <section v-if="!isCalendar" class="cy-panel cy-hero" aria-label="月度收支概览">
-                    <div class="cy-hero-stats"><div><p class="cy-muted">本月收入</p><strong>{{ display(totals.income) }}</strong></div><div><p class="cy-muted">本月结余</p><strong>{{ display(totals.balance) }}</strong></div><div><p class="cy-muted">本月账单</p><strong>{{ loading ? '—' : entries.length }} <small>笔</small></strong></div></div>
-                    <p class="cy-muted">本月支出（元）</p><p class="cy-major">{{ display(totals.expense) }}</p>
+                <section v-if="!isCalendar && !experience.preferences.hideHero" class="cy-home-hero" aria-label="月度收支概览">
+                    <div class="cy-hero-stats"><f7-link :href="homeBillsLink(2)"><p>本月收入</p><strong>{{ display(totals.income) }}</strong></f7-link><f7-link :href="homeBillsLink(0)"><p>本月结余</p><strong>{{ display(totals.balance) }}</strong></f7-link><f7-link :href="budgetLink"><p>剩余预算</p><strong>{{ loading ? '—' : homeBudget === undefined ? '点击设置' : ledgerMoney(homeBudget,false) }}</strong></f7-link></div>
+                    <f7-link :href="homeBillsLink(3)"><p>本月支出(元)</p><strong class="cy-major">{{ display(totals.expense) }}</strong></f7-link>
                 </section>
-                <section v-else class="cy-calendar-panel">
+                <section v-else-if="isCalendar" class="cy-calendar-panel">
                     <div class="cy-calendar-grid" role="group" aria-label="按日期查看账单" @touchstart.passive="touchStart" @touchend.passive="touchEnd">
                         <span v-for="weekday in weekDays" :key="weekday" class="cy-weekday">{{ weekday }}</span>
                         <span v-for="blank in firstWeekday" :key="`blank-${blank}`" aria-hidden="true" />
@@ -33,12 +33,15 @@
                 <header v-if="isCalendar" class="cy-selected-heading"><h2>{{ selectedDay === currentDay ? '今天' : date(selectedDay,'YYYY-MM-DD').format('M月D日') }} <small v-if="preferences.calendarShowLunar">{{ lunar(selectedDay) }}</small></h2><span><span>收 <b class="cy-income">{{ display(dayTotals.income,dayTotals.complete) }}</b></span><span>支 <b class="cy-expense">{{ display(dayTotals.expense,dayTotals.complete) }}</b></span><span>余 {{ display(dayTotals.balance,dayTotals.complete) }}</span></span></header>
                 <section v-if="isCalendar && selectedDue.length" class="cy-due-card"><f7-link v-for="item in selectedDue" :key="item.id" :href="`/calendar/due?date=${item.date}&id=${item.id}`"><span><strong>{{ item.kind === 'repayment' ? '待还款' : '定存到期' }} · {{ item.accountName }}</strong><small>{{ item.note || (item.date < currentDay ? '已逾期 · 点击处理' : '点击查看或处理') }}</small></span><b>{{ ledgerMoney(item.amount,false) }} <small>{{ item.currency }}</small></b></f7-link></section>
                 <p v-if="!loading && !totals.complete" class="cy-message" role="status">部分金额待换算</p>
-                <f7-link v-if="!isCalendar" class="cy-primary-action" :href="addLink"><svg class="cy-add-icon" viewBox="0 0 24 24" aria-hidden="true"><path :d="mdiNotePlusOutline" /></svg><span>添加一条新记账</span></f7-link>
+                <f7-link v-if="!isCalendar && !experience.preferences.hideAdd" class="cy-primary-action" :href="addLink"><svg class="cy-add-icon" viewBox="0 0 24 24" aria-hidden="true"><path :d="mdiNotePlusOutline" /></svg><span>添加一条新记账</span></f7-link>
+                <LedgerHomeCards v-if="!isCalendar && experience.preferences.cards.length" :entries="entries" :month="homeMonth" />
+                <div v-if="!isCalendar && experience.preferences.range === 'month'" class="cy-home-month"><button aria-label="上个月" @click="shiftHome(-1)">‹</button><input v-model="homeMonth" type="month" aria-label="账单月份" /><button aria-label="下个月" @click="shiftHome(1)">›</button></div>
                 <p v-if="loading" class="cy-empty" role="status">正在加载账单…</p>
-                <template v-else><LedgerDayList :entries="visibleEntries" :show-heading="!isCalendar" /><section v-if="!visibleEntries.length" class="cy-panel cy-empty"><p>{{ isCalendar ? `${selectedDay} 还没有账单` : '这个月还没有账单' }}</p><f7-link v-if="isCalendar" :href="addLink">记一笔</f7-link></section></template>
+                <template v-else><LedgerDayList :entries="isCalendar ? visibleEntries : visibleEntries.slice(0,homeLimit)" :show-heading="!isCalendar" @hold="openBillActions" /><button v-if="!isCalendar && homeLimit < visibleEntries.length" class="cy-home-load" @click="homeLimit += 100">加载更多账单</button><section v-if="!visibleEntries.length" class="cy-panel cy-empty"><p>{{ isCalendar ? `${selectedDay} 还没有账单` : '还没有账单，记下第一笔吧' }}</p><f7-link v-if="isCalendar" :href="addLink">记一笔</f7-link></section></template>
             </template>
         </main>
-        <template #fixed><LedgerNavigation :active="isCalendar ? 'calendar' : 'home'" /></template>
+        <template #fixed><f7-link v-if="!isCalendar && experience.preferences.floatPosition !== 'hidden'" :class="['cy-fab',{'cy-home-fab-left':experience.preferences.floatPosition === 'left'}]" :href="experience.preferences.floatAction === 'add' ? addLink : '/user/import'" :aria-label="experience.preferences.floatAction === 'add' ? '快捷记账' : '导入账单'"><f7-icon :f7="experience.preferences.floatAction === 'add' ? 'plus' : 'tray_arrow_down'" /></f7-link><LedgerNavigation :active="isCalendar ? 'calendar' : 'home'" /></template>
+        <f7-popover v-if="!isCalendar" target-el="#cy-home-menu" v-model:opened="showMenu" class="cy-mobile-surface cy-home-popover"><div class="cy-home-menu-content"><f7-link href="/settings/cards" popover-close><f7-icon f7="square_grid_2x2" />数据小卡片</f7-link><f7-link href="/template/list" popover-close><f7-icon f7="doc_on_doc" />模板记账</f7-link><f7-link :href="budgetLink" popover-close><f7-icon f7="chart_pie" />预算管理</f7-link><p>视图</p><div><button :aria-pressed="experience.preferences.view === 'simple'" @click="experience.set('view','simple'); showMenu = false"><f7-icon f7="list_bullet" />简约</button><button :aria-pressed="experience.preferences.view === 'detail'" @click="experience.set('view','detail'); showMenu = false"><f7-icon f7="list_bullet_below_rectangle" />详细</button><button :aria-pressed="experience.preferences.range === 'all'" @click="experience.set('range','all'); showMenu = false">全部</button><button :aria-pressed="experience.preferences.range === 'month'" @click="experience.set('range','month'); showMenu = false">按月</button></div><p>截图导入</p><div><f7-link href="/user/import?source=wechat-screenshot" popover-close><f7-icon f7="bubble_left_bubble_right" />微信</f7-link><f7-link href="/user/import?source=alipay-screenshot" popover-close><f7-icon f7="creditcard" />支付宝</f7-link></div></div></f7-popover>
         <f7-popover v-if="isCalendar" target-el="#cy-calendar-menu" v-model:opened="showMenu" class="cy-calendar-popover"><f7-list>
             <f7-list-item title="本月账单" :link="monthBillsLink" popover-close><template #media><f7-icon f7="calendar" /></template></f7-list-item>
             <f7-list-item title="多选账本" link="#" popover-close @click="openBookSelector"><template #media><f7-icon f7="checkmark_square" /></template></f7-list-item>
@@ -66,16 +69,22 @@ import moment from 'moment-timezone';
 import type { Router } from 'framework7/types';
 import LedgerNavigation from '@/components/mobile/LedgerNavigation.vue';
 import LedgerDayList from '@/components/mobile/LedgerDayList.vue';
-import { LedgerDecimal, ledgerMoney, ledgerTotals, useMobileLedger } from '@/lib/mobile-ledger.ts';
+import LedgerHomeCards from '@/components/mobile/LedgerHomeCards.vue';
+import { LedgerDecimal, ledgerMoney, ledgerTotals, useMobileLedger, type LedgerEntry } from '@/lib/mobile-ledger.ts';
+import { useLedgerExperienceStore } from '@/stores/ledgerExperience.ts';
+import { useStatisticsWorkspaceStore } from '@/stores/statisticsWorkspace.ts';
+import { budgetReports } from '@/lib/statistics-report.ts';
+import { ledgerMonthRange, ledgerAccountingMonth } from '@/lib/ledger-preferences.ts';
 import { useSettingsStore } from '@/stores/setting.ts';
 import { calendarEvents, type CalendarEvent } from '@/lib/calendar-events.ts';
 import { investmentError } from '@/lib/investments.ts';
 import { getChineseYearMonthDayInfo, getChineseCalendarAlternateDisplayDate } from '@/lib/calendar/chinese_calendar.ts';
 import { DEFAULT_CONTENT } from '@/locales/calendar/chinese/index.ts';
-const props = defineProps<{ f7route: Router.Route }>();
+const props = defineProps<{ f7route: Router.Route; f7router: Router.Router }>();
 const isCalendar = computed(() => props.f7route.path === '/calendar');
 const { entries, displayEntries, loading, error, load } = useMobileLedger({ applyFilters: () => false });
 const settings = useSettingsStore();
+const experience = useLedgerExperienceStore(), workspace = useStatisticsWorkspaceStore();
 const preferences = computed(() => settings.appSettings);
 const showMenu = ref(false), showMonth = ref(false), showBookSelector = ref(false), draftBooks = ref<string[]>([]);
 const dueItems = ref<CalendarEvent[]>([]), dueError = ref('');
@@ -85,6 +94,14 @@ const selectedDue = computed(() => visibleDue.value.filter(item => item.date ===
 const dayTotals = computed(() => ledgerTotals(entries.value.filter(item => item.day === selectedDay.value)));
 const monthBillsLink = computed(() => `/transaction/list?dateType=255&minTime=${date(month.value).startOf('month').unix()}&maxTime=${date(month.value).endOf('month').unix()}`);
 const scope = useLedgerScopeStore(), books = useBooksStore();
+const homeMonth = ref(ledgerAccountingMonth(moment().tz(scope.timeZone),experience.preferences.monthStart)), homeLimit = ref(100);
+const homeRange = computed(() => ledgerMonthRange(homeMonth.value,scope.timeZone,experience.preferences.monthStart));
+const homeEntries = computed(() => entries.value.filter(item => item.time >= homeRange.value.start.unix() && item.time <= homeRange.value.end.unix()));
+const homeBudget = computed(() => { const reports = budgetReports(workspace.budgets.filter(item => !books.selectedBookIds.length || books.selectedBookIds.includes(item.bookId)),entries.value,homeMonth.value,workspace.preferences).filter(item => item.budget.kind === 'monthly' && item.budget.categoryId === '0'); return reports.length ? reports.some(item => item.remaining === null) ? null : reports.reduce((sum,item) => sum.plus(item.remaining!),new LedgerDecimal(0)).toString() : undefined; });
+const budgetLink = computed(() => `/statistics/budgets?bookId=${books.defaultBookId}`);
+function homeBillsLink(type:number) { return `/transaction/list?minTime=${homeRange.value.start.unix()}&maxTime=${homeRange.value.end.unix()}&type=${type}&bookIds=${books.selectedBookIds.join(',')}`; }
+function shiftHome(amount:number) { homeMonth.value = moment(homeMonth.value,'YYYY-MM').add(amount,'month').format('YYYY-MM'); homeLimit.value = 100; }
+function openBillActions(item:LedgerEntry) { props.f7router.navigate(`/transaction/list?selectId=${item.transferFeeParentId && item.transferFeeParentId!=='0'?item.transferFeeParentId:item.id}`); }
 const { month, selectedDay } = storeToRefs(scope);
 const { currentDay } = storeToRefs(scope);
 const showBooks = ref(false), active = ref(false);
@@ -92,8 +109,8 @@ function date(value: string, format = 'YYYY-MM'): moment.Moment { return moment.
 watch(() => books.selectedBookIds.join(','), () => { if (active.value) void refresh(); });
 watch(() => [scope.timeZone, currentDay.value], () => { if (active.value) void refresh(); });
 const addLink = computed(() => isCalendar.value ? `/transaction/add?time=${date(selectedDay.value,'YYYY-MM-DD').hour(12).unix()}&noTransactionDraft=true` : '/transaction/add');
-const totals = computed(() => ledgerTotals(entries.value));
-const visibleEntries = computed(() => isCalendar.value ? displayEntries.value.filter(item => item.day === selectedDay.value) : displayEntries.value);
+const totals = computed(() => ledgerTotals(isCalendar.value ? entries.value : homeEntries.value));
+const visibleEntries = computed(() => isCalendar.value ? displayEntries.value.filter(item => item.day === selectedDay.value) : experience.preferences.range === 'all' ? displayEntries.value : displayEntries.value.filter(item => item.time >= homeRange.value.start.unix() && item.time <= homeRange.value.end.unix()));
 const weekStart = computed(() => preferences.value.calendarWeekStart);
 const weekDays = computed(() => Array.from({ length: 7 }, (_, index) => ['日','一','二','三','四','五','六'][(index + weekStart.value) % 7]));
 const firstWeekday = computed(() => (date(month.value).day() - weekStart.value + 7) % 7);
@@ -102,14 +119,16 @@ const days = computed(() => Array.from({ length: date(month.value).daysInMonth()
     const items = entries.value.filter(item => item.day === key);
     return { key, number: index + 1, hasFlows: items.some(item => item.type === 2 || item.type === 3), totals: ledgerTotals(items), due: visibleDue.value.filter(item => item.date === key) };
 }));
-function display(value: string, complete = totals.value.complete): string { return loading.value || (isCalendar.value && !complete) ? '—' : ledgerMoney(value, false); }
+function display(value: string, complete = totals.value.complete): string { return loading.value || !complete ? '—' : ledgerMoney(value, false); }
 function compact(value: string, direction: number): string { const amount = new LedgerDecimal(value).mul(direction); return `${direction > 0 ? '+' : amount.isZero() ? '-' : ''}${amount.abs().gte(10000) ? `${amount.div(10000).toFixed(1)}万` : amount.toFixed(amount.isInteger() ? 0 : 2)}`; }
 async function refresh(done?: () => void): Promise<void> {
     let requestedDate = date(isCalendar.value ? month.value : currentDay.value.slice(0,7));
     if (!requestedDate.isValid()) { requestedDate = moment().tz(scope.timeZone); month.value = requestedDate.format('YYYY-MM'); selectedDay.value = requestedDate.format('YYYY-MM-DD'); }
-    await Promise.all([load(requestedDate.clone().startOf('month').unix(), requestedDate.clone().endOf('month').unix()), ...(isCalendar.value ? [loadDue()] : [])]);
-    if (typeof done === 'function') done();
+    try { await Promise.all([load(isCalendar.value ? requestedDate.clone().startOf('month').unix() : 0, isCalendar.value ? requestedDate.clone().endOf('month').unix() : moment().tz(scope.timeZone).add(100,'years').unix()), ...(isCalendar.value ? [loadDue()] : [workspace.load(true)])]); }
+    catch(cause) { error.value = investmentError(cause); }
+    finally { if (typeof done === 'function') done(); }
 }
+function pullRefresh(done?: () => void):void { if (!isCalendar.value && experience.preferences.pullAction === 'add') { done?.(); props.f7router.navigate(addLink.value); } else void refresh(done); }
 function selectBook(id: string): void { books.selectedBookIds = id ? [id] : []; }
 function onPageAfterIn(): void { scope.syncClock(); active.value = true; void refresh(); }
 function monthChanged(): void { if (!date(month.value).isValid()) return; selectedDay.value = month.value === currentDay.value.slice(0,7) ? currentDay.value : `${month.value}-01`; void refresh(); }
@@ -142,6 +161,8 @@ function touchStart(event: TouchEvent): void { touchX = event.changedTouches[0]?
 function touchEnd(event: TouchEvent): void { const touch = event.changedTouches[0]; if (touch && Math.abs(touch.clientX-touchX)>70 && Math.abs(touch.clientY-touchY)<45) shift(touch.clientX>touchX ? -1 : 1); }
 </script>
 <style scoped>
+.cy-home-page{--f7-navbar-height:50px}.cy-home-page .cy-page-body{padding:6px 15px 22px}.cy-home-page .cy-primary-action{min-height:45px;margin-bottom:14px;border-radius:9px;font-weight:400;padding:9px 12px}.cy-home-page .cy-primary-action .cy-add-icon{width:25px;height:25px;flex-basis:25px}.cy-home-hero{background:#d6ebe4;border-radius:11px;min-height:145px;box-sizing:border-box;padding:13px 15px;margin-bottom:15px;color:#365651}.cy-home-hero a{display:block;color:inherit}.cy-home-hero p{font-size:13px;line-height:1.4}.cy-home-hero .cy-hero-stats{gap:14px;margin-bottom:12px}.cy-home-hero .cy-hero-stats strong{font-size:18px;font-weight:550;margin-top:3px;line-height:1.3}.cy-home-hero .cy-major{font-size:29px;font-weight:600;line-height:1.3;margin-top:1px;display:block}.cy-home-tools{gap:0}.cy-home-tools .link{width:37px;min-width:37px;padding:0}.cy-home-tools .icon{font-size:24px}.cy-home-nav-left{max-width:calc(100% - 100px)!important}.cy-home-page .cy-book-trigger{font-size:18px;font-weight:500;gap:9px}.cy-home-page :deep(.navbar-inner){padding-inline:13px}.cy-home-page :deep(.navbar .left),.cy-home-page :deep(.navbar .right){background:transparent;box-shadow:none;border-radius:0;backdrop-filter:none}.cy-home-month{display:flex;align-items:center;justify-content:center;margin:12px 0;gap:10px}.cy-home-month button{border:0;background:transparent;font-size:25px;color:var(--cy-muted);padding:5px 15px}.cy-home-month input{width:128px;background:transparent;border:0;font:inherit;font-size:15px}.cy-home-load{width:100%;background:var(--cy-card);border:0;border-radius:9px;color:var(--cy-muted);padding:13px;font-size:12px;margin-bottom:12px}.cy-home-fab-left{left:20px;right:auto}.dark .cy-home-hero{background:#25433f;color:#d9e9e3}
+.cy-home-popover{width:250px;--f7-list-bg-color:var(--cy-card);background:var(--cy-card);border-radius:10px}.cy-home-menu-content{padding:7px 13px 13px;color:var(--cy-ink)}.cy-home-menu-content>a{display:flex;align-items:center;gap:14px;color:inherit;min-height:46px;font-size:15px;padding-inline:7px}.cy-home-menu-content>a .icon{font-size:21px;color:var(--cy-muted)}.cy-home-menu-content>p{font-size:11px;color:var(--cy-muted);padding:9px 0}.cy-home-menu-content>div{display:grid;grid-template-columns:1fr 1fr;gap:8px}.cy-home-menu-content>div>button,.cy-home-menu-content>div>a{display:flex;align-items:center;justify-content:center;gap:6px;background:var(--cy-bg);color:var(--cy-ink);border:0;border-radius:7px;padding:10px 3px;font-size:13px}.cy-home-menu-content>div .icon{font-size:16px}.cy-home-menu-content button[aria-pressed=true]{color:var(--cy-accent);background:var(--cy-soft)}
 .cy-home-nav-left{min-width:0;max-width:calc(100% - 60px)}
 .cy-book-trigger{display:flex;align-items:center;gap:10px;min-width:0;max-width:100%;min-height:44px;padding:0 4px;background:transparent;border:0;color:var(--cy-ink);font:inherit;font-size:21px;font-weight:650;text-align:left;cursor:pointer}
 .cy-book-trigger span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

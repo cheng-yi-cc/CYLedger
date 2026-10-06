@@ -43,6 +43,8 @@ func personalOwner() (*models.User, error) {
 }
 
 func personalSession() (string, error) {
+	core.LocalRequestGate.RLock()
+	defer core.LocalRequestGate.RUnlock()
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
 	user, err := personalOwner()

@@ -59,6 +59,7 @@ func newInvestmentDBFixture(t *testing.T) *investmentDBFixture {
 	})
 	require.NoError(t, datastore.Container.UserDataStore.SyncStructs(
 		&models.StatisticsBudget{}, &models.StatisticsNote{}, &models.StatisticsPreference{},
+		&models.LocalLedgerItem{},
 		&models.Book{}, &models.CalendarEvent{}, &models.AssetPresentation{}, &models.FixedDeposit{}, &models.ReimbursementReceipt{}, &models.AssetAdjustment{}, &models.CreditInstallment{}, &models.DebtMovement{}, &models.MonetaryIncomeBinding{}, &models.MonetaryIncomeDay{}, &models.TransactionTemplate{}, &models.Account{}, &models.Transaction{}, &models.TransactionCategory{}, &models.TransactionTag{}, &models.TransactionTagIndex{}, &models.TransactionPictureInfo{},
 		&models.PortfolioAccount{}, &models.InvestmentInstrument{}, &models.InvestmentSettings{}, &models.InvestmentEventRecord{}, &models.InvestmentEventRevision{},
 		&models.InvestmentTransactionLink{}, &models.InvestmentIdempotency{}, &models.InvestmentQuote{}, &models.WealthSnapshot{},

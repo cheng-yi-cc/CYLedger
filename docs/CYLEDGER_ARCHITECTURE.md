@@ -22,7 +22,8 @@ Vue 网页 / Android WebView
 | 模型/字段 | 职责 |
 |---|---|
 | `Book` | 默认、归档、排序及显示偏好；流水/模板/投资事件携带账本归属，账户仍共用 |
-| `CalendarEvent` | 手动到期事项，完成状态不产生现金流水 |
+| `CalendarEvent` | 手动或借款账单关联的到期事项，完成状态不产生现金流水 |
+| `LocalLedgerItem` | 愿望、关键词规则、永久幂等的导入批次；不是第二份账户余额 |
 | `StatisticsBudget` / `StatisticsNote` / `StatisticsPreference` | 预算规则、账本与周期总结、各周期模块顺序及预算口径；修订号避免并发覆盖 |
 | `Transaction.DiscountAmount` / `TransactionTag.ParentTagId` | 原币优惠金额、两级标签关系；优惠不改实收付，两级关系同用户且无循环 |
 | `Account.Extend.AssetProfile` | 类型、分组、简称、卡号、夜间图标、资产统计选择、信用规则与借款日期；没有第二份余额 |
@@ -39,6 +40,16 @@ Vue 网页 / Android WebView
 | `InvestmentQuote` / `WealthSnapshot` | 公共行情持久缓存、私人手动价和历史估值快照 |
 
 普通账户金额沿用整数分；新增 API 的金额、数量、价格、汇率使用十进制字符串，禁止浮点进入成本计算。投资数量/价格最多 18 位小数，成本除法 36 位；输出展示舍入不改变保存事实。
+
+## 手机工作区与完整备份
+
+`LocalLedgerItem` 保存 `wish`、`keyword` 和内部 `import` 批次。愿望/规则请求校验用户归属、引用和修订号；金额采用十进制字符串，愿望进度是计划或从事实推导的显示值，不生成账户余额。显示偏好位于按本机档案隔离的 `cy_ledger_experience_*`；备份白名单只允许此项和 `ebk_app_settings`。
+
+`Transaction.TransferFeeAmount/TransferFeeCategoryId/TransferFeeParentId` 关联转账与手续费收支。创建、修订、删除在原事务中更新账户；关联手续费禁止被普通批量入口单独改动。移动账本和账户级联删除同步处理关联。`DebtDueDate` 关联 `CalendarEvent.TransactionId`，账单修改/删除/移动同步更新提醒；关联事项不能独立修改日期金额或删除，完成标记不修改账务。`LocationName` 保存用户输入的地点。
+
+导入沿用已有解析器和批量入账服务；用户/批次 ID 的永久摘要支持重启后幂等，内容改变或已撤回的批次 ID 拒绝重用。批次撤回在一个事务中删除尚存在的原始账单，恢复余额并沿用投资、报销及关联保护，失败整体回滚。
+
+Android `LocalBridge` 只允许本机页面且解锁后发起操作。备份同时获得请求、定时任务写门禁，用 SQLite 一致快照打包附件和白名单设置；恢复在私有维护进程中停止后端后替换目录，保留恢复前目录及日志回退。外部网页不在此 WebView 执行。
 
 ## 核心流程
 
@@ -65,6 +76,8 @@ Vue 网页 / Android WebView
 | 方法 | 路径（省略 `/api/v1`） |
 |---|---|
 | GET | `/books/list` |
+| GET | `/ledger/items`、`/ledger/imports` |
+| POST | `/ledger/items/save`、`/ledger/items/delete`、`/ledger/imports/undo` |
 | GET / POST | `/statistics/preferences` |
 | GET | `/statistics/budgets`、`/statistics/notes`、`/statistics/auxiliary` |
 | POST | `/statistics/budgets/save`、`/statistics/budgets/delete`、`/statistics/notes/save` |
@@ -126,6 +139,6 @@ Vue 网页 / Android WebView
 
 ## Android 与部署
 
-Android 通过 JNI 在应用进程内运行相同后端，正式/QA 分别使用回环端口 18761/18762 和各自私有目录。个人会话仅由原生外壳交给本应用 WebView；正式包禁用调试和注册。`ReminderBridge`/`ReminderReceiver` 接入系统通知，不能代替后台常驻服务。
+Android 通过 JNI 在应用进程内运行相同后端，正式/QA 分别使用回环端口 18761/18762 和各自私有目录。个人会话仅由原生外壳交给本应用 WebView；正式包禁用调试和注册。`ReminderBridge`/`ReminderReceiver` 处理资产提醒，`DailyReminderReceiver` 处理每日记账提醒，`LedgerTileService` 打开手动记账；这些入口不能代替后台常驻服务。
 
 Windows 和 Compose 的配置、签名密钥、数据库及附件放在持久运行目录，不能提交仓库。启动时 XORM 同步模型，随后 `Books.MigrateAll` 为历史事实补默认账本。迁移前备份、恢复校验与回退见 [运维说明](CYLEDGER_OPERATIONS.md)。没有独立下游项目；Android 是同仓库内的消费者。

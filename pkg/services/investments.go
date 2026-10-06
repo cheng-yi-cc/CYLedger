@@ -585,7 +585,12 @@ func InvalidateWealthSnapshots(sess *xorm.Session, uid, from int64) error {
 }
 
 // Guard all legacy mutation paths, including batch APIs and data clearing.
-func guardInvestmentTransactions(sess *xorm.Session, uid int64, ids []int64) error {
+func guardInvestmentTransactions(sess *xorm.Session, uid int64, ids []int64, allowTransferFees ...bool) error {
+	if len(allowTransferFees) == 0 || !allowTransferFees[0] {
+		if err := guardTransferFeeMutation(sess, uid, ids); err != nil {
+			return err
+		}
+	}
 	query := sess.Where("uid=? AND investment_event_id<>? AND deleted=?", uid, "", false)
 	if len(ids) > 0 {
 		query = query.In("transaction_id", ids)

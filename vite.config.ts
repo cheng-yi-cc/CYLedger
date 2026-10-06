@@ -102,6 +102,13 @@ function injectFramework7CssFile({ htmlFileName, placeHolders }: { htmlFileName:
     ];
 }
 
+function offlineOCR():Plugin {
+    const files:Record<string,string>={'worker.min.js':'node_modules/tesseract.js/dist/worker.min.js'};
+    for(const suffix of ['', '-simd', '-lstm', '-simd-lstm']) files[`tesseract-core${suffix}.wasm.js`]=`node_modules/tesseract.js-core/tesseract-core${suffix}.wasm.js`;
+    for(const lang of ['chi_sim','eng']) files[`${lang}.traineddata.gz`]=`node_modules/@tesseract.js-data/${lang}/4.0.0_best_int/${lang}.traineddata.gz`;
+    return {name:'offline-bill-ocr',generateBundle(){for(const [name,path] of Object.entries(files))this.emitFile({type:'asset',fileName:`js/ocr/${name}`,source:fs.readFileSync(resolve(__dirname,path))});},configureServer(server){server.middlewares.use('/js/ocr/',(req,res,next)=>{const path=files[(req.url||'').split('?')[0]!];if(!path){next();return;}res.setHeader('Content-Type',path.endsWith('.js')?'application/javascript':'application/octet-stream');fs.createReadStream(resolve(__dirname,path)).pipe(res);});}};
+}
+
 export default defineConfig(() => {
     const licenseContent = ['./LICENSE', './NOTICE', './licenses/ezbookkeeping-MIT-LICENSE']
         .map(path => fs.readFileSync(path, { encoding: 'utf-8' })).join('\n\n');
@@ -121,6 +128,7 @@ export default defineConfig(() => {
             __EZBOOKKEEPING_THIRD_PARTY_LICENSES__: JSON.stringify(thirdPartyLicenseFile)
         },
         plugins: [
+            offlineOCR(),
             vue({
                 template: {
                     compilerOptions: {

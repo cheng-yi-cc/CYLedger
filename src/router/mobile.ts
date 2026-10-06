@@ -55,12 +55,19 @@ import CategoryFilterSettingsPage from '@/views/mobile/settings/CategoryFilterSe
 import TransactionTagFilterSettingsPage from '@/views/mobile/settings/TransactionTagFilterSettingsPage.vue';
 
 import SettingsPage from '@/views/mobile/SettingsPage.vue';
+import MoreSettingsPage from '@/views/mobile/settings/MoreSettingsPage.vue';
+import AppearancePage from '@/views/mobile/settings/AppearancePage.vue';
+import CardsPage from '@/views/mobile/settings/CardsPage.vue';
+import WishesPage from '@/views/mobile/WishesPage.vue';
+import KeywordsPage from '@/views/mobile/KeywordsPage.vue';
 import ApplicationLockPage from '@/views/mobile/ApplicationLockPage.vue';
 import ExchangeRatesListPage from '@/views/mobile/exchangerates/ListPage.vue';
 import ExchangeRatesUpdatePage from '@/views/mobile/exchangerates/UpdatePage.vue';
 import AboutPage from '@/views/mobile/AboutPage.vue';
 
 import UserProfilePage from '@/views/mobile/users/UserProfilePage.vue';
+import BackupPage from '@/views/mobile/users/BackupPage.vue';
+import ImportPage from '@/views/mobile/users/ImportPage.vue';
 import DataManagementPage from '@/views/mobile/users/DataManagementPage.vue';
 import TwoFactorAuthPage from '@/views/mobile/users/TwoFactorAuthPage.vue';
 import SessionListPage from '@/views/mobile/users/SessionListPage.vue';
@@ -155,6 +162,13 @@ function checkNotLogin({ router, resolve, reject }: { router: Router.Router, res
 }
 
 const routes: Router.RouteParameters[] = [
+    { path: '/settings/more', async: asyncResolve(MoreSettingsPage), beforeEnter: [checkLogin] },
+    { path: '/settings/appearance', async: asyncResolve(AppearancePage), beforeEnter: [checkLogin] },
+    { path: '/user/backup', async: asyncResolve(BackupPage), beforeEnter: [checkLogin] },
+    { path: '/user/import', async: asyncResolve(ImportPage), beforeEnter: [checkLogin] },
+    { path: '/settings/cards', async: asyncResolve(CardsPage), beforeEnter: [checkLogin] },
+    { path: '/wishes', async: asyncResolve(WishesPage), beforeEnter: [checkLogin] },
+    { path: '/keywords', async: asyncResolve(KeywordsPage), beforeEnter: [checkLogin] },
     { path: '/assets/debts', async: asyncResolve(DebtPage), beforeEnter: [checkLogin] },
     { path: '/account/debt', async: asyncResolve(DebtPage), beforeEnter: [checkLogin] },
     { path: '/assets/reimbursements', async: asyncResolve(ReimbursementPage), beforeEnter: [checkLogin] },

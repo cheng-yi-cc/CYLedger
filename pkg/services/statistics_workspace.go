@@ -317,6 +317,13 @@ func (s *StatisticsWorkspaceService) Auxiliary(c core.Context, uid int64) (*mode
 		return nil, errs.ErrUserIdInvalid
 	}
 	out := &models.StatisticsAuxiliary{DebtActions: map[string]string{}, FeeIds: []string{}}
+	var transferFees []models.Transaction
+	if err := s.UserDataDB(uid).NewSession(c).Where("uid=? AND deleted=? AND transfer_fee_parent_id>0", uid, false).Find(&transferFees); err != nil {
+		return nil, err
+	}
+	for _, fee := range transferFees {
+		out.FeeIds = append(out.FeeIds, strconv.FormatInt(fee.TransactionId, 10))
+	}
 	var movements []models.DebtMovement
 	if err := s.UserDataDB(uid).NewSession(c).Where("uid=?", uid).Find(&movements); err != nil {
 		return nil, err

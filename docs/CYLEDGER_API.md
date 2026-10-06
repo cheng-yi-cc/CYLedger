@@ -4,11 +4,35 @@
 
 接口注册以 `cmd/webserver.go` 为准。新增路由清单如下，普通账户、流水、分类、模板及导入导出仍沿用上游接口；相关新增字段见 `pkg/models/account_asset_profile.go`、`transaction.go`、`book.go`。
 
+
+## 手机工作区
+
+- `GET /api/v1/ledger/items?kind=wish|keyword`：当前用户的愿望/关键词。
+- `POST /api/v1/ledger/items/save`：`{id, kind, revision, data}`；新增 `id=""`、`revision="0"`，编辑必须携带已读修订号。
+- `POST /api/v1/ledger/items/delete`：`{id, kind, revision}`；只删除当前用户和匹配修订的项目。
+- `GET /api/v1/ledger/imports`：导入批次 `{id,name,count,createdAt,deleted}`，`count` 为十进制整数字符串。
+- `POST /api/v1/ledger/imports/undo`：`{id}`，整批撤回可重复请求。
+
+原有 `POST /transactions/import.json` 请求可附 `batchId`（最多 64 字符）及 `sourceName`（最多 128 字符）；重试保持同一 ID 和内容。批次入账、指纹和交易 ID 在同一事务保存。撤回后保留防重身份，该 ID 不得再次导入。
+
+普通账单请求/响应增加 `transferFeeAmount`（最多两位小数的带符号字符串）、`transferFeeCategoryId`、`debtDueDate`（YYYY-MM-DD 或空串）、`locationName`（最多 200 字）。`transferFeeParentId` 仅由响应返回关联的原转账 ID。手续费仅适用于转出账单，正数选支出分类、负数选收入分类；关联费用不能单独编辑。约定日期只支持借入/借出，响应的日历事项含 `transactionId`；提醒变更请修改原账单。修改请求省略扩展字段则保留旧值，清空日期须显式传空串。模型定义仍是完整字段与约束的依据。
+
+愿望保存示例（`POST /ledger/items/save`，不产生资金流水）：
+
+```json
+{"id":"","kind":"wish","revision":"0","data":{"name":"旅行","icon":"gift","target":"1000.00","initial":"50.00","startDate":"2026-10-05","endDate":"","mode":"manual","cycle":"month","amount":"0.00","ratio":"100.00","bookIds":[],"accountIds":[],"incomeCategoryIds":[],"expenseCategoryIds":[],"note":"","archived":false,"logs":[]}}
+```
+
+`mode` 可选 `manual/schedule/income/balance/asset`，`cycle` 为 `day/week/month/year`；`target` 大于零，`ratio` 在 0–100 之间。`logs` 最多 300 条，金额允许带负号表示取出，手动模式累计不能为负。关键词 `data` 为 `{keywords,categoryId,accountId,tagIds,enabled}`：至少一个关键词、有效分类，账户可为空字符串，标签最多 10 个。引用必须属于当前用户。每种公开类型最多 500 项，`data` 上限 60 KiB；完整 JSON 上限 64 KiB。保存返回分配的 ID 和递增修订号，后续保存/删除必须使用最新修订号。
+
+
 ## 路由清单
 
 | 方法 | 路径（省略 `/api/v1`） |
 |---|---|
 | GET | `/books/list` |
+| GET | `/ledger/items`、`/ledger/imports` |
+| POST | `/ledger/items/save`、`/ledger/items/delete`、`/ledger/imports/undo` |
 | GET / POST | `/statistics/preferences` |
 | GET | `/statistics/budgets`、`/statistics/notes`、`/statistics/auxiliary` |
 | POST | `/statistics/budgets/save`、`/statistics/budgets/delete`、`/statistics/notes/save` |
@@ -68,6 +92,7 @@
 | GET | `/wealth/summary` |
 | GET | `/wealth/history` |
 
+
 ## 通用约定
 
 - 新增账务 API 中金额、数量、价格、汇率和大整数 ID 以字符串传递，例如 `"100.25"`；时间戳为 Unix 秒，业务日期为 `YYYY-MM-DD`，时区为 IANA 名称。旧流水接口仍使用其整数分格式，不能混用。
@@ -76,6 +101,7 @@
 - 投资创建/修订/撤销及加密账户创建使用 `Idempotency-Key` 请求头；余额校准、报销到账、债务和分期使用请求体 `requestId`。重试保持同一键及同一内容，改内容须创建新请求。
 - 投资修订、分期更新、资产偏好及预算/总结/统计偏好使用返回的版本/修订号。冲突后重新读取与预览，不盲目覆盖。
 - `GET /wealth/summary` 可能保存估值快照；`POST */sync` 可能写入到期费用/收益，不能当作无副作用的健康检查。健康检查使用 `/healthz.json`。
+
 
 ## 查询与最小示例
 
@@ -112,6 +138,7 @@ Invoke-RestMethod "$ledgerBase/monetary-income/search?q=000198" -Headers $ledger
 
 必须先搜索、核对实际基金并由用户明确绑定。仅人民币可用资金账户允许绑定。`bookId`、`categoryId` 可省略；首次使用有效默认值，后续收益继承前一条记录。暂停/解绑使用 `POST /monetary-income/pause` 的 `accountId`，保留历史流水与逐日防重。同步接收 `accountId` 和可选 `force`，缺数据时等待，不能绕过防重。
 
+
 ## 资产写入字段
 
 | 操作 | 关键输入与约束 |
@@ -127,6 +154,7 @@ Invoke-RestMethod "$ledgerBase/monetary-income/search?q=000198" -Headers $ledger
 
 精确类型定义位于 `pkg/services/asset_adjustment.go`、`reimbursements.go`、`debt_movements.go`、`credit_installments.go`、`account_deletion.go` 和 `pkg/models/asset_tools.go`。日期、ID 和金额均由服务复核，不信任前端预览结果。
 
+
 ## 投资、账本与历史
 
 投资先调用 `/investments/events/preview` 核对持仓/资金效果，再按相同事实提交；预览不落账。修订/撤销使用路径中的事件 ID、原版本和新的幂等键。字段定义为 `services.InvestmentEvent` 内嵌的 `investments.Event`，并带 `cashAccountId`、`bookId` 和可选转换快照。
@@ -134,6 +162,7 @@ Invoke-RestMethod "$ledgerBase/monetary-income/search?q=000198" -Headers $ledger
 加密参考兑换 `/investments/conversion` 保存 120 秒有效快照，实际到账可手动修正；过期/不匹配报价不得成为有效历史汇率。缺成本、价格或历史汇率不返回虚构零值。
 
 `books/move` 移动流水归属，最多 1000 笔，转账双边同步且不改余额；投资结算不通过普通批量移动修改。归档账本只供查询，成本回放始终包含全部有效历史。
+
 
 ## 错误处理
 
@@ -143,10 +172,12 @@ Invoke-RestMethod "$ledgerBase/monetary-income/search?q=000198" -Headers $ledger
 | `ErrInvestmentLinked`，HTTP 409 | 从投资事件修订/撤销，不能单独更改关联资金流水 |
 | `ErrInvestmentConflict`，HTTP 409 | 版本变化或同键不同内容；重新读取并让用户确认 |
 | `ErrStatisticsConflict`，HTTP 409 | 预算、总结或统计偏好的修订号已过期；保留编辑内容，读取新版本后再提交 |
+| `ErrLedgerItemConflict`，HTTP 409 | 愿望/关键词修订冲突、记录不存在，或导入批次同 ID 不同内容/已经撤回；先查询当前记录，不能盲目换键重试 |
 | 输入、归属、金额或历史约束，通常 HTTP 400 | 保留表单，显示服务端业务错误，修正后再提交 |
 | 网络中断/未知提交结果 | 同一请求键重试并查询结果，不能换键盲目再记一次 |
 
 账务操作可能因过额、超卖、共享额度引用、历史关联或账户状态被拒绝。具体业务错误沿用现有错误信封；不能仅凭中文提示反推稳定错误码。运维配置见 [运维说明](CYLEDGER_OPERATIONS.md)，内部计算边界见 [架构](CYLEDGER_ARCHITECTURE.md)。
+
 
 ## 统计、预算、总结与两级标签
 

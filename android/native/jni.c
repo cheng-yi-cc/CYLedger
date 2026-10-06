@@ -21,3 +21,9 @@ Java_com_cyledger_android_NativeBridge_session(JNIEnv *env, jclass type) {
     CYLedgerFree(session);
     return result;
 }
+
+JNIEXPORT jstring JNICALL Java_com_cyledger_android_NativeBridge_backup(JNIEnv *env,jclass type,jstring directory,jstring destination,jstring settings){
+const char *a=(*env)->GetStringUTFChars(env,directory,NULL),*b=(*env)->GetStringUTFChars(env,destination,NULL),*c=(*env)->GetStringUTFChars(env,settings,NULL);
+char *value=CYLedgerBackup((char*)a,(char*)b,(char*)c);(*env)->ReleaseStringUTFChars(env,directory,a);(*env)->ReleaseStringUTFChars(env,destination,b);(*env)->ReleaseStringUTFChars(env,settings,c);jstring result=(*env)->NewStringUTF(env,value);CYLedgerFree(value);return result;}
+JNIEXPORT jstring JNICALL Java_com_cyledger_android_NativeBridge_stageRestore(JNIEnv *env,jclass type,jstring archive,jstring parent){
+const char *a=(*env)->GetStringUTFChars(env,archive,NULL),*b=(*env)->GetStringUTFChars(env,parent,NULL);char *value=CYLedgerStageRestore((char*)a,(char*)b);(*env)->ReleaseStringUTFChars(env,archive,a);(*env)->ReleaseStringUTFChars(env,parent,b);jstring result=(*env)->NewStringUTF(env,value);CYLedgerFree(value);return result;}

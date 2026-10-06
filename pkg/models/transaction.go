@@ -125,6 +125,11 @@ const (
 
 // Transaction represents transaction data stored in database
 type Transaction struct {
+	TransferFeeAmount      string            `xorm:"VARCHAR(32) NOT NULL DEFAULT '0'"`
+	TransferFeeCategoryId  int64             `xorm:"NOT NULL DEFAULT 0"`
+	TransferFeeParentId    int64             `xorm:"NOT NULL DEFAULT 0 INDEX"`
+	DebtDueDate            string            `xorm:"VARCHAR(10) NOT NULL DEFAULT ''"`
+	LocationName           string            `xorm:"VARCHAR(200) NOT NULL DEFAULT ''"`
 	DiscountAmount         string            `xorm:"VARCHAR(32) NOT NULL DEFAULT '0'"`
 	ExcludeFromStatistics  bool              `xorm:"NOT NULL DEFAULT 0"`
 	ReimbursementAccountId int64             `xorm:"NOT NULL DEFAULT 0 INDEX"`
@@ -170,6 +175,10 @@ type TransactionGeoLocationRequest struct {
 
 // TransactionCreateRequest represents all parameters of transaction creation request
 type TransactionCreateRequest struct {
+	TransferFeeAmount      string                         `json:"transferFeeAmount" binding:"max=17"`
+	TransferFeeCategoryId  int64                          `json:"transferFeeCategoryId,string" binding:"min=0"`
+	DebtDueDate            string                         `json:"debtDueDate" binding:"max=10"`
+	LocationName           string                         `json:"locationName" binding:"max=200"`
 	DiscountAmount         string                         `json:"discountAmount" binding:"max=16"`
 	ExcludeFromStatistics  bool                           `json:"excludeFromStatistics"`
 	ReimbursementAccountId int64                          `json:"reimbursementAccountId,string" binding:"min=0"`
@@ -192,6 +201,10 @@ type TransactionCreateRequest struct {
 
 // TransactionModifyRequest represents all parameters of transaction modification request
 type TransactionModifyRequest struct {
+	TransferFeeAmount      *string                        `json:"transferFeeAmount" binding:"omitempty,max=17"`
+	TransferFeeCategoryId  *int64                         `json:"transferFeeCategoryId,string" binding:"omitempty,min=0"`
+	DebtDueDate            *string                        `json:"debtDueDate" binding:"omitempty,max=10"`
+	LocationName           *string                        `json:"locationName" binding:"omitempty,max=200"`
 	DiscountAmount         *string                        `json:"discountAmount" binding:"omitempty,max=16"`
 	ExcludeFromStatistics  *bool                          `json:"excludeFromStatistics"`
 	ReimbursementAccountId *int64                         `json:"reimbursementAccountId,string" binding:"omitempty,min=0"`
@@ -214,6 +227,8 @@ type TransactionModifyRequest struct {
 
 // TransactionImportRequest represents all parameters of transaction import request
 type TransactionImportRequest struct {
+	BatchId         string                      `json:"batchId" binding:"max=64"`
+	SourceName      string                      `json:"sourceName" binding:"max=128"`
 	BookId          string                      `json:"bookId" binding:"max=64"`
 	Transactions    []*TransactionCreateRequest `json:"transactions"`
 	ClientSessionId string                      `json:"clientSessionId"`
@@ -426,6 +441,11 @@ type TransactionGeoLocationResponse struct {
 
 // TransactionInfoResponse represents a view-object of transaction
 type TransactionInfoResponse struct {
+	TransferFeeAmount      string                                   `json:"transferFeeAmount"`
+	TransferFeeCategoryId  int64                                    `json:"transferFeeCategoryId,string"`
+	TransferFeeParentId    int64                                    `json:"transferFeeParentId,string"`
+	DebtDueDate            string                                   `json:"debtDueDate"`
+	LocationName           string                                   `json:"locationName"`
 	DiscountAmount         string                                   `json:"discountAmount"`
 	ExcludeFromStatistics  bool                                     `json:"excludeFromStatistics"`
 	ReimbursementAccountId int64                                    `json:"reimbursementAccountId,string"`
@@ -670,7 +690,9 @@ func (t *Transaction) ToTransactionInfoResponse(tagIds []int64, editable bool) *
 	}
 
 	return &TransactionInfoResponse{
-		BookId:                 t.BookId,
+		BookId:            t.BookId,
+		TransferFeeAmount: t.TransferFeeAmount, TransferFeeCategoryId: t.TransferFeeCategoryId, TransferFeeParentId: t.TransferFeeParentId,
+		DebtDueDate: t.DebtDueDate, LocationName: t.LocationName,
 		DiscountAmount:         t.DiscountAmount,
 		InvestmentEventId:      t.InvestmentEventId,
 		Id:                     t.TransactionId,

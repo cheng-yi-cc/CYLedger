@@ -22,7 +22,7 @@
                 <div class="cy-section-head"><strong>{{ item.kind === 'repayment' ? '还款' : '定存到期' }} · {{ item.accountName }}</strong><span>{{ ledgerMoney(item.amount,false) }} {{ item.currency }}</span></div>
                 <p>{{ item.date }} <span :class="item.completed ? 'cy-muted' : 'cy-accent'">{{ item.completed ? '已完成' : item.date < scope.currentDay ? '已逾期' : '待处理' }}</span></p>
                 <p v-if="item.note" class="cy-muted">{{ item.note }}</p>
-                <div class="cy-actions"><button class="cy-button" :disabled="busy" @click="editing = {...item}">编辑</button><button class="cy-button" :disabled="busy" @click="complete(item)">{{ item.completed ? '恢复待办' : '标记完成' }}</button><button class="cy-button cy-expense" :disabled="busy" @click="remove(item)">删除</button></div>
+                <div class="cy-actions"><f7-link v-if="item.transactionId && item.transactionId!=='0'" :href="'/transaction/detail?id='+item.transactionId+'&type=4'">编辑原借款</f7-link><button v-else class="cy-button" :disabled="busy" @click="editing = {...item}">编辑</button><button class="cy-button" :disabled="busy" @click="complete(item)">{{ item.completed ? '恢复待办' : '标记完成' }}</button><button v-if="!item.transactionId || item.transactionId==='0'" class="cy-button cy-expense" :disabled="busy" @click="remove(item)">删除</button></div>
             </section>
         </main>
     </f7-page>
@@ -56,7 +56,7 @@ async function loadItems(): Promise<void> {
 }
 async function load(): Promise<void> {
     try { await Promise.all([books.loadBooks(), accounts.loadAllAccounts({force:true}).catch(keepUpToDate)]); await loadItems();
-        if (!initialized) { initialized = true; const existing = items.value.find(item => item.id === props.f7route.query['id']); if (existing) editing.value = {...existing}; else if (props.f7route.query['add'] === '1') create(); }
+        if (!initialized) { initialized = true; const existing = items.value.find(item => item.id === props.f7route.query['id']); if (existing && (!existing.transactionId || existing.transactionId==='0')) editing.value = {...existing}; else if (props.f7route.query['add'] === '1') create(); }
     } catch(cause) { error.value = investmentError(cause); }
 }
 async function save(): Promise<void> {

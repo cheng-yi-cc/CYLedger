@@ -168,6 +168,11 @@ func (s *InvestmentService) DeleteAssetAccount(c core.Context, uid int64, input 
 				selected[movement.InterestTransactionId] = true
 			}
 		}
+		for _, tx := range allTx {
+			if tx.TransferFeeParentId > 0 && selected[tx.TransferFeeParentId] {
+				selected[tx.TransactionId] = true
+			}
+		}
 		var txs []models.Transaction
 		for _, tx := range allTx {
 			if selected[tx.TransactionId] {
@@ -337,6 +342,11 @@ func (s *InvestmentService) DeleteAssetAccount(c core.Context, uid int64, input 
 			}
 			if _, err := sess.Where("uid=?", uid).In("transaction_id", ids).Cols("deleted", "deleted_unix_time").Update(&models.Transaction{Deleted: true, DeletedUnixTime: now}); err != nil {
 				return err
+			}
+			if hasDueTable {
+				if _, err := sess.Where("uid=?", uid).In("transaction_id", ids).Delete(&models.CalendarEvent{}); err != nil {
+					return err
+				}
 			}
 			if _, err := sess.Where("uid=?", uid).In("transaction_id", ids).Cols("deleted", "deleted_unix_time").Update(&models.TransactionTagIndex{Deleted: true, DeletedUnixTime: now}); err != nil {
 				return err

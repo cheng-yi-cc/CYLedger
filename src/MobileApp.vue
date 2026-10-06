@@ -7,6 +7,7 @@
 <script setup lang="ts">
 import '@/styles/mobile/cyledger.scss';
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import moment from 'moment-timezone';
 
 import type { Framework7Parameters, Notification, Actions, Dialog, Popover, Popup, Sheet } from 'framework7/types';
 import { f7ready } from 'framework7-vue';
@@ -16,6 +17,7 @@ import { useI18n } from '@/locales/helpers.ts';
 
 import { useRootStore } from '@/stores/index.ts';
 import { useSettingsStore } from '@/stores/setting.ts';
+import { useLedgerExperienceStore } from '@/stores/ledgerExperience.ts';
 import { useEnvironmentsStore } from '@/stores/environment.ts';
 import { useUserStore } from '@/stores/user.ts';
 import { useTokensStore } from '@/stores/token.ts';
@@ -26,7 +28,7 @@ import { ThemeType } from '@/core/theme.ts';
 
 import { isFunction } from '@/lib/common.ts';
 import { isProduction } from '@/lib/version.ts';
-import { isNativePersonalMode, syncNativeAppearance } from '@/lib/native.ts';
+import { syncNativeSettings, isNativePersonalMode, syncNativeAppearance } from '@/lib/native.ts';
 import {syncAssetAutomationOnOpen} from '@/lib/asset-tools.ts';
 import { syncMonetaryIncomeOnOpen } from '@/lib/monetary-income.ts';
 import { getTheme, isEnableSwipeBack, isEnableAnimate } from '@/lib/settings.ts';
@@ -41,10 +43,28 @@ document.documentElement.classList.toggle('cy-native',isNativePersonalMode());
 
 const rootStore = useRootStore();
 const settingsStore = useSettingsStore();
+const ledgerExperience = useLedgerExperienceStore();
+watch(() => ledgerExperience.preferences, prefs => {
+    const style = document.documentElement.style;
+    style.setProperty('--cy-preference-accent', prefs.accent);
+    style.setProperty('--cy-preference-income', prefs.colorScheme === 'monochrome' ? 'var(--cy-ink)' : prefs.colorScheme === 'green-expense' ? '#e65757' : '#269785');
+    style.setProperty('--cy-preference-expense', prefs.colorScheme === 'monochrome' ? 'var(--cy-ink)' : prefs.colorScheme === 'green-expense' ? '#269785' : '#e65757');
+    window.CYLedgerLocal?.preferences(JSON.stringify({exitConfirm:prefs.exitConfirm,hideRecents:prefs.hideRecents}));
+}, { deep: true, immediate: true });
+let nativeSettingsTimer:ReturnType<typeof setTimeout>|undefined;
+watch(()=>[ledgerExperience.preferences,settingsStore.appSettings],()=>{clearTimeout(nativeSettingsTimer);nativeSettingsTimer=setTimeout(syncNativeSettings,500);},{deep:true});
 const environmentsStore = useEnvironmentsStore();
 const userStore = useUserStore();
 const tokensStore = useTokensStore();
 const exchangeRatesStore = useExchangeRatesStore();
+let appearanceTimer: ReturnType<typeof setInterval> | undefined;
+function applyAppearance(): void {
+    const p=ledgerExperience.preferences,clock=moment().format('HH:mm');
+    const night=p.nightStart===p.nightEnd?false:p.nightStart<p.nightEnd?clock>=p.nightStart&&clock<p.nightEnd:clock>=p.nightStart||clock<p.nightEnd;
+    f7ready(app=>app.setDarkMode(p.nightSchedule?night:settingsStore.appSettings.theme==='auto'?'auto':settingsStore.appSettings.theme==='dark'));
+    syncNativeAppearance();
+}
+watch(()=>[settingsStore.appSettings.theme,ledgerExperience.preferences.nightSchedule,ledgerExperience.preferences.nightStart,ledgerExperience.preferences.nightEnd],applyAppearance);
 
 const f7params = ref<Framework7Parameters>({
     name: 'CYLedger',
@@ -153,12 +173,15 @@ function onBackdropChanged(element: { push?: boolean, opened?: boolean }): void 
     setThemeColorMeta(environmentsStore.framework7DarkMode);
 }
 
-function resumeMonetaryIncome(): void { syncNativeAppearance();void syncMonetaryIncomeOnOpen();void syncAssetAutomationOnOpen(settingsStore.appSettings.timeZone).catch(()=>{}); }
+function resumeMonetaryIncome(): void { syncNativeSettings(); syncNativeAppearance();void syncMonetaryIncomeOnOpen();void syncAssetAutomationOnOpen(settingsStore.appSettings.timeZone).catch(()=>{}); }
 onUnmounted(() => {
+    if (appearanceTimer) clearInterval(appearanceTimer);
     document.removeEventListener('visibilitychange', resumeMonetaryIncome);
     window.removeEventListener('online', resumeMonetaryIncome);
 });
 onMounted(() => {
+    syncNativeSettings();
+    applyAppearance();appearanceTimer=setInterval(applyAppearance,60000);
     document.addEventListener('visibilitychange', resumeMonetaryIncome);
     window.addEventListener('online', resumeMonetaryIncome);
     setAppFontSize(settingsStore.appSettings.fontSize);

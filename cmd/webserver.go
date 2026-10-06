@@ -109,6 +109,7 @@ func startWebServer(c *core.CliContext) error {
 	workboxFileNames := utils.ListFileNamesWithPrefixAndSuffix(config.StaticRootPath, "workbox-", ".js")
 
 	router := gin.New()
+	router.Use(func(c *gin.Context) { core.LocalRequestGate.RLock(); defer core.LocalRequestGate.RUnlock(); c.Next() })
 	router.Use(bindMiddleware(middlewares.Recovery, config))
 
 	err = router.SetTrustedProxies(config.TrustedProxyTextualIPs)
@@ -406,6 +407,11 @@ func startWebServer(c *core.CliContext) error {
 			apiV1Route.GET("/statistics/notes", bindApi(api.StatisticsWorkspace.Notes, config))
 			apiV1Route.POST("/statistics/notes/save", bindApi(api.StatisticsWorkspace.SaveNote, config))
 			apiV1Route.GET("/statistics/auxiliary", bindApi(api.StatisticsWorkspace.Auxiliary, config))
+			apiV1Route.GET("/ledger/items", bindApi(api.LedgerWorkspace.Items, config))
+			apiV1Route.GET("/ledger/imports", bindApi(api.LedgerWorkspace.ImportBatches, config))
+			apiV1Route.POST("/ledger/imports/undo", bindApi(api.LedgerWorkspace.UndoImportBatch, config))
+			apiV1Route.POST("/ledger/items/save", bindApi(api.LedgerWorkspace.Save, config))
+			apiV1Route.POST("/ledger/items/delete", bindApi(api.LedgerWorkspace.Delete, config))
 			apiV1Route.GET("/monetary-income/search", bindApi(api.MonetaryIncome.Search, config))
 			apiV1Route.GET("/assets/reimbursements", bindApi(api.AssetTools.Reimbursements, config))
 			apiV1Route.GET("/assets/debts", bindApi(api.AssetTools.DebtReports, config))

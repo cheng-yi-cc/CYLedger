@@ -440,5 +440,40 @@
         "url": "https://materialdesignicons.com",
         "license": "MIT License (Code) and Apache License 2.0 (Icons & Fonts)",
         "licenseUrl": "https://github.com/Templarian/MaterialDesign-JS/blob/v7.4.47/LICENSE"
+    },
+    {
+        "name": "tesseract.js",
+        "version": "6.0.1",
+        "url": "https://github.com/naptha/tesseract.js",
+        "license": "Apache-2.0",
+        "licenseUrl": "https://github.com/naptha/tesseract.js/blob/master/LICENSE"
+    },
+    {
+        "name": "tesseract.js-core",
+        "version": "6.0.0",
+        "url": "https://github.com/naptha/tesseract.js-core",
+        "license": "Apache-2.0",
+        "licenseUrl": "https://github.com/naptha/tesseract.js-core/blob/master/LICENSE"
+    },
+    {
+        "name": "@tesseract.js-data/chi_sim",
+        "version": "1.0.0",
+        "url": "https://github.com/naptha/tessdata",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/naptha/tessdata/blob/gh-pages/LICENSE"
+    },
+    {
+        "name": "@tesseract.js-data/eng",
+        "version": "1.0.0",
+        "url": "https://github.com/naptha/tessdata",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/naptha/tessdata/blob/gh-pages/LICENSE"
+    },
+    {
+        "name": "fflate",
+        "version": "0.8.2",
+        "url": "https://github.com/101arrowz/fflate",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/101arrowz/fflate/blob/master/LICENSE"
     }
 ]

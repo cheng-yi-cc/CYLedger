@@ -1,0 +1,10 @@
+package com.cyledger.android;
+import android.content.Context;import android.graphics.*;import android.view.*;import java.util.*;import java.util.function.Consumer;
+final class PatternView extends View {
+ private final Paint paint=new Paint(3);private final ArrayList<Integer> points=new ArrayList<>();private final Consumer<String> complete;private float fingerX,fingerY;private boolean drawing;
+ PatternView(Context c,Consumer<String> complete){super(c);this.complete=complete;setMinimumHeight((int)(300*c.getResources().getDisplayMetrics().density));setContentDescription("手势密码九宫格，连接至少四个点");}
+ private float x(int n){return getWidth()*(1+(n%3)*2)/6f;}private float y(int n){return getHeight()*(1+(n/3)*2)/6f;}
+ @Override protected void onDraw(Canvas canvas){super.onDraw(canvas);paint.setColor(Color.rgb(60,145,116));paint.setStrokeWidth(8);for(int i=1;i<points.size();i++)canvas.drawLine(x(points.get(i-1)),y(points.get(i-1)),x(points.get(i)),y(points.get(i)),paint);if(drawing&&!points.isEmpty())canvas.drawLine(x(points.get(points.size()-1)),y(points.get(points.size()-1)),fingerX,fingerY,paint);for(int i=0;i<9;i++){paint.setColor(points.contains(i)?Color.rgb(60,145,116):Color.GRAY);canvas.drawCircle(x(i),y(i),points.contains(i)?17:10,paint);}}
+ private void hit(float x,float y){for(int i=0;i<9;i++){if(Math.hypot(x-x(i),y-y(i))<getWidth()/9f&&!points.contains(i)){if(!points.isEmpty()){int last=points.get(points.size()-1),dx=Math.abs(last%3-i%3),dy=Math.abs(last/3-i/3);if((dx==2&&(dy==0||dy==2))||(dy==2&&dx==0)){int middle=(last+i)/2;if(!points.contains(middle))points.add(middle);}}points.add(i);break;}}}
+ @Override public boolean onTouchEvent(MotionEvent event){fingerX=event.getX();fingerY=event.getY();if(event.getAction()==MotionEvent.ACTION_DOWN){points.clear();drawing=true;}if(event.getAction()==MotionEvent.ACTION_MOVE)for(int i=0;i<event.getHistorySize();i++)hit(event.getHistoricalX(i),event.getHistoricalY(i));hit(fingerX,fingerY);if(event.getAction()==MotionEvent.ACTION_UP){drawing=false;StringBuilder value=new StringBuilder();for(int p:points)value.append(p);complete.accept(value.toString());}invalidate();return true;}
+}

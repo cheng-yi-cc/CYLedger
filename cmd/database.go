@@ -184,6 +184,7 @@ func updateAllDatabaseTablesStructure(c *core.CliContext) error {
 
 	err = datastore.Container.UserDataStore.SyncStructs(
 		new(models.StatisticsBudget), new(models.StatisticsNote), new(models.StatisticsPreference),
+		new(models.LocalLedgerItem),
 		new(models.Book), new(models.CalendarEvent), new(models.AssetPresentation), new(models.ReimbursementReceipt), new(models.AssetAdjustment), new(models.CreditInstallment), new(models.DebtMovement), new(models.FixedDeposit), new(models.MonetaryIncomeBinding), new(models.MonetaryIncomeDay), new(models.InvestmentSettings), new(models.PortfolioAccount), new(models.InvestmentInstrument),
 		new(models.InvestmentEventRecord), new(models.InvestmentEventRevision), new(models.InvestmentTransactionLink),
 		new(models.InvestmentIdempotency), new(models.InvestmentQuote), new(models.WealthSnapshot),

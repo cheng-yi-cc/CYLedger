@@ -92,6 +92,9 @@ func (s *CalendarService) Save(c core.Context, uid int64, req models.CalendarSav
 			if !has {
 				return ErrCalendarNotFound
 			}
+			if item.TransactionId > 0 {
+				return investmentError("请在原借款账单中修改约定还款日期")
+			}
 		}
 		bookId, err := Books.ResolveInSession(sess, uid, req.BookId, false)
 		if err != nil {
@@ -138,6 +141,13 @@ func (s *CalendarService) SetCompleted(c core.Context, uid int64, id string, com
 }
 func (s *CalendarService) Delete(c core.Context, uid int64, id string) (bool, error) {
 	return s.change(c, uid, id, func(sess *xorm.Session) (int64, error) {
+		var item models.CalendarEvent
+		if _, err := sess.ID(id).Where("uid=?", uid).Get(&item); err != nil {
+			return 0, err
+		}
+		if item.TransactionId > 0 {
+			return 0, investmentError("请在原借款账单中清除约定还款日期")
+		}
 		return sess.ID(id).Where("uid=?", uid).Delete(&models.CalendarEvent{})
 	})
 }

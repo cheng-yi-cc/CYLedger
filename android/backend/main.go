@@ -38,7 +38,7 @@ func CYLedgerStart(directory *C.char, port C.int) *C.char {
 		os.Setenv("EBK_WORK_DIR", root)
 		// Android's current trust store is supplied by the platform TrustManager.
 		os.Setenv("SSL_CERT_FILE", filepath.Join(root, "ca-certificates.pem"))
-		core.Version = "CYLedger-Android-0.1.1"
+		core.Version = "CYLedger-Android-0.2.0"
 		app := &cli.Command{
 			Name:     "CYLedger",
 			Commands: []*cli.Command{cmd.WebServer},

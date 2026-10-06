@@ -233,6 +233,9 @@ func (a *DataManagementsApi) ClearAllDataHandler(c *core.WebContext) (any, *errs
 		return nil, errs.Or(err, errs.ErrOperationFailed)
 	}
 
+	if _, err = services.LedgerWorkspace.UserDataDB(uid).NewSession(c).Where("uid=?", uid).Delete(&models.LocalLedgerItem{}); err != nil {
+		return nil, errs.Or(err, errs.ErrOperationFailed)
+	}
 	if err = services.Calendar.DeleteAll(c, uid); err != nil {
 		return nil, errs.Or(err, errs.ErrOperationFailed)
 	}

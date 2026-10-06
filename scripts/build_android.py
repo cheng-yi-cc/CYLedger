@@ -99,7 +99,7 @@ def main():
     run([tools / "aapt2.exe", "compile", "--dir", resources, "-o", compiled_resources])
     unsigned = build / "unsigned.apk"
     run([tools / "aapt2.exe", "link", "-o", unsigned, "--manifest", manifest,
-         "-I", platform, "-A", assets, "--version-code", "2", "--version-name", "0.1.1", compiled_resources])
+         "-I", platform, "-A", assets, "--version-code", "3", "--version-name", "0.2.0", compiled_resources])
     sources = sorted((ROOT / "android/app/src/main/java").rglob("*.java"))
     bootclasspath = os.pathsep.join([str(tools / "core-lambda-stubs.jar"), str(platform)])
     run([java, "-encoding", "UTF-8", "-source", "8", "-target", "8", "-bootclasspath", bootclasspath,

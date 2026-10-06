@@ -6,7 +6,7 @@
 
 ## 开始使用
 
-手机安装包：`dist/android/CYLedger-Android-arm64.apk`。账户与持仓在 **CYLedger → 资产**；收支分析、预算和总结在 **统计**。已有正式版须使用同签名覆盖升级，不能卸载或清除数据。构建和安装见 [Android 说明](android/README.md)。
+手机安装包：`dist/android/CYLedger-Android-arm64.apk`。**首页**提供账单搜索、手动记账和数据卡片；账户与持仓在 **资产**，预算和总结在 **统计**，愿望、导入导出、完整备份和个性设置在 **我的**。已有正式版须使用同签名覆盖升级，不能卸载或清除数据。构建和安装见 [Android 说明](android/README.md)。
 
 Windows 在项目目录执行：
 

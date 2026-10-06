@@ -110,11 +110,13 @@ export const KNOWN_COLUMN_NAME_MAPPING: Record<string, ImportTransactionColumnTy
     // Other common columns of related account currency
     {
         // en
+        ['账户2币种']: ImportTransactionColumnType.RelatedAccountCurrency,
         ['Foreign Currency']: ImportTransactionColumnType.RelatedAccountCurrency,
         ['Foreign Currency Code']: ImportTransactionColumnType.RelatedAccountCurrency,
     },
     // Other common columns of related amount
     {
+        ['账户2金额']: ImportTransactionColumnType.RelatedAmount,
         // en
         ['Foreign Amount']: ImportTransactionColumnType.RelatedAmount,
     },

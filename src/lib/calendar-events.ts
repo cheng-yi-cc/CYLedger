@@ -2,7 +2,7 @@ import axios from 'axios';
 import '@/lib/services.ts';
 import type { ApiResponse } from '@/core/api.ts';
 export interface CalendarEvent {
-    id: string; bookId: string; accountId: string; accountName: string; currency: string;
+    id: string; transactionId?: string; bookId: string; accountId: string; accountName: string; currency: string;
     kind: 'repayment' | 'deposit'; date: string; amount: string; note: string; completed: boolean;
 }
 export type CalendarEventInput = Pick<CalendarEvent, 'id' | 'bookId' | 'accountId' | 'kind' | 'date' | 'amount' | 'note'>;

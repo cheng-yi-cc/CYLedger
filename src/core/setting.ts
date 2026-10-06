@@ -203,7 +203,7 @@ export const DEFAULT_APPLICATION_SETTINGS: ApplicationSettings = {
     // Debug Settings
     debug: false,
     // General Settings
-    theme: 'auto',
+    theme: 'light',
     fontSize: 1,
     timeZone: '',
     autoUpdateExchangeRatesData: true,

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1437,6 +1439,8 @@ func (a *TransactionsApi) TransactionModifyHandler(c *core.WebContext) (any, *er
 
 	newTransaction := &models.Transaction{
 		BookId: transactionModifyReq.BookId, TransactionId: transaction.TransactionId,
+		TransferFeeAmount: transaction.TransferFeeAmount, TransferFeeCategoryId: transaction.TransferFeeCategoryId,
+		DebtDueDate: transaction.DebtDueDate, LocationName: transaction.LocationName,
 		DiscountAmount:         transaction.DiscountAmount,
 		ExcludeFromStatistics:  transaction.ExcludeFromStatistics,
 		ReimbursementAccountId: transaction.ReimbursementAccountId,
@@ -1453,6 +1457,18 @@ func (a *TransactionsApi) TransactionModifyHandler(c *core.WebContext) (any, *er
 		Comment:                transactionModifyReq.Comment,
 	}
 
+	if transactionModifyReq.TransferFeeAmount != nil {
+		newTransaction.TransferFeeAmount = *transactionModifyReq.TransferFeeAmount
+	}
+	if transactionModifyReq.TransferFeeCategoryId != nil {
+		newTransaction.TransferFeeCategoryId = *transactionModifyReq.TransferFeeCategoryId
+	}
+	if transactionModifyReq.DebtDueDate != nil {
+		newTransaction.DebtDueDate = *transactionModifyReq.DebtDueDate
+	}
+	if transactionModifyReq.LocationName != nil {
+		newTransaction.LocationName = *transactionModifyReq.LocationName
+	}
 	if transactionModifyReq.DiscountAmount != nil {
 		newTransaction.DiscountAmount = *transactionModifyReq.DiscountAmount
 	}
@@ -1476,6 +1492,8 @@ func (a *TransactionsApi) TransactionModifyHandler(c *core.WebContext) (any, *er
 		newTransaction.BookId = transaction.BookId
 	}
 	if newTransaction.BookId == transaction.BookId &&
+		newTransaction.TransferFeeAmount == transaction.TransferFeeAmount && newTransaction.TransferFeeCategoryId == transaction.TransferFeeCategoryId &&
+		newTransaction.DebtDueDate == transaction.DebtDueDate && newTransaction.LocationName == transaction.LocationName &&
 		newTransaction.DiscountAmount == transaction.DiscountAmount &&
 		newTransaction.ExcludeFromStatistics == transaction.ExcludeFromStatistics &&
 		newTransaction.ReimbursementAccountId == transaction.ReimbursementAccountId &&
@@ -2788,6 +2806,15 @@ func (a *TransactionsApi) TransactionImportHandler(c *core.WebContext) (any, *er
 		}
 	}
 
+	rawBatch, _ := json.Marshal(transactionImportReq.Transactions)
+	sum := sha256.Sum256(append([]byte(transactionImportReq.BookId+"\n"), rawBatch...))
+	batchHash := hex.EncodeToString(sum[:])
+	if count, exists, e := services.LedgerWorkspace.ExistingImportBatch(c, uid, transactionImportReq.BatchId, batchHash); e != nil {
+		return nil, errs.Or(e, errs.ErrOperationFailed)
+	} else if exists {
+		return count, nil
+	}
+
 	newTransactionTagIdsMap := make(map[int][]int64, len(transactionImportReq.Transactions))
 
 	for i := 0; i < len(transactionImportReq.Transactions); i++ {
@@ -2873,7 +2900,7 @@ func (a *TransactionsApi) TransactionImportHandler(c *core.WebContext) (any, *er
 
 	err = a.transactions.BatchCreateTransactions(c, user.Uid, newTransactions, newTransactionTagIdsMap, func(currentProcess float64) {
 		a.SetSubmissionRemarkIfEnable(duplicatechecker.DUPLICATE_CHECKER_TYPE_IMPORT_TRANSACTIONS, uid, transactionImportReq.ClientSessionId, fmt.Sprintf("processing:%.2f", currentProcess))
-	})
+	}, &services.ImportBatch{Id: transactionImportReq.BatchId, Name: transactionImportReq.SourceName, Fingerprint: batchHash})
 	count := len(newTransactions)
 
 	if err != nil {
@@ -3197,7 +3224,9 @@ func (a *TransactionsApi) createNewTransactionModel(uid int64, transactionCreate
 	}
 
 	transaction := &models.Transaction{
-		BookId:                 transactionCreateReq.BookId,
+		BookId:            transactionCreateReq.BookId,
+		TransferFeeAmount: transactionCreateReq.TransferFeeAmount, TransferFeeCategoryId: transactionCreateReq.TransferFeeCategoryId,
+		DebtDueDate: transactionCreateReq.DebtDueDate, LocationName: transactionCreateReq.LocationName,
 		DiscountAmount:         transactionCreateReq.DiscountAmount,
 		Uid:                    uid,
 		Type:                   transactionDbType,

@@ -8,6 +8,7 @@
                 <output :class="amountClass" aria-label="记账金额" aria-live="polite"><small>{{ activeCurrency === 'CNY' ? '¥' : activeCurrency }}</small>{{ input || '0.00' }}</output>
             </div>
             <div v-if="tags.length" class="cy-selected-tags"><button v-for="tag in tags" :key="tag.id" @click="$emit('tags')">{{ tag.name }}</button></div>
+            <div v-if="experience.preferences.historicalRemarks && matchingRemarks.length" class="cy-selected-tags"><button v-for="remark in matchingRemarks" :key="remark" @click="comment=remark">{{ remark }}</button></div>
             <slot name="attachments" />
             <div v-if="transfer" class="cy-amount-tabs"><button :aria-pressed="!destinationActive" @click="selectAmount(false)">转出 · {{ currency }}</button><button :aria-pressed="destinationActive" @click="selectAmount(true)">转入 · {{ destinationCurrency }}</button></div>
             <div class="cy-entry-meta"><slot name="context" /><button class="cy-meta-more" aria-label="更多记账信息" @click="openMore"><svg viewBox="0 0 24 24" aria-hidden="true"><path :d="mdiDotsHorizontal" /></svg></button></div>
@@ -15,15 +16,15 @@
             <p v-if="amountError || validationMessage" class="cy-amount-error" role="alert">{{ amountError || validationMessage }}</p>
         </div>
         <div class="cy-entry-keyboard" aria-label="金额键盘">
-            <button v-for="key in ['1','2','3']" :key="key" :disabled="disabled" @click="press(key)">{{ key }}</button>
+            <button v-for="key in experience.preferences.keyboard === 'ascending' ? ['1','2','3'] : ['7','8','9']" :key="key" :disabled="disabled" @click="press(key)">{{ key }}</button>
             <button :disabled="disabled" aria-label="删除一位" @click="press('⌫')"><svg viewBox="0 0 24 24" aria-hidden="true"><path :d="mdiBackspaceOutline" /></svg></button>
             <button v-for="key in ['4','5','6']" :key="key" :disabled="disabled" @click="press(key)">{{ key }}</button>
             <div class="cy-key-operations"><button v-for="key in ['+','−','×','÷']" :key="key" :disabled="disabled" :aria-label="({'+':'加','−':'减','×':'乘','÷':'除'})[key]" @click="press(key)">{{ key }}</button></div>
-            <button v-for="key in ['7','8','9']" :key="key" :disabled="disabled" @click="press(key)">{{ key }}</button>
+            <button v-for="key in experience.preferences.keyboard === 'ascending' ? ['7','8','9'] : ['1','2','3']" :key="key" :disabled="disabled" @click="press(key)">{{ key }}</button>
             <button class="cy-key-next" :disabled="disabled || !canSave || !!validationMessage" @click="allowContinue ? saveAndContinue() : $emit('cancel')">{{ allowContinue ? '再记' : '取消' }}</button>
             <button :disabled="disabled" @click="press('0')">0</button>
             <button :disabled="disabled" aria-label="小数点" @click="press('.')">.</button>
-            <button class="cy-key-save" :disabled="disabled || (!operation && (!canSave || !!validationMessage))" @click="complete">{{ operation ? '=' : '保存' }}</button>
+            <button class="cy-key-save" :disabled="disabled || (!operation && !!input && (!canSave || !!validationMessage))" @click="complete">{{ operation ? '=' : input && input!=='0' ? '保存' : '取消' }}</button>
         </div>
     </section>
 </template>
@@ -37,11 +38,13 @@ import type { CategoryType } from '@/core/category.ts';
 import type { TransactionCategory } from '@/models/transaction_category.ts';
 import { calculateEntryAmount, type EntryOperation } from '@/lib/ledger-entry.ts';
 import { TRANSACTION_MAX_AMOUNT, TRANSACTION_MIN_AMOUNT, TRANSACTION_MAX_COMMENT_LENGTH } from '@/consts/transaction.ts';
+import { useLedgerExperienceStore } from '@/stores/ledgerExperience.ts';
 
 const props = defineProps<{
     categories: TransactionCategory[]; bookId: string; preserveCategory: boolean; categoryType: CategoryType;
     currency: string; destinationCurrency: string; transfer: boolean; canSave: boolean; disabled: boolean; allowContinue: boolean;
     tags: { id: string; name: string }[]; amountClass?: string; validationMessage?: string;
+    remarks?: string[];
 }>();
 const amount = defineModel<number>('amount', { required: true });
 const destinationAmount = defineModel<number>('destinationAmount', { required: true });
@@ -49,6 +52,8 @@ const categoryId = defineModel<string>('categoryId', { required: true });
 const comment = defineModel<string>('comment', { required: true });
 const emit = defineEmits<{ (e: 'save'): void; (e: 'continue'): void; (e: 'more'): void; (e: 'tags'): void; (e: 'cancel'): void }>();
 const Money = Decimal.clone({ precision: 40 });
+const experience=useLedgerExperienceStore();
+const matchingRemarks=computed(()=>(props.remarks||[]).filter(text=>text!==comment.value&&(!comment.value||text.includes(comment.value))).slice(0,5));
 const destinationActive = ref(false), input = ref(''), operand = ref<string | null>(null), operation = ref<EntryOperation | ''>(''), amountError = ref('');
 const activeCurrency = computed(() => destinationActive.value ? props.destinationCurrency : props.currency);
 const activeAmount = computed({ get: () => destinationActive.value ? destinationAmount.value : amount.value, set: (value: number) => { if (destinationActive.value) destinationAmount.value = value; else amount.value = value; } });
@@ -77,6 +82,7 @@ function calculate(): boolean {
     } catch (cause) { amountError.value = (cause as Error).message; return false; }
 }
 function press(key: string): void {
+    experience.vibrate();
     if (['+', '−', '×', '÷'].includes(key)) {
         if (operation.value && !input.value) { operation.value = key as EntryOperation; return; }
         if (!calculate()) return;
@@ -87,7 +93,7 @@ function press(key: string): void {
     if (input.value.includes('.') && input.value.split('.')[1]!.length >= 2) return;
     accept((input.value === '0' ? '' : input.value) + key);
 }
-function complete(): void { if (operation.value) calculate(); else emit('save'); }
+function complete(): void { if (operation.value) calculate(); else if(!input.value||input.value==='0')emit('cancel');else emit('save'); }
 function saveAndContinue(): void { if (calculate()) emit('continue'); }
 function selectAmount(destination: boolean): void {
     if (!calculate()) return;
@@ -99,7 +105,7 @@ defineExpose({ prepareSave: calculate });
 </script>
 
 <style scoped>
-.cy-quick-entry{display:flex;flex-direction:column;height:calc(100dvh - var(--f7-navbar-height) - var(--f7-safe-area-top,0px));min-height:470px;max-width:720px;margin:auto;padding:8px 6px max(10px,env(safe-area-inset-bottom));gap:6px;box-sizing:border-box;color:var(--cy-ink)}
+.cy-quick-entry{display:flex;flex-direction:column;height:calc(100dvh - var(--f7-navbar-height) - var(--f7-safe-area-top,0px));min-height:470px;max-width:720px;margin:auto;padding:4px 5px max(10px,env(safe-area-inset-bottom));gap:6px;box-sizing:border-box;color:var(--cy-ink)}
 .cy-entry-selection{flex:1;min-height:110px;border-radius:13px;background:var(--cy-card);overflow:auto;border:1px solid var(--cy-line)}
 .cy-entry-details{flex:none;background:var(--cy-card);border:1px solid var(--cy-line);border-radius:13px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 .cy-note-amount-row{display:flex;align-items:center;gap:10px;min-height:37px}.cy-tag-button{display:flex;align-items:center;gap:5px;border:0;padding:6px 0;background:transparent;color:var(--cy-muted);white-space:nowrap;font-size:13px}.cy-tag-button svg{width:19px;height:19px;fill:currentColor;flex:none}
@@ -107,10 +113,10 @@ defineExpose({ prepareSave: calculate });
 .cy-note-amount-row output{max-width:58%;min-width:0;text-align:right;font-size:clamp(22px,6vw,29px);font-weight:600;line-height:1.25;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.cy-note-amount-row output small{font-size:12px;font-weight:400;padding-right:3px;color:var(--cy-muted)}
 .cy-note-amount-row output.cy-expense{color:var(--cy-expense)}.cy-note-amount-row output.cy-income{color:var(--cy-accent)}.cy-note-amount-row output.cy-expense small,.cy-note-amount-row output.cy-income small{color:inherit}
 .cy-selected-tags{display:flex;gap:5px;overflow:auto}.cy-selected-tags button{border:0;flex:none;border-radius:6px;padding:3px 8px;background:var(--cy-soft);color:var(--cy-accent);font-size:11px}
-.cy-entry-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-height:30px}.cy-meta-more{margin-left:auto;border:0;padding:4px;background:transparent;color:var(--cy-muted);line-height:1}.cy-meta-more svg{width:20px;height:20px;fill:currentColor}
+.cy-entry-meta{display:flex;flex-wrap:nowrap;overflow-x:auto;align-items:center;gap:18px;min-height:30px}.cy-entry-meta :deep(>*){flex-shrink:0}.cy-meta-more{margin-left:auto;border:0;padding:4px;background:transparent;color:var(--cy-muted);line-height:1}.cy-meta-more svg{width:20px;height:20px;fill:currentColor}
 .cy-amount-tabs{display:flex;gap:8px}.cy-amount-tabs button{background:transparent;border:0;border-radius:6px;color:var(--cy-muted);padding:5px 8px;font-size:11px}.cy-amount-tabs button[aria-pressed=true]{background:var(--cy-soft);color:var(--cy-accent)}
 .cy-calculation{font-size:12px;color:var(--cy-muted);text-align:right}.cy-amount-error{font-size:12px;color:var(--cy-expense);line-height:1.5}
-.cy-entry-keyboard{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(4,48px);gap:5px;flex:none}.cy-entry-keyboard>button,.cy-key-operations{border:1px solid var(--cy-line);border-radius:10px;background:var(--cy-card);color:var(--cy-ink);font-size:24px;padding:0;touch-action:manipulation}.cy-entry-keyboard>button svg{width:27px;height:27px;fill:currentColor;vertical-align:middle}
+.cy-entry-keyboard{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(4,48px);gap:5px;flex:none}.cy-entry-keyboard>button,.cy-key-operations{border:1px solid var(--cy-line);border-radius:10px;background:var(--cy-card);color:var(--cy-ink);font-size:22px;font-weight:500;padding:0;touch-action:manipulation}.cy-entry-keyboard>button svg{width:27px;height:27px;fill:currentColor;vertical-align:middle}
 .cy-key-operations{grid-column:4;grid-row:2 / 4;display:grid;grid-template-columns:1fr 1fr;overflow:hidden}.cy-key-operations button{border:0;padding:0;background:transparent;color:var(--cy-ink);font-size:22px;touch-action:manipulation}.cy-entry-keyboard button:active{background:var(--cy-soft)}.cy-entry-keyboard .cy-key-save{background:var(--cy-accent);color:var(--cy-card);font-size:16px;border-color:var(--cy-accent)}.cy-entry-keyboard .cy-key-next{font-size:16px}
 .cy-quick-entry button:disabled{opacity:.45}.cy-quick-entry button:focus-visible{outline:2px solid var(--cy-accent);outline-offset:-2px}
 @media(min-height:850px){.cy-entry-keyboard{grid-template-rows:repeat(4,53px)}}@media(max-height:600px){.cy-quick-entry{height:560px}}@media(max-width:350px){.cy-entry-details{padding-inline:8px}.cy-note-amount-row{gap:7px}.cy-tag-button{font-size:12px}}

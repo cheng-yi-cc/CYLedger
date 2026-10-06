@@ -253,6 +253,9 @@ func (s *BookService) MoveTransactions(c core.Context, uid int64, ids []int64, b
 			if !has {
 				return errs.ErrTransactionNotFound
 			}
+			if tx.TransferFeeParentId > 0 {
+				return investmentError("请选中原转账账单移动账本")
+			}
 			allIDs[id] = true
 			if tx.RelatedId != 0 {
 				allIDs[tx.RelatedId] = true
@@ -262,10 +265,20 @@ func (s *BookService) MoveTransactions(c core.Context, uid int64, ids []int64, b
 		for id := range allIDs {
 			paired = append(paired, id)
 		}
-		if err := guardInvestmentTransactions(sess, uid, paired); err != nil {
+		var fees []models.Transaction
+		if err := sess.Where("uid=? AND deleted=?", uid, false).In("transfer_fee_parent_id", paired).Find(&fees); err != nil {
+			return err
+		}
+		for _, fee := range fees {
+			paired = append(paired, fee.TransactionId)
+		}
+		if err := guardInvestmentTransactions(sess, uid, paired, true); err != nil {
 			return err
 		}
 		_, err = sess.Where("uid=? AND deleted=?", uid, false).In("transaction_id", paired).Cols("book_id", "updated_unix_time").Update(&models.Transaction{BookId: target, UpdatedUnixTime: time.Now().Unix()})
+		if err == nil {
+			_, err = sess.Where("uid=?", uid).In("transaction_id", paired).Cols("book_id").Update(&models.CalendarEvent{BookId: target})
+		}
 		return err
 	})
 }

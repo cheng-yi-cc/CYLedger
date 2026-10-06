@@ -19,6 +19,8 @@ type CronJob struct {
 }
 
 func (j *CronJob) doRun() {
+	core.LocalCronGate.RLock()
+	defer core.LocalCronGate.RUnlock()
 	start := time.Now()
 	c := core.NewCronJobContext(j.Name, j.Period.GetInterval())
 

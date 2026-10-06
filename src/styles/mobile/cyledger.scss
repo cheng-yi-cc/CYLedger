@@ -1,6 +1,7 @@
 .cy-mobile-surface {
-    --cy-bg: #f2f6f5; --cy-card: #fff; --cy-ink: #233b3a; --cy-muted: #738480;
-    --cy-accent: #12786f; --cy-soft: #e8f3ef; --cy-line: #e2eae7; --cy-expense: #ce4857;
+    --cy-bg: #f5f6f8; --cy-card: #fff; --cy-ink: #303637; --cy-muted: #929999;
+    --cy-accent: var(--cy-preference-accent,#087f72); --cy-soft: #e9f3ef; --cy-line: #edf0ef;
+    --cy-expense: var(--cy-preference-expense,#e65757); --cy-income: var(--cy-preference-income,#269785);
     background: var(--cy-bg); color: var(--cy-ink); font-variant-numeric: tabular-nums;
     --f7-page-bg-color: var(--cy-bg); --f7-navbar-bg-color: var(--cy-bg); --f7-navbar-text-color: var(--cy-ink);
     --f7-navbar-border-color: transparent;
@@ -17,7 +18,7 @@
     .cy-button { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 9px 14px; border: 1px solid var(--cy-line); border-radius: 9px; background: var(--cy-card); color: var(--cy-ink); font-size: 13px; }
     .cy-primary { background: var(--cy-accent); border-color: var(--cy-accent); color: var(--cy-card); }
     .cy-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
-    .cy-income { color: var(--cy-accent); } .cy-expense { color: var(--cy-expense); }
+    .cy-income { color: var(--cy-income,var(--cy-accent)); } .cy-expense { color: var(--cy-expense); }
     .cy-section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
     .cy-section-head a { color: var(--cy-accent); font-size: 13px; }
     .cy-hero { color: white; background: #145d58; border: none; position: relative; overflow: hidden; }
@@ -49,7 +50,8 @@
 }
 .dark .cy-mobile-surface, .dark.cy-mobile-surface {
     --cy-bg: #142127; --cy-card: #202e35; --cy-ink: #e3ece9; --cy-muted: #9aada8;
-    --cy-accent: #68bfae; --cy-soft: #28403f; --cy-line: #314148; --cy-expense: #f27b84;
+    --cy-accent: color-mix(in srgb,var(--cy-preference-accent,#087f72) 65%,white); --cy-soft: #28403f; --cy-line: #314148;
+    --cy-expense: var(--cy-preference-expense,#f27b84); --cy-income:var(--cy-preference-income,#68bfae);
     .cy-hero { background: #163f43; } .cy-primary-action,.cy-fab { color: #102725; }
     input { color-scheme: dark; }
 }

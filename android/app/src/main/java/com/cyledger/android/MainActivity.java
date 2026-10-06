@@ -70,12 +70,17 @@ public final class MainActivity extends Activity {
     private ValueCallback<Uri[]> uploadCallback;
     private byte[] pendingDownload;
     private boolean loaded;
+    private LocalBridge local;
+    private android.webkit.GeolocationPermissions.Callback geoCallback;
+    private String geoOrigin;
     private boolean destroyed;
     private Boolean appearanceDark;
     private android.window.OnBackInvokedCallback backCallback;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        try { MaintenanceActivity.recover(getFilesDir()); } catch(Exception error){ finish(); return; }
+        local=new LocalBridge(this);
         int port = getPackageName().endsWith(".qa") ? 18762 : 18761;
         origin = "http://127.0.0.1:" + port;
         root = new LinearLayout(this);
@@ -170,11 +175,14 @@ public final class MainActivity extends Activity {
         handler.post(() -> { if (!destroyed) showStatus("账本暂时没有响应。数据仍保存在手机，请关闭后重新打开。", true); });
     }
 
-    private void openLedger(Bundle state) {
+    private void openLedger(Bundle state) { local.ensureUnlocked(()->openLedgerUnlocked(state)); }
+    private void openLedgerUnlocked(Bundle state) {
         loaded = true;
         root.removeAllViews();
         if (web == null) {
             web = new WebView(this);
+            local.attach(web);
+            web.addJavascriptInterface(local,"CYLedgerLocal");
             web.addJavascriptInterface(new ReminderBridge(this, web), "CYLedgerReminders");
             web.addJavascriptInterface(new AppearanceBridge(), "CYLedgerAppearance");
             WebView.setWebContentsDebuggingEnabled((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0);
@@ -183,12 +191,13 @@ public final class MainActivity extends Activity {
             settings.setDomStorageEnabled(true);
             settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
             settings.setAllowFileAccess(false);
-            settings.setAllowContentAccess(false);
+            settings.setAllowContentAccess(true);
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
             settings.setMediaPlaybackRequiresUserGesture(true);
             CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
             web.setWebViewClient(new WebViewClient() {
                 @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                    if (!isLocal(request.getUrl().toString())) return new WebResourceResponse("text/plain","UTF-8",403,"Forbidden",Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));
                     // Credentials enter only this app's WebView, through JNI.
                     // No HTTP session endpoint or public JavaScript bridge exists.
                     if (!request.isForMainFrame() || !isLocal(request.getUrl().toString())
@@ -205,6 +214,8 @@ public final class MainActivity extends Activity {
                             + "localStorage.setItem('ebk_user_info',JSON.stringify(s.user));"
                             + "if(location.hash.includes('/login')||location.hash.includes('/signup'))history.replaceState(null,'','/personal');"
                             + "})();</script>";
+                        File restored=new File(getFilesDir(),"ledger/settings.json");
+                        if(restored.isFile()){String settings=new String(java.nio.file.Files.readAllBytes(restored.toPath()),StandardCharsets.UTF_8);new JSONObject(settings);script+="<script>(()=>{let settings=JSON.parse("+JSONObject.quote(settings).replace("<","\\u003c").replace(">","\\u003e")+");Object.keys(localStorage).filter(k=>k==='ebk_app_settings'||k.startsWith('cy_ledger_experience_')).forEach(k=>localStorage.removeItem(k));Object.entries(settings).forEach(([k,v])=>localStorage.setItem(k,v));window.addEventListener('load',()=>CYLedgerLocal.action('settingsRestored','{}'));})();</script>";}
                         html = html.replace("<head>", "<head>" + script);
                         return new WebResourceResponse("text/html", "UTF-8", 200, "OK",
                             Collections.singletonMap("Cache-Control", "no-store"),
@@ -238,12 +249,15 @@ public final class MainActivity extends Activity {
                 }
             });
             web.setWebChromeClient(new WebChromeClient() {
+                @Override public void onGeolocationPermissionsShowPrompt(String pageOrigin,android.webkit.GeolocationPermissions.Callback callback){if(!isLocal(pageOrigin)){callback.invoke(pageOrigin,false,false);return;}geoOrigin=pageOrigin;geoCallback=callback;if(checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)==android.content.pm.PackageManager.PERMISSION_GRANTED||checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)==android.content.pm.PackageManager.PERMISSION_GRANTED){callback.invoke(pageOrigin,true,false);geoCallback=null;}else requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION,android.Manifest.permission.ACCESS_COARSE_LOCATION},804);}
+
                 @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams parameters) {
                     if (uploadCallback != null) uploadCallback.onReceiveValue(null);
                     uploadCallback = callback;
                     Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                     intent.addCategory(Intent.CATEGORY_OPENABLE);
                     String[] types = parameters.getAcceptTypes();
+                    for(int i=0;i<types.length;i++){if(types[i].startsWith(".")){String mime=android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(types[i].substring(1));types[i]=mime==null?"*/*":mime;}}
                     intent.setType(types.length == 1 && !types[0].isEmpty() ? types[0] : "*/*");
                     if (types.length > 1) intent.putExtra(Intent.EXTRA_MIME_TYPES, types);
                     intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, parameters.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
@@ -276,9 +290,10 @@ public final class MainActivity extends Activity {
         }
         root.addView(web, new LinearLayout.LayoutParams(-1, -1));
         if (state != null && web.restoreState(state) != null) return;
-        web.loadUrl(origin + "/personal");
+        web.loadUrl(origin + "/personal"+(getIntent().getBooleanExtra("quickEntry",false)?"#!/transaction/add?type=3":""));
     }
 
+    boolean isLocalPage(String url) { return url!=null&&isLocal(url); }
     private boolean isLocal(String url) {
         Uri uri = Uri.parse(url);
         Uri local = Uri.parse(origin);
@@ -429,8 +444,11 @@ public final class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent result) {
         super.onActivityResult(requestCode, resultCode, result);
+        local.activityResult(requestCode,resultCode,result);
         if (requestCode == PICK_FILE && uploadCallback != null) {
-            uploadCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, result));
+            Uri[] files=null; if(resultCode==RESULT_OK && result!=null){android.content.ClipData clip=result.getClipData();if(clip!=null){files=new Uri[clip.getItemCount()];for(int i=0;i<files.length;i++)files[i]=clip.getItemAt(i).getUri();}else if(result.getData()!=null)files=new Uri[]{result.getData()};}
+            local.selectedFiles(files);
+            uploadCallback.onReceiveValue(files);
             uploadCallback = null;
         }
         if (requestCode == SAVE_FILE && pendingDownload != null) {
@@ -451,15 +469,20 @@ public final class MainActivity extends Activity {
 
     @Override public void onBackPressed() {
         if (loaded && web != null) {
-            web.evaluateJavascript("(function(){let v=document.querySelector('.view-main');if(v&&v.f7View&&v.f7View.router.history.length>1){v.f7View.router.back();return true;}return false;})()", result -> {
+            web.evaluateJavascript("(function(){let modal=document.querySelector('.modal-in');if(modal){let close=modal.querySelector('.popup-close,.sheet-close,.dialog-button');if(close){close.click();return true;}let api=modal.f7Modal;if(api){api.close();return true;}}let v=document.querySelector('.view-main');if(v&&v.f7View&&v.f7View.router.history.length>1){v.f7View.router.back();return true;}return false;})()", result -> {
                 if (!"true".equals(result)) {
                     if (web.canGoBack()) web.goBack();
-                    else moveTaskToBack(true);
+                    else exitLedger();
                 }
             });
-        } else moveTaskToBack(true);
+        } else exitLedger();
     }
 
+    private void exitLedger(){if(local.exitConfirm())new AlertDialog.Builder(this).setTitle("退出账本？").setNegativeButton("取消",null).setPositiveButton("退出",(d,w)->moveTaskToBack(true)).show();else moveTaskToBack(true);}
+    @Override protected void onStop(){local.stopped();super.onStop();}
+    @Override protected void onResume(){super.onResume();if(local!=null)local.resumed();}
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.getBooleanExtra("quickEntry",false)&&web!=null)local.ensureUnlocked(()->web.evaluateJavascript("document.querySelector('.view-main')?.f7View?.router.navigate('/transaction/add?type=3')",null));}
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==804&&geoCallback!=null){boolean granted=false;for(int result:results)if(result==android.content.pm.PackageManager.PERMISSION_GRANTED)granted=true;geoCallback.invoke(geoOrigin,granted,false);geoCallback=null;}}
     @Override public void onConfigurationChanged(Configuration configuration) {
         super.onConfigurationChanged(configuration);
         applyInsets();
@@ -479,6 +502,7 @@ public final class MainActivity extends Activity {
         if (uploadCallback != null) uploadCallback.onReceiveValue(null);
         if (web != null) { root.removeView(web); web.destroy(); }
         io.shutdownNow();
+        if(local!=null)local.destroy();
         super.onDestroy();
     }
 }

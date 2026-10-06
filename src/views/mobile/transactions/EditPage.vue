@@ -67,6 +67,7 @@
                                :currency="sourceAccountCurrency" :destination-currency="destinationAccountCurrency"
                                :transfer="transaction.type === TransactionType.Transfer && !debtMode" :can-save="!inputIsEmpty && transaction.sourceAmount !== 0"
                                :tags="quickTags" :amount-class="transaction.type === TransactionType.Expense ? 'cy-expense' : transaction.type === TransactionType.Income ? 'cy-income' : ''"
+                               :remarks="historicalRemarks"
                                :validation-message="debtMode && transaction.sourceAmount ? debtValidationMessage : ''"
                                :disabled="submitting || recognizing" :allow-continue="mode === TransactionEditPageMode.Add"
                                v-model:amount="transaction.sourceAmount" v-model:destination-amount="transaction.destinationAmount"
@@ -74,13 +75,17 @@
                                @save="save(AfterSaveAction.GoBack)" @continue="save(AfterSaveAction.StayWithNewTransaction)"
                                @more="showExtendedFields = true" @tags="showTransactionTagSheet = true" @cancel="f7router.back()">
             <template v-if="debtMode" #selection><DebtEntryFields :accounts="debtAccounts" :categories="debtCategories" :amount="transaction.sourceAmount" :disabled="submitting" :previous-account-id="previousDebtAccountId" :previous-impact="previousDebtImpact" v-model:operation="debtOperation" v-model:source-id="transaction.sourceAccountId" v-model:destination-id="transaction.destinationAccountId" v-model:category-id="transaction.transferCategoryId" /></template>
+            <template v-else-if="transaction.type === TransactionType.Transfer" #selection><div class="cy-transfer-accounts"><button @click="showSourceAccountSheet=true"><small>转出账户</small><strong>{{ sourceAccountName || '请选择账户' }}</strong><span>{{ sourceAccountCurrency }} {{ ledgerMoney(new LedgerDecimal(allAccountsMap[transaction.sourceAccountId]?.balance||0).div(100).toString(),false) }}</span></button><button class="cy-transfer-swap" aria-label="交换转出和转入账户" @click="swapTransactionData(true,true)"><f7-icon f7="arrow_up_arrow_down" /></button><button @click="showDestinationAccountSheet=true"><small>转入账户</small><strong>{{ destinationAccountName || '请选择账户' }}</strong><span>{{ destinationAccountCurrency }} {{ ledgerMoney(new LedgerDecimal(allAccountsMap[transaction.destinationAccountId]?.balance||0).div(100).toString(),false) }}</span></button><f7-link v-if="!allVisibleAccounts.length" href="/account/add">＋ 添加账户</f7-link><label>转账分类<select v-model="transaction.transferCategoryId"><option v-for="category in debtCategories.flatMap(c=>c.subCategories || [])" :key="category.id" :value="category.id">{{ category.name }}</option></select></label></div></template>
             <template #context>
-                <button v-if="canRecordDiscount" class="cy-entry-chip" @click="openDiscount"><f7-icon f7="tag" />优惠{{ transaction.discountAmount && transaction.discountAmount !== '0' && transaction.discountAmount !== '0.00' ? ' '+transaction.discountAmount : '' }}</button>
-                <button v-if="transaction.type === TransactionType.Expense && reimbursementAccounts.length" class="cy-entry-chip" @click="showReimbursementSheet=true"><f7-icon f7="doc_text" />{{allAccountsMap[transaction.reimbursementAccountId]?.name||'报销'}}</button>
                 <button class="cy-entry-chip" @click="showDateTimeDialog('date')"><f7-icon f7="calendar" />{{ quickDate }}</button>
                 <template v-if="!debtMode"><button v-if="allVisibleAccounts.length" class="cy-entry-chip" @click="showSourceAccountSheet = true"><f7-icon f7="creditcard" />{{ sourceAccountName || '选择账户' }}</button><f7-link v-else class="cy-entry-chip" href="/account/add">＋ 添加账户</f7-link>
                 <button v-if="transaction.type === TransactionType.Transfer" class="cy-entry-chip" :disabled="!allVisibleAccounts.length" @click="showDestinationAccountSheet = true"><f7-icon f7="arrow_right" />{{ destinationAccountName || '转入账户' }}</button></template>
+                <button v-if="transaction.type === TransactionType.Expense" class="cy-entry-chip" @click="showReimbursementSheet=true"><f7-icon f7="doc_text" />{{allAccountsMap[transaction.reimbursementAccountId]?.name||'不报销'}}</button>
                 <button v-if="isTransactionPicturesEnabled()" class="cy-entry-chip" :disabled="uploadingPicture || !canAddTransactionPicture" @click="showOpenPictureDialog"><f7-icon f7="paperclip" />{{ uploadingPicture ? '上传中' : '附件' }}</button>
+                <button v-if="canRecordDiscount" class="cy-entry-chip" @click="openDiscount"><f7-icon f7="tag" />优惠{{ transaction.discountAmount && transaction.discountAmount !== '0' && transaction.discountAmount !== '0.00' ? ' '+transaction.discountAmount : '' }}</button>
+                <button v-if="debtMode && ['borrow','lend'].includes(debtOperation)" class="cy-entry-chip" @click="showDebtDue=true"><f7-icon f7="calendar_badge_plus" />{{transaction.debtDueDate||'还款日期'}}</button>
+                <button class="cy-entry-chip" @click="showAttributes=true"><f7-icon f7="slider_horizontal_3" />属性</button>
+                <button v-if="transaction.type===TransactionType.Transfer && !debtMode" class="cy-entry-chip" @click="showFee=true"><f7-icon f7="banknote" />手续费{{ transaction.transferFeeAmount!=='0'&&transaction.transferFeeAmount!=='0.00'?' '+transaction.transferFeeAmount:'' }}</button>
             </template>
             <template v-if="transaction.pictures?.length" #attachments><div class="cy-quick-attachments"><button v-for="picture in transaction.pictures" :key="picture.pictureId" aria-label="查看或移除附件" @click="viewOrRemovePicture(picture)"><img :src="getTransactionPictureUrl(picture)" alt="记账附件" /></button></div></template>
         </QuickTransactionEntry>
@@ -248,6 +253,9 @@
                 </tree-view-selection-sheet>
             </f7-list-item>
 
+            <f7-list-input v-if="transaction.locationName||mode!==TransactionEditPageMode.View" label="地点名称" v-model:value="transaction.locationName" :readonly="mode===TransactionEditPageMode.View" :maxlength="200" />
+            <f7-list-item v-if="transaction.debtDueDate" title="约定还款日期" :after="transaction.debtDueDate" />
+            <f7-list-item v-if="transaction.type===TransactionType.Transfer&&transaction.transferFeeAmount!=='0'&&transaction.transferFeeAmount!=='0.00'" title="手续费 / 优惠" :after="sourceAccountCurrency+' '+transaction.transferFeeAmount" />
             <f7-list-item
                 class="list-item-with-header-and-title"
                 link="#" no-chevron
@@ -507,9 +515,6 @@
         </f7-actions>
 
         <f7-actions close-by-outside-click close-on-escape :opened="showMoreActionSheet" @actions:closed="showMoreActionSheet = false">
-            <f7-actions-group v-if="mode !== TransactionEditPageMode.View && pageTypeAndMode?.type === TransactionEditPageType.Transaction && isTransactionFromAITextRecognitionEnabled()">
-                <f7-actions-button @click="recognizeFromClipboard">{{ tt('AI Clipboard Text Recognition') }}</f7-actions-button>
-            </f7-actions-group>
             <f7-actions-group v-if="mode !== TransactionEditPageMode.View && transaction.type === TransactionType.Transfer">
                 <f7-actions-button @click="swapTransactionData(true, false)">{{ tt('Swap Account') }}</f7-actions-button>
                 <f7-actions-button @click="swapTransactionData(false, true)">{{ tt('Swap Amount') }}</f7-actions-button>
@@ -564,12 +569,14 @@
             </f7-list>
         </f7-popover>
 
-        <a-i-text-recognition-sheet :initial-text="pastedText" v-model:show="showAITextRecognitionSheet" @text:confirm="recognizeText" />
         <f7-photo-browser ref="pictureBrowser" type="popup" navbar-of-text="/"
                           :navbar-show-count="true" :exposition="false"
                           :photos="transactionPictures" :thumbs="transactionThumbs" />
         <input ref="pictureInput" type="file" style="display: none" :accept="`${SUPPORTED_IMAGE_EXTENSIONS};capture=camera`" @change="onUploadPicture($event)" />
-        <StatisticsSheet v-model:open="showDiscountSheet" title="优惠金额"><div class="cy-discount-form"><label>优惠（{{ sourceAccountCurrency }}）<input v-model="discountDraft" inputmode="decimal" maxlength="16" placeholder="0.00" aria-label="优惠金额" /></label><p>记账金额仍为实付或实收；优惠仅作统计记录，不会再次扣减账户余额。</p><p v-if="discountValid">优惠前金额：{{ discountOriginal }}</p><p v-if="discountError" role="alert">{{ discountError }}</p><button class="cy-button cy-primary" @click="saveDiscount">确定</button></div></StatisticsSheet>
+        <StatisticsSheet v-model:open="showDiscountSheet" title="优惠金额"><div class="cy-discount-form"><label>原价（{{ sourceAccountCurrency }}）<input v-model="discountOriginal" inputmode="decimal" maxlength="16" placeholder="0.00" aria-label="优惠前金额" @input="calculateDiscount('original')" /></label><label>优惠<input v-model="discountDraft" inputmode="decimal" maxlength="16" placeholder="0.00" aria-label="优惠金额" @input="calculateDiscount('discount')" /></label><label>{{ transaction.type===TransactionType.Income?'实收':'实付' }}<input v-model="discountActual" inputmode="decimal" maxlength="16" placeholder="0.00" aria-label="实际金额" @input="calculateDiscount('actual')" /></label><p>填写其中两项，可计算第三项。保存后按实际金额记账。</p><p v-if="discountError" role="alert">{{ discountError }}</p><button class="cy-button cy-primary" @click="saveDiscount">确定</button></div></StatisticsSheet>
+        <StatisticsSheet v-model:open="showAttributes" title="账单属性"><f7-list><f7-list-input label="地点名称" placeholder="例如：公司、家、商场" v-model:value="transaction.locationName" :maxlength="200" /><f7-list-item title="计入收支与预算"><template #after><f7-toggle :disabled="transaction.type===TransactionType.Transfer || transaction.reimbursementAccountId!=='0'" :checked="!transaction.excludeFromStatistics && transaction.reimbursementAccountId==='0'" @toggle:change="transaction.excludeFromStatistics=!$event" /></template></f7-list-item><f7-list-item title="隐藏金额"><template #after><f7-toggle :checked="transaction.hideAmount" @toggle:change="transaction.hideAmount=$event" /></template></f7-list-item><f7-list-item title="记账地点" :after="transaction.geoLocation?'已添加':'未添加'" link="#" @click="showAttributes=false;showExtendedFields=true;showGeoLocationActionSheet=true" /></f7-list></StatisticsSheet>
+        <StatisticsSheet v-model:open="showDebtDue" title="约定还款日期"><div class="cy-discount-form"><label>日期<input type="date" v-model="transaction.debtDueDate" /></label><p>同时添加日历提醒，入账金额仍以本次借款为准。</p><button class="cy-button" @click="transaction.debtDueDate='';showDebtDue=false">清除日期</button><button class="cy-button cy-primary" @click="showDebtDue=false">确定</button></div></StatisticsSheet>
+        <StatisticsSheet v-model:open="showFee" title="转账手续费"><div class="cy-discount-form"><label>手续费（{{ sourceAccountCurrency }}）<input v-model="transaction.transferFeeAmount" inputmode="decimal" maxlength="17" placeholder="0.00" /></label><label>收支分类<select v-model="transaction.transferFeeCategoryId"><option value="0">请选择分类</option><option v-for="category in feeCategories" :key="category.id" :value="category.id">{{ category.name }}</option></select></label><p>正数为手续费，负数为转账优惠；将与原转账一并保存到转出账户。</p><button class="cy-button cy-primary" @click="showFee=false">完成</button></div></StatisticsSheet>
         <f7-sheet v-model:opened="showReimbursementSheet" class="cy-mobile-surface cy-reimbursement-picker" backdrop><f7-list><f7-list-item title="不报销" link="#" sheet-close @click="transaction.reimbursementAccountId='0'"/><f7-list-item v-for="a in reimbursementAccounts" :key="a.id" :title="a.name" link="#" sheet-close @click="transaction.reimbursementAccountId=a.id"/><f7-list-item title="添加报销账户" link="/account/add?preset=reimbursement" sheet-close/></f7-list></f7-sheet>
     </f7-page>
 </template>
@@ -577,6 +584,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, useTemplateRef } from 'vue';
 import { useLedgerScopeStore } from '@/stores/ledgerScope.ts';
+import { useLedgerExperienceStore } from '@/stores/ledgerExperience.ts';
+import services from '@/lib/services.ts';
 import { getCurrentUnixTime } from '@/lib/datetime.ts';
 import QuickTransactionEntry from '@/components/mobile/QuickTransactionEntry.vue';
 import DebtEntryFields from '@/components/mobile/DebtEntryFields.vue';
@@ -589,7 +598,7 @@ import { useBooksStore } from '@/stores/books.ts';
 import type { PhotoBrowser, Router } from 'framework7/types';
 
 import { useI18n } from '@/locales/helpers.ts';
-import { useI18nUIComponents, isiOS, showLoading, hideLoading, closeAllDialog } from '@/lib/ui/mobile.ts';
+import { useI18nUIComponents, isiOS, showLoading, hideLoading } from '@/lib/ui/mobile.ts';
 import {
     TransactionEditPageMode,
     TransactionEditPageType,
@@ -624,7 +633,6 @@ import { TransactionTemplate } from '@/models/transaction_template.ts';
 import type { TransactionPictureInfoBasicResponse } from '@/models/transaction_picture_info.ts';
 import { Transaction } from '@/models/transaction.ts';
 
-import { isDefined } from '@/lib/common.ts';
 import { parseBigDecimal } from '@/lib/numeral.ts';
 import {
     getTimezoneOffset,
@@ -636,7 +644,6 @@ import { generateRandomUUID } from '@/lib/misc.ts';
 import { getTransactionPrimaryCategoryName, getTransactionSecondaryCategoryName } from '@/lib/category.ts';
 import { type SetTransactionOptions } from '@/lib/transaction.ts';
 import {
-    isTransactionFromAITextRecognitionEnabled,
     isTransactionPicturesEnabled,
     getMapProvider
 } from '@/lib/server_settings.ts';
@@ -663,7 +670,7 @@ const {
     formatGregorianTextualYearMonthDayToLongDate,
     parseAmountFromLocalizedNumerals
 } = useI18n();
-const { showAlert, showConfirm, showCancelableLoading, showToast, routeBackOnError } = useI18nUIComponents();
+const { showAlert, showConfirm, showToast, routeBackOnError } = useI18nUIComponents();
 
 const {
     mode,
@@ -689,7 +696,7 @@ const {
     allTimezones,
     allVisibleAccounts,
     allAccountsMap,
-    allVisibleCategorizedAccounts,
+    allVisibleCategorizedAccounts: baseVisibleCategorizedAccounts,
     allCategories,
     allTagsMap,
     firstVisibleAccountId,
@@ -713,7 +720,6 @@ const {
     inputEmptyProblemMessage,
     inputIsEmpty,
     setTransactionModel,
-    updateTransactionModelFromRecognizedResponse,
     updateTransactionModelByAfterSaveAction,
     updateTransactionTime: updateSelectedTransactionTime,
     updateTransactionTimezone,
@@ -725,13 +731,16 @@ const {
 const isSupportClipboard = !!navigator.clipboard;
 
 const settingsStore = useSettingsStore();
+const experience=useLedgerExperienceStore(),showAttributes=ref(false),showFee=ref(false),historicalRemarks=ref<string[]>([]);
+const showDebtDue=ref(false);
+const feeCategories=computed(()=>(allCategories.value[transaction.value.transferFeeAmount.startsWith('-')?CategoryType.Income:CategoryType.Expense]||[]).flatMap(c=>c.subCategories||[]).filter(c=>!c.hidden));
 const showReimbursementSheet=ref(false);
-const showDiscountSheet=ref(false),discountDraft=ref('0'),discountError=ref('');
+const showDiscountSheet=ref(false),discountDraft=ref('0'),discountOriginal=ref(''),discountActual=ref(''),discountError=ref('');
 const canRecordDiscount=computed(()=>pageTypeAndMode?.type===TransactionEditPageType.Transaction&&[TransactionType.Expense,TransactionType.Income].includes(transaction.value.type)&&transaction.value.sourceAmount>=0&&!transaction.value.reimbursementReceiptId);
-const discountValid=computed(()=>/^(0|[1-9]\d{0,12})(\.\d{1,2})?$/.test(discountDraft.value));
-const discountOriginal=computed(()=>discountValid.value?ledgerMoney(new LedgerDecimal(transaction.value.sourceAmount.toString()).div(100).plus(discountDraft.value).toString(),false):'—');
-function openDiscount(){discountDraft.value=transaction.value.discountAmount||'0';discountError.value='';showDiscountSheet.value=true;}
-function saveDiscount(){if(!discountValid.value){discountError.value='请输入非负金额，最多两位小数。';return;}transaction.value.discountAmount=new LedgerDecimal(discountDraft.value).toFixed(2);showDiscountSheet.value=false;}
+const validMoney=(value:string)=>/^(0|[1-9]\d{0,12})(\.\d{1,2})?$/.test(value);
+function openDiscount(){discountDraft.value=transaction.value.discountAmount||'0';discountActual.value=new LedgerDecimal(transaction.value.sourceAmount).div(100).toFixed(2);discountOriginal.value=new LedgerDecimal(discountActual.value).plus(discountDraft.value).toFixed(2);discountError.value='';showDiscountSheet.value=true;}
+function calculateDiscount(changed:'original'|'discount'|'actual'){discountError.value='';if(changed==='actual'&&validMoney(discountOriginal.value)&&validMoney(discountActual.value))discountDraft.value=new LedgerDecimal(discountOriginal.value).minus(discountActual.value).toFixed(2);else if(validMoney(discountOriginal.value)&&validMoney(discountDraft.value))discountActual.value=new LedgerDecimal(discountOriginal.value).minus(discountDraft.value).toFixed(2);else if(validMoney(discountActual.value)&&validMoney(discountDraft.value))discountOriginal.value=new LedgerDecimal(discountActual.value).plus(discountDraft.value).toFixed(2);}
+function saveDiscount(){if(![discountDraft.value,discountActual.value,discountOriginal.value].every(validMoney)||!new LedgerDecimal(discountOriginal.value).eq(new LedgerDecimal(discountActual.value).plus(discountDraft.value))||new LedgerDecimal(discountActual.value).mul(100).gt(TRANSACTION_MAX_AMOUNT)){discountError.value='请检查原价、优惠与实际金额，金额必须非负且最多两位小数。';return;}transaction.value.discountAmount=new LedgerDecimal(discountDraft.value).toFixed(2);transaction.value.sourceAmount=new LedgerDecimal(discountActual.value).mul(100).toNumber();showDiscountSheet.value=false;}
 const reimbursementAccounts=computed(()=>Object.values(allAccountsMap.value).filter(a=>a.visible&&a.assetProfile.kind==='reimbursement'&&a.currency===sourceAccountCurrency.value));
 const booksStore = useBooksStore();
 const ledgerScope = useLedgerScopeStore();
@@ -760,7 +769,6 @@ const quickEntry = useTemplateRef<InstanceType<typeof QuickTransactionEntry>>('q
 
 const loadingError = ref<unknown | null>(null);
 const removingPictureId = ref<string | null>(null);
-const pastedText = ref<string>('');
 const transactionDateTimeSheetMode = ref<string>('time');
 const showTimeInDefaultTimezone = ref<boolean>(false);
 const showQuickSavePopover = ref<boolean>(false);
@@ -770,6 +778,7 @@ const showMoreActionSheet = ref<boolean>(false);
 const showSourceAmountSheet = ref<boolean>(false);
 const showDestinationAmountSheet = ref<boolean>(false);
 const showCategorySheet = ref<boolean>(false);
+const allVisibleCategorizedAccounts=computed(()=>experience.preferences.multiCurrency?baseVisibleCategorizedAccounts.value:baseVisibleCategorizedAccounts.value.map(group=>({...group,accounts:group.accounts.filter(a=>a.currency==='CNY'||(mode.value!==TransactionEditPageMode.Add&&[transaction.value.sourceAccountId,transaction.value.destinationAccountId].includes(a.id)))})).filter(group=>group.accounts.length));
 const showSourceAccountSheet = ref<boolean>(false);
 const showDestinationAccountSheet = ref<boolean>(false);
 const showTransactionDateTimeSheet = ref<boolean>(false);
@@ -781,9 +790,9 @@ const showTransactionTagSheet = ref<boolean>(false);
 const showTransactionPictures = ref<boolean>(pageTypeAndMode?.type === TransactionEditPageType.Transaction
     && (pageTypeAndMode?.mode === TransactionEditPageMode.Add || pageTypeAndMode?.mode === TransactionEditPageMode.Edit)
     && settingsStore.appSettings.alwaysShowTransactionPicturesInMobileTransactionEditPage);
-const showAITextRecognitionSheet = ref<boolean>(false);
 const showExtendedFields = ref(false);
 const debtMode = ref(false), debtOperation = ref<DebtOperation>('borrow');
+watch(debtOperation,op=>{if(!loading.value&&!['borrow','lend'].includes(op))transaction.value.debtDueDate='';});
 const previousDebtAccountId = ref(''), previousDebtImpact = ref('0');
 const entryTypes = [{ value: 'expense', label: '支出' }, { value: 'income', label: '收入' }, { value: 'transfer', label: '转账' }, { value: 'debt', label: '债务' }];
 const activeEntryType = computed(() => debtMode.value ? 'debt' : transaction.value.type === TransactionType.Expense ? 'expense' : transaction.value.type === TransactionType.Income ? 'income' : 'transfer');
@@ -792,7 +801,7 @@ const quickDate = computed(() => {
     return date.format('YYYY-MM-DD') === ledgerScope.currentDay ? '今天' : date.format('YYYY年M月D日');
 });
 const quickTags = computed(() => transaction.value.tagIds.map(id => ({ id, name: allTagsMap.value[id]?.name || '标签' })));
-const debtAccounts = computed(() => Object.values(allAccountsMap.value).filter(account => allVisibleAccounts.value.includes(account) || (mode.value === TransactionEditPageMode.Edit && [transaction.value.sourceAccountId, transaction.value.destinationAccountId].includes(account.id))));
+const debtAccounts = computed(() => Object.values(allAccountsMap.value).filter(account => (allVisibleAccounts.value.includes(account) && (experience.preferences.multiCurrency || account.currency==='CNY')) || (mode.value === TransactionEditPageMode.Edit && [transaction.value.sourceAccountId, transaction.value.destinationAccountId].includes(account.id))));
 const debtCategories = computed(() => (allCategories.value[CategoryType.Transfer] || []).map(parent => ({ ...parent,
     subCategories: parent.subCategories?.filter(child => ((!parent.hidden && (!parent.bookIds.length || parent.bookIds.includes(transaction.value.bookId))) && !child.hidden && (!child.bookIds.length || child.bookIds.includes(transaction.value.bookId))) || (mode.value === TransactionEditPageMode.Edit && child.id === transaction.value.transferCategoryId))
 })).filter(parent => parent.subCategories?.length));
@@ -802,6 +811,7 @@ const debtValidationMessage = computed(() => {
 });
 function selectEntryType(value: string): void {
     const wasDebt = debtMode.value;
+    if(value!=='debt')transaction.value.debtDueDate='';
     const cash = [transaction.value.sourceAccountId, transaction.value.destinationAccountId].map(id => allAccountsMap.value[id]).find(account => account && isDebtCashAccount(account));
     debtMode.value = value === 'debt';
     transaction.value.type = value === 'expense' ? TransactionType.Expense : value === 'income' ? TransactionType.Income : TransactionType.Transfer;
@@ -820,6 +830,10 @@ const quickCategoryId = computed({
     get: () => transaction.value.type === TransactionType.Expense ? transaction.value.expenseCategoryId : transaction.value.type === TransactionType.Income ? transaction.value.incomeCategoryId : transaction.value.transferCategoryId,
     set: (value: string) => { if (transaction.value.type === TransactionType.Expense) transaction.value.expenseCategoryId = value; else if (transaction.value.type === TransactionType.Income) transaction.value.incomeCategoryId = value; else transaction.value.transferCategoryId = value; }
 });
+function applyDefaultAccount(){if(mode.value!==TransactionEditPageMode.Add||debtMode.value)return;const choice=experience.preferences.defaultAccountId,id=choice==='category'?experience.preferences.categoryAccounts[quickCategoryId.value]:choice==='last'?experience.lastAccountId:choice;if(id&&allVisibleAccounts.value.some(a=>a.id===id&&(experience.preferences.multiCurrency||a.currency==='CNY')))transaction.value.sourceAccountId=id;}
+let remarksGeneration=0;
+async function loadRemarks(){const version=++remarksGeneration;historicalRemarks.value=[];if(!experience.preferences.historicalRemarks||!quickCategoryId.value)return;try{const response=await services.getTransactions({bookIds:[],maxTime:getCurrentUnixTime()+1,minTime:0,count:100,page:1,withCount:false,type:transaction.value.type,categoryIds:quickCategoryId.value,accountIds:'',tagFilter:'',amountFilter:'',keyword:'',matchMode:0});if(version===remarksGeneration&&response.data.success)historicalRemarks.value=[...new Set(response.data.result.items.map(item=>item.comment).filter(Boolean))].slice(0,30);}catch{/* Suggestions must not prevent manual entry. */}}
+watch(quickCategoryId,()=>{if(!loading.value){applyDefaultAccount();void loadRemarks();}});
 watch(() => transaction.value, () => {
     if (canUseQuickEntry.value && !transaction.value.bookId) transaction.value.bookId = booksStore.defaultBookId;
 });
@@ -1223,16 +1237,8 @@ function init(): void {
         }
 
         loading.value = false;
+        if(!fromTransaction)applyDefaultAccount();void loadRemarks();
 
-        if (isDefined(props.autoRecognizeClipboardText)) {
-            pastedText.value = props.autoRecognizeClipboardText;
-
-            if (pastedText.value && !settingsStore.appSettings.alwaysRequireConfirmationOfClipboardContentBeforeSubmission) {
-                recognizeText(pastedText.value);
-            } else {
-                showAITextRecognitionSheet.value = true;
-            }
-        }
     }).catch(error => {
         logger.error('failed to load essential data for editing transaction', error);
 
@@ -1252,6 +1258,7 @@ function save(afterAction: AfterSaveAction): void {
     if (canRecordDiscount.value && !/^(0|[1-9]\d{0,12})(\.\d{1,2})?$/.test(transaction.value.discountAmount || '0')) { showAlert('优惠金额格式无效，请重新填写。'); return; }
 
     if (debtMode.value && debtValidationMessage.value) { showAlert(debtValidationMessage.value); return; }
+    if(transaction.value.type===TransactionType.Transfer && (!/^-?(0|[1-9]\d{0,12})(\.\d{1,2})?$/.test(transaction.value.transferFeeAmount)||(!new LedgerDecimal(transaction.value.transferFeeAmount).isZero()&&!feeCategories.value.some(c=>c.id===transaction.value.transferFeeCategoryId)))){showAlert('请填写有效手续费，并选择对应的收支分类。');return;}
 
     if (mode.value === TransactionEditPageMode.View) {
         return;
@@ -1275,6 +1282,7 @@ function save(afterAction: AfterSaveAction): void {
                 isEdit: mode.value === TransactionEditPageMode.Edit,
                 clientSessionId: clientSessionId.value
             }).then(async () => {
+                experience.rememberAccount(quickCategoryId.value,transaction.value.sourceAccountId);
                 if (debtMode.value) {
                     await accountsStore.loadAllAccounts({ force: true }).catch(error => { if (!error?.isUpToDate && !error?.processed) showToast(error.message || error); });
                 }
@@ -1337,6 +1345,8 @@ function save(afterAction: AfterSaveAction): void {
             showConfirm('Are you sure you want to save this transaction with a zero amount?', () => {
                 doSubmit();
             });
+        } else if(!debtMode.value && experience.preferences.lowBalance && mode.value===TransactionEditPageMode.Add && [TransactionType.Expense,TransactionType.Transfer].includes(transaction.value.type) && transaction.value.sourceAmount>0 && allAccountsMap.value[transaction.value.sourceAccountId]?.category!==3 && new LedgerDecimal(allAccountsMap.value[transaction.value.sourceAccountId]?.balance||0).lt(new LedgerDecimal(transaction.value.sourceAmount).plus(transaction.value.type===TransactionType.Transfer?new LedgerDecimal(transaction.value.transferFeeAmount||'0').mul(100):0))) {
+            showConfirm('账户余额不足，仍要保存这笔账单吗？',doSubmit);
         } else {
             doSubmit();
         }
@@ -1392,57 +1402,6 @@ function quickSave(): void {
     }
 
     save(AfterSaveAction.GoBack);
-}
-
-function recognizeText(text: string): void {
-    if (recognizing.value || loading.value || submitting.value) {
-        return;
-    }
-
-    if (!text || !text.trim()) {
-        return;
-    }
-
-    recognizing.value = true;
-    showCancelableLoading('Recognizing', 'AI can make mistakes. Check important info.');
-
-    transactionsStore.recognizeTransactionText({ text }).then(response => {
-        updateTransactionModelFromRecognizedResponse(response);
-        closeAllDialog();
-        recognizing.value = false;
-    }).catch(error => {
-        closeAllDialog();
-        recognizing.value = false;
-
-        if (!error.processed) {
-            showToast(error.message || error);
-        }
-    });
-}
-
-function recognizeFromClipboard(): void {
-    if (recognizing.value || loading.value || submitting.value) {
-        return;
-    }
-
-    pastedText.value = '';
-
-    if (isSupportClipboard && !isiOS()) {
-        navigator.clipboard.readText().then(text => {
-            pastedText.value = text && text.trim() ? text.trim() : '';
-
-            if (pastedText.value && !settingsStore.appSettings.alwaysRequireConfirmationOfClipboardContentBeforeSubmission) {
-                recognizeText(pastedText.value);
-            } else {
-                showAITextRecognitionSheet.value = true;
-            }
-        }).catch(error => {
-            logger.error('failed to read clipboard', error);
-            showAITextRecognitionSheet.value = true;
-        });
-    } else {
-        showAITextRecognitionSheet.value = true;
-    }
 }
 
 function pasteAmount(type: 'sourceAmount' | 'destinationAmount'): void {
@@ -1649,8 +1608,10 @@ init();
 </script>
 
 <style scoped>
+.cy-transfer-accounts{padding:20px 16px;display:flex;flex-direction:column;align-items:stretch;gap:8px}.cy-transfer-accounts>button:not(.cy-transfer-swap){text-align:left;background:transparent;border:0;color:var(--cy-ink);padding:18px 8px}.cy-transfer-accounts small{display:block;color:var(--cy-muted);font-size:12px}.cy-transfer-accounts strong{display:block;font-size:23px;margin:12px 0}.cy-transfer-accounts span{font-size:12px;color:var(--cy-muted)}.cy-transfer-swap{align-self:center;border:1px solid var(--cy-line);background:var(--cy-card);border-radius:50%;width:40px;height:40px;color:var(--cy-accent)}.cy-transfer-accounts label{font-size:13px;display:flex;justify-content:space-between;margin-top:20px}.cy-transfer-accounts select,.cy-discount-form select{background:transparent;color:var(--cy-ink);border:0;max-width:65%}
+
 .cy-transaction-entry{--f7-navbar-height:56px}
-.cy-quick-navbar :deep(.navbar-inner){padding-inline:6px;gap:5px}.cy-quick-navbar :deep(.left){margin-right:0}.cy-quick-navbar :deep(.left .link){min-width:28px;padding-inline:0}
+.cy-quick-navbar{--f7-navbar-height:50px}.cy-quick-navbar :deep(.left),.cy-quick-navbar :deep(.right),.cy-quick-navbar :deep(.link){background:transparent!important;box-shadow:none!important;backdrop-filter:none!important}.cy-quick-navbar :deep(.left)::before,.cy-quick-navbar :deep(.right)::before,.cy-quick-navbar :deep(.link)::before{display:none!important}.cy-quick-navbar :deep(.navbar-inner){padding-inline:6px;gap:5px}.cy-quick-navbar :deep(.left){margin-right:0}.cy-quick-navbar :deep(.left .link){min-width:28px;padding-inline:0}
 .cy-quick-navbar :deep(.title){position:static!important;left:auto!important;width:auto!important;transform:none!important;flex:1;min-width:0;margin:0!important;overflow:visible}.cy-quick-navbar :deep(.right){margin-left:0;flex:none}
 .cy-entry-types{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--cy-soft);padding:3px;border-radius:10px}.cy-entry-types button{border:0;border-radius:8px;background:transparent;color:var(--cy-muted);font-size:14px;line-height:1.3;min-height:34px;padding:4px 5px;white-space:nowrap}.cy-entry-types button[aria-pressed=true]{background:var(--cy-accent);color:var(--cy-card);font-weight:600}
 .cy-quick-attachments{display:flex;gap:7px;overflow:auto}.cy-quick-attachments button{border:0;padding:0;background:transparent;flex:none}.cy-quick-attachments img{display:block;width:38px;height:38px;object-fit:cover;border-radius:7px}
@@ -1661,6 +1622,7 @@ init();
 </style>
 
 <style>
+.cy-transfer-accounts{padding:20px 16px;display:flex;flex-direction:column;align-items:stretch;gap:8px}.cy-transfer-accounts>button:not(.cy-transfer-swap){text-align:left;background:transparent;border:0;color:var(--cy-ink);padding:18px 8px}.cy-transfer-accounts small{display:block;color:var(--cy-muted);font-size:12px}.cy-transfer-accounts strong{display:block;font-size:23px;margin:12px 0}.cy-transfer-accounts span{font-size:12px;color:var(--cy-muted)}.cy-transfer-swap{align-self:center;border:1px solid var(--cy-line);background:var(--cy-card);border-radius:50%;width:40px;height:40px;color:var(--cy-accent)}.cy-transfer-accounts label{font-size:13px;display:flex;justify-content:space-between;margin-top:20px}.cy-transfer-accounts select,.cy-discount-form select{background:transparent;color:var(--cy-ink);border:0;max-width:65%}
 .category-separate-icon.icon {
     margin-inline-start: 5px;
     margin-inline-end: 5px;
