@@ -2382,6 +2382,12 @@ func (s *TransactionService) DeleteAllTransactions(c core.Context, uid int64, de
 		if err := guardInvestmentTransactions(sess, uid, nil); err != nil {
 			return err
 		}
+		if _, err := sess.Where("uid=?", uid).Cols("paused").Update(&models.InvestmentPlan{Paused: true}); err != nil {
+			return err
+		}
+		if _, err := sess.Where("uid=? AND status=?", uid, "pending").Cols("status", "error").Update(&models.InvestmentOrder{Status: "cancelled", Error: "账务已清理"}); err != nil {
+			return err
+		}
 		if err := InvalidateWealthSnapshots(sess, uid, 0); err != nil {
 			return err
 		}

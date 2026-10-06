@@ -1,3 +1,4 @@
+import '@/styles/mobile/investment.scss';
 import type { Router } from 'framework7/types';
 
 import { isUserLogined, isUserUnlocked } from '@/lib/userstate.ts';
@@ -9,6 +10,9 @@ import AssetToolsPage from '@/views/mobile/AssetToolsPage.vue';
 import DebtPage from '@/views/mobile/DebtPage.vue';
 import ReimbursementPage from '@/views/mobile/ReimbursementPage.vue';
 import InvestmentManagePage from '@/views/mobile/InvestmentManagePage.vue';
+import InvestmentSetupPage from '@/views/mobile/InvestmentSetupPage.vue';
+import InvestmentPlansPage from '@/views/mobile/InvestmentPlansPage.vue';
+import InvestmentStatisticsPage from '@/views/mobile/InvestmentStatisticsPage.vue';
 import InvestmentPositionPage from '@/views/mobile/InvestmentPositionPage.vue';
 import InvestmentRecordPage from '@/views/mobile/InvestmentRecordPage.vue';
 import CryptoAccountPage from '@/views/mobile/CryptoAccountPage.vue';
@@ -177,6 +181,9 @@ const routes: Router.RouteParameters[] = [
     { path: '/account/credit', async: asyncResolve(CreditPage), beforeEnter: [checkLogin] },
     { path: '/account/installments', async: asyncResolve(InstallmentPage), beforeEnter: [checkLogin] },
     { path: '/account/activity', async: asyncResolve(AccountActivityPage), beforeEnter: [checkLogin] },
+    { path: '/investments/add', async: asyncResolve(InvestmentSetupPage), beforeEnter: [checkLogin] },
+    { path: '/investments/plans', async: asyncResolve(InvestmentPlansPage), beforeEnter: [checkLogin] },
+    { path: '/investments/statistics', async: asyncResolve(InvestmentStatisticsPage), beforeEnter: [checkLogin] },
     { path: '/investments/manage', async: asyncResolve(InvestmentManagePage), beforeEnter: [checkLogin] },
     { path: '/investments/position', async: asyncResolve(InvestmentPositionPage), beforeEnter: [checkLogin] },
     { path: '/crypto/add', async: asyncResolve(CryptoAccountPage), beforeEnter: [checkLogin] },

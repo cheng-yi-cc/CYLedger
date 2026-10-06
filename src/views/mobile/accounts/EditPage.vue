@@ -543,6 +543,7 @@ function init(): void {
             account.value.color = preset.color.replace('#', '');
             void nextTick(() => { account.value.icon = preset.icon; });
         }
+        if(query['monetary']==='1'){account.value.name='货币基金';account.value.assetProfile.group='货币基金';void nextTick(()=>{showIncomeSetup.value=true;});}
         loading.value = false;
     }
 }

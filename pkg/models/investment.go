@@ -81,3 +81,70 @@ type WealthSnapshot struct {
 	Invalidated  bool    `json:"invalidated"`
 	Payload      string  `xorm:"TEXT NOT NULL" json:"-"`
 }
+
+// 持仓偏好不保存第二份余额；成本和数量始终从投资事实回放。
+type InvestmentHoldingProfile struct {
+	Id               string   `xorm:"VARCHAR(64) PK" json:"id"`
+	Uid              int64    `xorm:"UNIQUE(holding_profile) NOT NULL" json:"-"`
+	AccountId        string   `xorm:"VARCHAR(64) UNIQUE(holding_profile) NOT NULL" json:"accountId"`
+	InstrumentId     string   `xorm:"VARCHAR(64) UNIQUE(holding_profile) NOT NULL" json:"instrumentId"`
+	Name             string   `xorm:"VARCHAR(64)" json:"name"`
+	Group            string   `xorm:"VARCHAR(64)" json:"group"`
+	Note             string   `xorm:"TEXT" json:"note"`
+	ProfitOffset     string   `xorm:"TEXT" json:"profitOffset"`
+	Hidden           bool     `json:"hidden"`
+	ExcludeFromTotal bool     `json:"excludeFromTotal"`
+	ExcludeProfit    bool     `json:"excludeProfit"`
+	BookIds          []string `xorm:"TEXT" json:"bookIds"`
+	Version          int      `json:"version"`
+}
+
+// 定投和待确认记录是指令。只有入账事务成功才产生投资事实。
+type InvestmentPlan struct {
+	Id            string `xorm:"VARCHAR(64) PK" json:"id"`
+	Uid           int64  `xorm:"INDEX NOT NULL" json:"-"`
+	AccountId     string `xorm:"VARCHAR(64)" json:"accountId"`
+	InstrumentId  string `xorm:"VARCHAR(64)" json:"instrumentId"`
+	CashAccountId string `xorm:"VARCHAR(32)" json:"cashAccountId"`
+	BookId        string `xorm:"VARCHAR(64)" json:"bookId"`
+	Amount        string `xorm:"TEXT" json:"amount"`
+	FeePercent    string `xorm:"TEXT" json:"feePercent"`
+	Cycle         string `xorm:"VARCHAR(16)" json:"cycle"`
+	StartDate     string `xorm:"VARCHAR(10)" json:"startDate"`
+	NextDate      string `xorm:"VARCHAR(10)" json:"nextDate"`
+	EndDate       string `xorm:"VARCHAR(10)" json:"endDate"`
+	Time          string `xorm:"VARCHAR(5)" json:"time"`
+	TimeZone      string `xorm:"VARCHAR(64)" json:"timeZone"`
+	Note          string `xorm:"TEXT" json:"note"`
+	Paused        bool   `json:"paused"`
+	Deleted       bool   `json:"deleted"`
+	Version       int    `json:"version"`
+}
+
+type InvestmentOrder struct {
+	Id            string `xorm:"VARCHAR(64) PK" json:"id"`
+	Uid           int64  `xorm:"UNIQUE(investment_order_key) INDEX NOT NULL" json:"-"`
+	RequestKey    string `xorm:"VARCHAR(128) UNIQUE(investment_order_key) NOT NULL" json:"-"`
+	PlanId        string `xorm:"VARCHAR(64) INDEX" json:"planId"`
+	AccountId     string `xorm:"VARCHAR(64)" json:"accountId"`
+	InstrumentId  string `xorm:"VARCHAR(64)" json:"instrumentId"`
+	CashAccountId string `xorm:"VARCHAR(32)" json:"cashAccountId"`
+	BookId        string `xorm:"VARCHAR(64)" json:"bookId"`
+	Type          string `xorm:"VARCHAR(16)" json:"type"`
+	Amount        string `xorm:"TEXT" json:"amount"`
+	Quantity      string `xorm:"TEXT" json:"quantity"`
+	Fee           string `xorm:"TEXT" json:"fee"`
+	FeePercent    string `xorm:"TEXT" json:"feePercent"`
+	TradeDate     string `xorm:"VARCHAR(10)" json:"tradeDate"`
+	ConfirmDate   string `xorm:"VARCHAR(10)" json:"confirmDate"`
+	Time          string `xorm:"VARCHAR(5)" json:"time"`
+	TimeZone      string `xorm:"VARCHAR(64)" json:"timeZone"`
+	Note          string `xorm:"TEXT" json:"note"`
+	Status        string `xorm:"VARCHAR(16)" json:"status"`
+	EventId       string `xorm:"VARCHAR(64)" json:"eventId"`
+	Price         string `xorm:"TEXT" json:"price"`
+	PriceDate     string `xorm:"VARCHAR(10)" json:"priceDate"`
+	Error         string `xorm:"TEXT" json:"error"`
+	LastAttempt   int64  `json:"-"`
+	Version       int    `json:"version"`
+}

@@ -26,6 +26,33 @@
 `mode` 可选 `manual/schedule/income/balance/asset`，`cycle` 为 `day/week/month/year`；`target` 大于零，`ratio` 在 0–100 之间。`logs` 最多 300 条，金额允许带负号表示取出，手动模式累计不能为负。关键词 `data` 为 `{keywords,categoryId,accountId,tagIds,enabled}`：至少一个关键词、有效分类，账户可为空字符串，标签最多 10 个。引用必须属于当前用户。每种公开类型最多 500 项，`data` 上限 60 KiB；完整 JSON 上限 64 KiB。保存返回分配的 ID 和递增修订号，后续保存/删除必须使用最新修订号。
 
 
+## 手机理财、基金确认与定投
+
+| 路由 | 契约 |
+|---|---|
+| `GET /investments/holdings` | 当前用户单项展示规则 |
+| `POST /investments/holdings` | 保存 `accountId/instrumentId/name/group/note/profitOffset/hidden/excludeFromTotal/excludeProfit/bookIds/version`；版本须匹配 |
+| `POST /investments/holdings/setup` | `profile/instrument/quantity/cost/price/bookId/occurredAt`；携带 `Idempotency-Key`，原子建立理财及已有持仓 |
+| `POST /investments/holdings/update` | 同上，附 `expectedQuantity/expectedCost`；原子保存规则与必要的 `ADJUST` 校准，保留未改成本的全部回放精度 |
+| `GET /investments/plans`、`POST /investments/plans` | 定投读取/保存，字段为模型 `InvestmentPlan`；`cycle=daily/weekly/biweekly/monthly`，金额含费，`feePercent` 为0–100，须传 `version` |
+| `GET /investments/orders`、`POST /investments/orders` | 确认指令读取/创建，模型 `InvestmentOrder`；创建携带 `Idempotency-Key`，买入二选一 `amount/quantity`，卖出填 `quantity` |
+| `POST /investments/orders/confirm` | `{id,version,price,date}`；手动确认净值并原子入账 |
+| `POST /investments/orders/cancel` | `{id,version}`；永久取消本期，不删除防重身份 |
+| `POST /investments/plans/sync` | `{force}`；生成到期指令并按历史净值确认，返回 `{created,pending}`；`created` 为本次成功入账数，`pending` 为仍待确认数，大批积压分次处理 |
+| `GET /investments/report?accountId=&instrumentId=` | 回放交易效果、真实快照历史和简单年化估算；未知字段为 `null` |
+
+日期为 `YYYY-MM-DD`、时间 `HH:mm`、会计时区为有效 IANA 名称。指令为基金 `BUY/SELL`，须有人民币资金账户；`amount/fee` 最多两位小数，`quantity/price/feePercent` 使用受限十进制字符串。待确认不影响资金和持仓；15:00起顺延至下一公开净值日期。入账事件附 `fund:{tradeDate,confirmDate,price,priceDate,source,orderId}`，后续可沿用事件修订/撤销接口。已处理或取消的指令不能再次入账。
+
+`GET /monetary-income/list` 附只读 `totalIncome/lastPerTenThousand`，前者由仍有效的关联收入累加，后者为最后一个已结算日的万份收益；两者都不维护第二份本金。
+
+新增定投示例（`POST /investments/plans`，替换为当前用户的有效账户、基金和账本 ID）：
+
+```json
+{"id":"","version":0,"accountId":"portfolio-id","instrumentId":"fund-id","cashAccountId":"cash-id","bookId":"book-id","amount":"100.00","feePercent":"0.15","cycle":"monthly","startDate":"2026-10-31","endDate":"","time":"10:00","timeZone":"Asia/Shanghai","note":"每月定投","paused":false,"deleted":false}
+```
+
+更新时传回完整计划及最新 `version`；`paused=true` 暂停，`deleted=true` 删除并取消待确认期次，均保留历史防重身份。`nextDate` 由服务维护，不由客户端推进；按月计划锚定开始日，短月份取月末。读取 `/investments/orders` 后，`status=pending/completed/cancelled` 分别表示待确认、已入账、已取消；`error` 给出等待原因。`POST /investments/plans/sync` 的 `force=true` 只跳过重试间隔，不跳过到期、归属、余额或防重校验，也不会向银行/基金平台实际扣款。
+
 ## 加密账户与钱包品牌
 
 `POST /investments/accounts/crypto` 接收 `{name, kind, platform, bookId, holdings:[{instrumentId, quantity}]}`，须携带 `Idempotency-Key`；账户与已有持仓在同一事务保存，重试不能重复增加数量。`kind="WALLET"` 时 `platform` 可省略或传空字符串；选 Bitget Wallet 时为 `bitget-wallet`。`kind="EXCHANGE"` 仍须提供匹配的交易所，Bitget 交易所为 `bitget`。非空的未知品牌或类型不匹配仍被拒绝。
@@ -112,6 +139,10 @@
 | POST | `/investments/events/preview` |
 | POST | `/investments/events/:id/revise` |
 | POST | `/investments/events/:id/void` |
+| GET / POST | `/investments/holdings`、`/investments/plans`、`/investments/orders` |
+| POST | `/investments/holdings/setup`、`/investments/holdings/update` |
+| POST | `/investments/orders/confirm`、`/investments/orders/cancel`、`/investments/plans/sync` |
+| GET | `/investments/report` |
 | GET | `/investments/positions` |
 | GET | `/investments/quotes` |
 | POST | `/investments/quotes/manual` |

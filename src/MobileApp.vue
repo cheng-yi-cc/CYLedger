@@ -30,6 +30,7 @@ import { isFunction } from '@/lib/common.ts';
 import { isProduction } from '@/lib/version.ts';
 import { syncNativeSettings, isNativePersonalMode, syncNativeAppearance } from '@/lib/native.ts';
 import {syncAssetAutomationOnOpen} from '@/lib/asset-tools.ts';
+import {syncInvestmentPlansOnOpen} from '@/lib/investment-mobile.ts';
 import { syncMonetaryIncomeOnOpen } from '@/lib/monetary-income.ts';
 import { getTheme, isEnableSwipeBack, isEnableAnimate } from '@/lib/settings.ts';
 import { initMapProvider } from '@/lib/map/index.ts';
@@ -173,7 +174,7 @@ function onBackdropChanged(element: { push?: boolean, opened?: boolean }): void 
     setThemeColorMeta(environmentsStore.framework7DarkMode);
 }
 
-function resumeMonetaryIncome(): void { syncNativeSettings(); syncNativeAppearance();void syncMonetaryIncomeOnOpen();void syncAssetAutomationOnOpen(settingsStore.appSettings.timeZone).catch(()=>{}); }
+function resumeMonetaryIncome(): void { syncNativeSettings(); syncNativeAppearance();void syncMonetaryIncomeOnOpen();void syncInvestmentPlansOnOpen();void syncAssetAutomationOnOpen(settingsStore.appSettings.timeZone).catch(()=>{}); }
 onUnmounted(() => {
     if (appearanceTimer) clearInterval(appearanceTimer);
     document.removeEventListener('visibilitychange', resumeMonetaryIncome);
@@ -181,14 +182,14 @@ onUnmounted(() => {
 });
 onMounted(() => {
     syncNativeSettings();
-    applyAppearance();appearanceTimer=setInterval(applyAppearance,60000);
+    applyAppearance();appearanceTimer=setInterval(()=>{applyAppearance();void syncInvestmentPlansOnOpen();},60000);
     document.addEventListener('visibilitychange', resumeMonetaryIncome);
     window.addEventListener('online', resumeMonetaryIncome);
     setAppFontSize(settingsStore.appSettings.fontSize);
 
     f7ready((f7) => {
         f7.on('pageAfterIn', resumeMonetaryIncome);
-        void syncMonetaryIncomeOnOpen();
+        void syncMonetaryIncomeOnOpen();void syncInvestmentPlansOnOpen();
         void syncAssetAutomationOnOpen(settingsStore.appSettings.timeZone).catch(()=>{});
         environmentsStore.framework7DarkMode = f7.darkMode;
         setThemeColorMeta(f7.darkMode);

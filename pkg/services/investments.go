@@ -35,6 +35,15 @@ type InvestmentEvent struct {
 	CashAccountID string                `json:"cashAccountId"`
 	BookID        string                `json:"bookId,omitempty"`
 	Conversion    *InvestmentConversion `json:"conversion,omitempty"`
+	Fund          *FundConfirmation     `json:"fund,omitempty"`
+}
+type FundConfirmation struct {
+	TradeDate   string `json:"tradeDate"`
+	ConfirmDate string `json:"confirmDate"`
+	Price       string `json:"price"`
+	PriceDate   string `json:"priceDate"`
+	Source      string `json:"source"`
+	OrderId     string `json:"orderId,omitempty"`
 }
 type InvestmentPreview struct {
 	Event     InvestmentEvent           `json:"event"`
@@ -243,6 +252,19 @@ func (s *InvestmentService) validateEvent(sess *xorm.Session, uid int64, e *Inve
 	if len(e.Note) > 1000 {
 		return investmentError("备注过长")
 	}
+	if e.Fund != nil {
+		f := e.Fund
+		if (e.Type != investments.Buy && e.Type != investments.Sell) || !investmentDate(f.TradeDate) || !investmentDate(f.ConfirmDate) || f.ConfirmDate < f.TradeDate || !investmentDate(f.PriceDate) || len(f.Source) > 128 || len(f.OrderId) > 64 {
+			return investmentError("基金确认信息无效")
+		}
+		price, err := investmentDecimal(f.Price, "确认净值", true)
+		if err != nil {
+			return err
+		}
+		if !price.IsPositive() {
+			return investmentError("确认净值必须大于零")
+		}
+	}
 	if e.OccurredAt <= 0 || e.OccurredAt > time.Now().Unix()+60 {
 		return investmentError("投资发生时间不能在未来")
 	}
@@ -328,10 +350,24 @@ func (s *InvestmentService) validateEvent(sess *xorm.Session, uid int64, e *Inve
 // Mutate atomically validates replay, settles cash, stores facts/audit and invalidates history.
 // SQLite's settings-row write is acquired before reading holdings; unique idempotency protects retries.
 func (s *InvestmentService) Mutate(c core.Context, uid int64, input InvestmentEvent, key, operation string, preview bool) (*InvestmentPreview, error) {
+	defer s.lock(uid)()
+	var response *InvestmentPreview
+	err := s.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
+		var err error
+		response, err = s.mutateInvestmentInSession(c, sess, uid, input, key, operation, preview)
+		return err
+	})
+	if err == errInvestmentPreviewRollback {
+		return response, nil
+	}
+	return response, err
+}
+
+// 与创建持仓、基金确认共用同一个事务，结算和事实不能拆成两次提交。
+func (s *InvestmentService) mutateInvestmentInSession(c core.Context, sess *xorm.Session, uid int64, input InvestmentEvent, key, operation string, preview bool) (*InvestmentPreview, error) {
 	if uid <= 0 {
 		return nil, errs.ErrUserIdInvalid
 	}
-	defer s.lock(uid)()
 	if !preview && operation == "create" && (len(key) < 8 || len(key) > 128) {
 		return nil, investmentError("请求缺少有效的 Idempotency-Key")
 	}
@@ -339,7 +375,7 @@ func (s *InvestmentService) Mutate(c core.Context, uid int64, input InvestmentEv
 	hash := sha256.Sum256(append([]byte(operation+":"), raw...))
 	digest := hex.EncodeToString(hash[:])
 	var response *InvestmentPreview
-	err := s.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
+	err := func() error {
 		settings := &models.InvestmentSettings{}
 		has, err := sess.Where("uid=?", uid).Get(settings)
 		if err != nil {
@@ -407,6 +443,9 @@ func (s *InvestmentService) Mutate(c core.Context, uid int64, input InvestmentEv
 				// A manual correction is not a new automatic market conversion.
 				// The original observation remains in the previous audit revision.
 				input.Conversion = nil
+				if input.Fund != nil {
+					input.Fund.Source = "手动修订"
+				}
 			}
 			if input.Conversion != nil && operation == "create" {
 				quote := input.Conversion
@@ -499,10 +538,7 @@ func (s *InvestmentService) Mutate(c core.Context, uid int64, input InvestmentEv
 			_, err = sess.Insert(&models.InvestmentIdempotency{Id: investmentID(), Uid: uid, RequestKey: key, Digest: digest, Response: string(serialized)})
 		}
 		return err
-	})
-	if err == errInvestmentPreviewRollback {
-		return response, nil
-	}
+	}()
 	return response, err
 }
 

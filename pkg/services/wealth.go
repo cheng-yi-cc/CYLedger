@@ -27,9 +27,11 @@ type InvestmentValuationQuote struct {
 }
 type ValuedPosition struct {
 	investments.Position
-	MarketValue   *string                   `json:"marketValue"`
-	UnrealizedPNL *string                   `json:"unrealizedPnl"`
-	Quote         *InvestmentValuationQuote `json:"quote"`
+	MarketValue   *string                          `json:"marketValue"`
+	UnrealizedPNL *string                          `json:"unrealizedPnl"`
+	Quote         *InvestmentValuationQuote        `json:"quote"`
+	TotalValue    *string                          `json:"totalValue"`
+	Profile       *models.InvestmentHoldingProfile `json:"profile,omitempty"`
 }
 type WealthCashAccount struct {
 	ExcludedFromTotal bool                 `json:"excludedFromTotal"`
@@ -59,9 +61,10 @@ type WealthSummary struct {
 }
 
 type wealthObservation struct {
-	Summary *WealthSummary             `json:"summary"`
-	Quotes  []InvestmentValuationQuote `json:"quotes"`
-	FX      []marketquotes.FXRate      `json:"fx"`
+	Summary  *WealthSummary                    `json:"summary"`
+	Quotes   []InvestmentValuationQuote        `json:"quotes"`
+	FX       []marketquotes.FXRate             `json:"fx"`
+	Profiles []models.InvestmentHoldingProfile `json:"profiles,omitempty"`
 }
 
 func decimalPointer(d decimal.Decimal) *string { v := d.String(); return &v }
@@ -387,6 +390,11 @@ func (s *InvestmentService) Summary(c core.Context, uid int64, save bool) (*Weal
 		}
 		fx := fxs
 		out = buildWealth(result, cash, quotes, fx)
+		profiles := []models.InvestmentHoldingProfile{}
+		if err = sess.Where("uid=?", uid).Find(&profiles); err != nil {
+			return err
+		}
+		applyHoldingProfiles(out, profiles)
 		if !save {
 			return nil
 		}
@@ -395,11 +403,7 @@ func (s *InvestmentService) Summary(c core.Context, uid int64, save bool) (*Weal
 		if err != nil || exists {
 			return err
 		}
-		payload, _ := json.Marshal(struct {
-			Summary *WealthSummary             `json:"summary"`
-			Quotes  []InvestmentValuationQuote `json:"quotes"`
-			FX      []marketquotes.FXRate      `json:"fx"`
-		}{out, quotes, fx})
+		payload, _ := json.Marshal(wealthObservation{Summary: out, Quotes: quotes, FX: fx, Profiles: profiles})
 		_, err = sess.Insert(&models.WealthSnapshot{Id: investmentID(), Uid: uid, RecordedAt: now, NetAssets: out.NetAssets, ValuedAssets: out.ValuedAssets, Complete: out.MissingPrices == 0, Payload: string(payload)})
 		return err
 	})
@@ -497,6 +501,7 @@ func (s *InvestmentService) rebuildHistory(c core.Context, uid int64) error {
 				cash = append(cash, a)
 			}
 			rebuilt := buildWealth(result, cash, observation.Quotes, observation.FX)
+			applyHoldingProfiles(rebuilt, observation.Profiles)
 			observation.Summary = rebuilt
 			payload, _ := json.Marshal(observation)
 			row.NetAssets = rebuilt.NetAssets

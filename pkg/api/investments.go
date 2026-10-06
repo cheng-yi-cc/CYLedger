@@ -170,3 +170,74 @@ func (a *InvestmentsApi) ManualQuote(c *core.WebContext) (any, *errs.Error) {
 func (a *InvestmentsApi) Export(c *core.WebContext) (any, *errs.Error) {
 	return investmentResponse(services.Investments.Export(c, c.GetCurrentUid()))
 }
+
+func (a *InvestmentsApi) HoldingProfiles(c *core.WebContext) (any, *errs.Error) {
+	if c.Request.Method == "GET" {
+		return investmentResponse(services.Investments.HoldingProfiles(c, c.GetCurrentUid()))
+	}
+	var input models.InvestmentHoldingProfile
+	if err := investmentBind(c, &input); err != nil {
+		return nil, err
+	}
+	return investmentResponse(services.Investments.SaveHoldingProfile(c, c.GetCurrentUid(), input))
+}
+func (a *InvestmentsApi) SetupHolding(c *core.WebContext) (any, *errs.Error) {
+	var input services.HoldingSetupInput
+	if err := investmentBind(c, &input); err != nil {
+		return nil, err
+	}
+	return investmentResponse(services.Investments.SetupHolding(c, c.GetCurrentUid(), input, c.GetHeader("Idempotency-Key")))
+}
+func (a *InvestmentsApi) Plans(c *core.WebContext) (any, *errs.Error) {
+	if c.Request.Method == "GET" {
+		return investmentResponse(services.Investments.InvestmentPlans(c, c.GetCurrentUid()))
+	}
+	var input models.InvestmentPlan
+	if err := investmentBind(c, &input); err != nil {
+		return nil, err
+	}
+	return investmentResponse(services.Investments.SaveInvestmentPlan(c, c.GetCurrentUid(), input))
+}
+func (a *InvestmentsApi) Orders(c *core.WebContext) (any, *errs.Error) {
+	if c.Request.Method == "GET" {
+		return investmentResponse(services.Investments.InvestmentOrders(c, c.GetCurrentUid()))
+	}
+	var input models.InvestmentOrder
+	if err := investmentBind(c, &input); err != nil {
+		return nil, err
+	}
+	return investmentResponse(services.Investments.SaveInvestmentOrder(c, c.GetCurrentUid(), input, c.GetHeader("Idempotency-Key")))
+}
+func (a *InvestmentsApi) ConfirmOrder(c *core.WebContext) (any, *errs.Error) {
+	var input services.InvestmentOrderConfirmation
+	if err := investmentBind(c, &input); err != nil {
+		return nil, err
+	}
+	return investmentResponse(services.Investments.ConfirmInvestmentOrder(c, c.GetCurrentUid(), input))
+}
+func (a *InvestmentsApi) CancelOrder(c *core.WebContext) (any, *errs.Error) {
+	var input services.InvestmentOrderConfirmation
+	if err := investmentBind(c, &input); err != nil {
+		return nil, err
+	}
+	return investmentResponse(true, services.Investments.CancelInvestmentOrder(c, c.GetCurrentUid(), input.Id, input.Version))
+}
+func (a *InvestmentsApi) SyncPlans(c *core.WebContext) (any, *errs.Error) {
+	var input struct {
+		Force bool `json:"force"`
+	}
+	if err := investmentBind(c, &input); err != nil {
+		return nil, err
+	}
+	return investmentResponse(services.Investments.SyncInvestmentPlans(c, c.GetCurrentUid(), input.Force))
+}
+func (a *InvestmentsApi) Report(c *core.WebContext) (any, *errs.Error) {
+	return investmentResponse(services.Investments.InvestmentReport(c, c.GetCurrentUid(), c.Query("accountId"), c.Query("instrumentId")))
+}
+func (a *InvestmentsApi) UpdateHolding(c *core.WebContext) (any, *errs.Error) {
+	var input services.HoldingSetupInput
+	if err := investmentBind(c, &input); err != nil {
+		return nil, err
+	}
+	return investmentResponse(services.Investments.UpdateHolding(c, c.GetCurrentUid(), input, c.GetHeader("Idempotency-Key")))
+}

@@ -22,10 +22,10 @@
 import { ref } from 'vue';
 import { investments, investmentError } from '@/lib/investments.ts';
 import type { Instrument } from '@/models/investment.ts';
-const props = defineProps<{ instrumentId?: string }>();
+const props = defineProps<{ instrumentId?: string; initialMarket?:string }>();
 const emit = defineEmits<{ saved: [instrument: Instrument] }>();
 type SearchResult = Awaited<ReturnType<typeof investments.searchInstruments>>[number];
-const query=ref(''),market=ref('CRYPTO'),loading=ref(false),saving=ref(false),searched=ref(false),error=ref('');
+const query=ref(''),market=ref(props.initialMarket||'CRYPTO'),loading=ref(false),saving=ref(false),searched=ref(false),error=ref('');
 const results=ref<SearchResult[]>([]),selected=ref<SearchResult|null>(null);
 let searchVersion=0;
 async function search(): Promise<void> { if (!query.value.trim()) return; const version=++searchVersion; loading.value=true; error.value=''; selected.value=null; searched.value=true; try { const found=await investments.searchInstruments(query.value.trim(),market.value); if(version===searchVersion) results.value=found; } catch(cause) { if(version===searchVersion) {error.value=investmentError(cause);results.value=[];} } finally {if(version===searchVersion)loading.value=false;} }

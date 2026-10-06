@@ -1,48 +1,84 @@
 <template>
-    <f7-page class="cy-main-page cy-mobile-surface" @page:afterin="activate" @page:beforeout="valuationRefresh.stop">
-        <f7-navbar :title="asset?.name || '持仓详情'" back-link="理财" />
-        <main class="cy-page-body cy-position-body">
-            <p v-if="error" class="cy-message" role="alert">{{ error }} <button @click="refresh">重试</button></p>
-            <p v-if="loading" class="cy-empty">正在加载持仓…</p>
-            <template v-else-if="asset">
-                <section class="cy-panel"><p class="cy-muted">{{ asset.symbol }} · {{ account?.name || '投资账户' }} · {{ instrumentMarketLabel(asset) }}</p><p class="cy-muted cy-value-label">当前市值（{{walletCurrency(account)==='USD'?'美元':'人民币'}}）</p><strong class="cy-position-value">{{ currencyMoney(positionValue(position,walletCurrency(account),wealth),walletCurrency(account)) }}</strong><dl class="cy-position-metrics"><div><dt>持有数量</dt><dd>{{ position?.quantity || '0' }}</dd></div><div><dt>剩余成本</dt><dd>{{ position?.costKnown ? ledgerMoney(position.cost) : '未知' }}</dd></div><div><dt>持有收益</dt><dd>{{ ledgerMoney(position?.unrealizedPnl) }}</dd></div><div><dt>已实现收益</dt><dd>{{ ledgerMoney(position?.realizedPnl) }}</dd></div></dl></section>
-                <section class="cy-panel"><div class="cy-section-head"><h2>当前行情</h2><f7-link :href="actionLink('quote')">手动估值</f7-link></div><p class="cy-price"><strong>{{ position?.quote?.price || '—' }}</strong> {{ position?.quote?.currency || asset.currency || (isPresetInstrument(asset) ? 'USD' : 'CNY') }}</p><p>{{ quoteChangeLabel(position?.quote) }} <strong>{{ quoteChange(position?.quote) }}</strong></p><p class="cy-muted">{{ position?.quote ? quoteStatus(position.quote) : '暂未估值' }} · {{ position?.quote?.source || '尚无报价' }}</p><details class="cy-quote-details"><summary>报价来源与时间</summary><p v-if="position?.quote" class="cy-muted">报价时间 {{ date(position.quote.sourceTime) }}<br />收到时间 {{ date(position.quote.receivedAt) }}</p><p v-if="position?.quote && position.quote.currency !== 'CNY'" class="cy-muted">折算汇率 {{ position.quote.fxRate || '未知' }} · {{ position.quote.fxDate || '日期未知' }}<br />{{ position.quote.fxSource || '缺少汇率来源' }} · {{ position.quote.fxState === 'stale' ? '已过期' : position.quote.fxRate ? '最近可用参考汇率' : '不可折算' }}</p><p class="cy-muted">涨跌幅为币价变化，不是个人收益。</p></details></section>
-                <section class="cy-panel"><div class="cy-section-head"><h2>投资流水</h2><span>{{ visibleEvents.length }} 笔</span></div><BookScope /><p v-if="!visibleEvents.length" class="cy-empty">所选账本没有这项资产的流水。</p><article v-for="event in visibleEvents" :key="event.id" class="cy-position-event"><div><strong>{{ event.settlementInstrumentId === asset.id ? "结算 · " : "" }}{{ eventNames[event.type] }} <small v-if="event.voided">已撤销</small></strong><span>{{ eventQuantity(event) }} {{ asset.symbol }}</span></div><p class="cy-muted">{{ date(event.occurredAt) }} · {{ books.allBooks.find(book=>book.id===event.bookId)?.name || '默认账本' }}</p><p v-if="event.fee !== '0'" class="cy-muted">手续费 {{ event.fee }} {{ event.type==='TRANSFER' ? asset.symbol : '结算单位' }}</p><p v-if="event.note">{{ event.note }}</p><f7-link v-if="!event.voided" :href="actionLink('revise',event.id)">查看与修订</f7-link><f7-link v-if="!event.voided" :href="actionLink('void',event.id)">撤销</f7-link></article></section>
-            </template>
-            <p v-else-if="!error" class="cy-empty">找不到这项资产，请返回理财列表。</p>
-        </main>
-        <template #fixed><div class="cy-position-actions"><f7-link :href="actionLink('BUY')">买入</f7-link><f7-link :href="actionLink('SELL')">卖出</f7-link><f7-link :href="actionLink('TRANSFER')">转移</f7-link></div></template>
-    </f7-page>
+ <f7-page class="cy-mobile-surface cy-investment-page" @page:afterin="activate" @page:beforeout="live.stop">
+  <f7-navbar :title="row?.name||'理财详情'" back-link="理财"><f7-nav-right><f7-link aria-label="更多理财操作" @click="showMenu=true"><f7-icon f7="ellipsis" /></f7-link></f7-nav-right></f7-navbar>
+  <main class="inv-body">
+   <p v-if="error" class="cy-message" role="alert">{{ error }} <button @click="refresh">重试</button></p>
+   <p v-if="loading&&!row" class="cy-empty">正在加载…</p>
+   <template v-if="row">
+    <section class="inv-card inv-title">
+     <p class="inv-muted">持有金额（{{ currency==='USD'?'美元':'元' }}）</p><strong>{{ money(positionValue(row.position,currency,wealth)) }}</strong>
+     <dl class="inv-metrics">
+      <div><dt>今日收益（元）</dt><dd :class="profitClass(dayProfit)">{{ money(dayProfit) }}</dd></div>
+      <div><dt>持有收益（元）</dt><dd :class="profitClass(row.position.unrealizedPnl)">{{ money(row.position.unrealizedPnl) }}</dd></div>
+      <div><dt><button class="inv-link" style="padding:0;font-size:inherit" @click="openProfit">累计收益（元）</button></dt><dd :class="profitClass(row.profit)">{{ money(row.profit) }}</dd></div>
+      <div><dt>持仓成本价（元）</dt><dd>{{ decimal(row.position.averageCost) }}</dd></div>
+      <div><dt>持有份额</dt><dd>{{ decimal(row.position.quantity,8) }}</dd></div>
+      <div><dt>{{ row.asset?.type==='FUND'?'基金净值':'最新价' }}{{ row.position.quote?.currency&&row.position.quote.currency!=='CNY'?' · '+row.position.quote.currency:'' }}</dt><dd>{{ decimal(row.position.quote?.price,6) }}</dd></div>
+     </dl>
+     <details class="inv-details" style="margin-top:16px;text-align:left"><summary>{{ row.asset?.symbol }} · {{ quoteStatus(row.position.quote) }} <span :class="profitClass(row.position.quote?.changePercent)">{{ quoteChange(row.position.quote) }}</span></summary><p>{{ row.position.quote?.source || '尚无报价' }} · {{ date(row.position.quote?.sourceTime) }}</p><p v-if="row.position.quote?.currency!=='CNY'">人民币汇率 {{ row.position.quote?.fxRate || '未知' }} · {{ row.position.quote?.fxDate || '日期未知' }}</p><p>今日收益需要前一日的实际估值记录；没有记录时显示“—”。{{ row.profile.profitOffset!=='0'?`累计收益包含盈亏偏差 ${row.profile.profitOffset} 元。`:'' }}</p><p v-if="row.profile.note">{{ row.profile.note }}</p></details>
+    </section>
+    <nav class="inv-trade-buttons"><f7-link :href="actionLink('BUY')"><f7-icon f7="plus_circle" />买入</f7-link><f7-link :href="actionLink('SELL')"><f7-icon f7="minus_circle" />卖出</f7-link></nav>
+    <f7-link v-if="pending.length" class="inv-card inv-list-button" :href="scoped('/investments/plans',{tab:'orders'})"><span>{{ pending.length }} 笔待确认</span><f7-icon f7="chevron_right" /></f7-link>
+    <section class="inv-card">
+      <div class="inv-event-line"><span class="inv-muted">交易记录</span><button class="inv-link" style="padding:0;font-size:12px" @click="showVoided=!showVoided">{{ showVoided?'收起撤销记录':'查看撤销记录' }}</button></div>
+      <p v-if="!visibleEvents.length" class="cy-empty">还没有交易记录</p>
+      <button v-for="event in visibleEvents" :key="event.id" type="button" class="inv-event" style="border-inline:0;border-top:0;background:none;text-align:left" @click="selectedEvent=event">
+        <div class="inv-event-line"><strong>{{ investmentNames[event.type] }}{{ event.voided?' · 已撤销':'' }}{{ event.settlementInstrumentId===instrumentId?' · 结算':'' }}</strong><strong>{{ eventAmount(event) }}</strong></div>
+        <div class="inv-event-line"><small>{{ date(event.occurredAt) }}{{ event.note?' · '+event.note:'' }}</small><small style="text-align:right">{{ cashName(event) }}</small></div>
+      </button>
+    </section>
+   </template>
+   <p v-else-if="!loading&&!error" class="cy-empty">找不到这项理财，请返回列表</p>
+  </main>
+  <f7-sheet class="inv-sheet cy-mobile-surface cy-investment-page" v-model:opened="showMenu" swipe-to-close backdrop>
+    <f7-link class="inv-list-button" :href="scoped('/investments/statistics')" sheet-close>收益统计<f7-icon f7="chart_bar" /></f7-link>
+    <button class="inv-list-button" @click="exportRows">流水导出<f7-icon f7="square_arrow_up" /></button>
+    <f7-link v-if="row?.asset?.type==='FUND'" class="inv-list-button" :href="scoped('/investments/plans')" sheet-close>理财定投<f7-icon f7="repeat" /></f7-link>
+    <f7-link class="inv-list-button" :href="editLink" sheet-close>编辑理财<f7-icon f7="pencil" /></f7-link>
+    <f7-link class="inv-list-button" :href="actionLink('quote')" sheet-close>更新参考价格<f7-icon f7="arrow_clockwise" /></f7-link>
+    <f7-link class="inv-list-button" :href="actionLink('TRANSFER')" sheet-close>账户间转移<f7-icon f7="arrow_right_arrow_left" /></f7-link>
+    <button class="inv-list-button" @click="toggleHidden">{{ row?.profile.hidden?'恢复显示':'隐藏理财' }}<f7-icon f7="eye_slash" /></button>
+    <f7-link class="inv-list-button" href="/investments/manage" sheet-close>账户管理与删除<f7-icon f7="gear" /></f7-link>
+  </f7-sheet>
+  <f7-sheet class="inv-sheet cy-mobile-surface cy-investment-page" :opened="!!selectedEvent" @sheet:closed="selectedEvent=undefined" swipe-to-close backdrop>
+    <template v-if="selectedEvent"><h2>{{ investmentNames[selectedEvent.type] }}</h2><p class="inv-caption">{{ date(selectedEvent.occurredAt) }}</p><div class="inv-row"><span>份额</span><strong style="margin-left:auto">{{ selectedEvent.quantity }}</strong></div><div class="inv-row"><span>手续费</span><span style="margin-left:auto">{{ selectedEvent.fee }}</span></div><p v-if="selectedEvent.note" class="inv-caption">{{ selectedEvent.note }}</p><p v-if="selectedEvent.fund" class="inv-caption">申请 {{ selectedEvent.fund.tradeDate }} · 确认 {{ selectedEvent.fund.confirmDate }}<br />净值 {{ selectedEvent.fund.price }} · {{ selectedEvent.fund.source }}</p><f7-link v-if="!selectedEvent.voided" class="inv-list-button" :href="actionLink('revise',selectedEvent.id)" sheet-close>编辑记录<f7-icon f7="pencil" /></f7-link><f7-link v-if="!selectedEvent.voided" class="inv-list-button" :href="actionLink('void',selectedEvent.id)" sheet-close>撤销记录<f7-icon f7="trash" /></f7-link></template>
+  </f7-sheet>
+  <f7-sheet class="inv-sheet cy-mobile-surface cy-investment-page" v-model:opened="showProfit" swipe-to-close backdrop><h2>调整累计收益</h2><label class="inv-row"><span>累计收益（元）</span><input v-model="profitInput" inputmode="decimal" aria-label="累计收益" /></label><p class="inv-caption">差额保存为盈亏偏差，不改变账户余额和持仓。</p><button class="inv-save" :disabled="busy" @click="saveProfit">保存</button></f7-sheet>
+ </f7-page>
 </template>
 <script setup lang="ts">
-import { computed, ref, onUnmounted } from 'vue';
-import { walletCurrency, positionValue, currencyMoney } from '@/lib/wallet-entry.ts';
-import type { WealthSummary } from '@/models/investment.ts';
+import {downloadLedgerFile} from '@/lib/ledger-export.ts';
+import {computed,onUnmounted,ref} from 'vue';
+import type {Router} from 'framework7/types';
 import moment from 'moment-timezone';
-import type { Router } from 'framework7/types';
-import { isCryptoAccount } from '@/lib/crypto-platforms.ts';
-import { investments, investmentError } from '@/lib/investments.ts';
-import { createValuationRefresh } from '@/lib/valuation-refresh.ts';
-import { LedgerDecimal, ledgerMoney } from '@/lib/ledger-display.ts';
-import { instrumentMarketLabel, isPresetInstrument, quoteChange, quoteChangeLabel, quoteStatus } from '@/lib/investment-display.ts';
-import { useBooksStore } from '@/stores/books.ts';
-import BookScope from '@/components/mobile/BookScope.vue';
-import type { Instrument, InvestmentAccount, InvestmentPosition, InvestmentEvent } from '@/models/investment.ts';
-const props=defineProps<{f7route:Router.Route}>();
-const books=useBooksStore(),loading=ref(false),error=ref(''),zone=ref('Asia/Shanghai');
-const wealth=ref<WealthSummary>();
-const asset=ref<Instrument>(),account=ref<InvestmentAccount>(),position=ref<InvestmentPosition>(),events=ref<InvestmentEvent[]>([]);
-const valuationRefresh=createValuationRefresh(summary=>{wealth.value=summary;position.value=summary.positions.find(item=>item.instrumentId===props.f7route.query['instrumentId']&&item.accountId===props.f7route.query['accountId']);});
-function activate():void{void refresh();valuationRefresh.start();}
-onUnmounted(valuationRefresh.stop);
-const eventNames={OPENING:'录入已有持仓',BUY:'买入',SELL:'卖出',TRANSFER:'账户间转移',INCOME:'收入',EXPENSE:'支出'};
-const visibleEvents=computed(()=>events.value.filter(item=>!books.selectedBookIds.length || books.selectedBookIds.includes(item.bookId || '')).sort((a,b)=>b.occurredAt-a.occurredAt));
-function eventQuantity(event:InvestmentEvent):string { if(event.wallet){const quantity=event.instrumentId===asset.value?.id?event.quantity:event.additionalMovements?.find(m=>m.instrumentId===asset.value?.id)?.quantity||'0';return `${event.type==='EXPENSE'?'-':'+'}${quantity}`;} if(event.settlementInstrumentId!==asset.value?.id)return event.quantity; const amount=new LedgerDecimal(event.amount); return (event.type==='BUY'?amount.plus(event.fee).negated():amount.minus(event.fee)).toString(); }
-function date(value:number):string{return value?moment.unix(value).tz(zone.value).format('YYYY-MM-DD HH:mm'):'时间未知';}
-function actionLink(action:string,eventId=''):string{if(eventId&&events.value.find(e=>e.id===eventId)?.wallet)return '/crypto/entry?'+new URLSearchParams({eventId,action}).toString();if(isCryptoAccount(account.value?.kind)&&asset.value?.type==='CRYPTO'&&['BUY','SELL','TRANSFER'].includes(action))return '/crypto/convert?'+new URLSearchParams({mode:({BUY:'cash',SELL:'redeem',TRANSFER:'transfer'} as Record<string,string>)[action]!,accountId:props.f7route.query['accountId']||'',instrumentId:props.f7route.query['instrumentId']||''}).toString();return '/investments/record?'+new URLSearchParams({action,accountId:props.f7route.query['accountId']||'',instrumentId:props.f7route.query['instrumentId']||'',eventId}).toString();}
-async function refresh():Promise<void>{if(loading.value)return;loading.value=true;error.value='';try{const [summary,instruments,accounts,allEvents,settings]=await Promise.all([investments.summary(),investments.instruments(),investments.accounts(),investments.events(),investments.settings(),books.loadBooks()]);wealth.value=summary;const id=props.f7route.query['instrumentId'],accountId=props.f7route.query['accountId'];asset.value=instruments.find(item=>item.id===id);account.value=accounts.find(item=>item.id===accountId);position.value=summary.positions.find(item=>item.instrumentId===id&&item.accountId===accountId);events.value=allEvents.filter(item=>(item.instrumentId===id&&(item.accountId===accountId||item.toAccountId===accountId))||(item.settlementInstrumentId===id&&item.settlementAccountId===accountId)||(item.accountId===accountId&&item.additionalMovements?.some(m=>m.instrumentId===id)));zone.value=settings.timeZone||zone.value;}catch(cause){error.value=investmentError(cause);}finally{loading.value=false;}}
+import {useInvestmentData,investmentNames,investmentSum,profitClass,validInvestmentNumber} from '@/lib/investment-mobile.ts';
+import {investments,investmentError} from '@/lib/investments.ts';
+import {quoteChange,quoteStatus} from '@/lib/investment-display.ts';
+import {LedgerDecimal,ledgerMoney} from '@/lib/ledger-display.ts';
+import {createValuationRefresh} from '@/lib/valuation-refresh.ts';
+import {walletCurrency,positionValue} from '@/lib/wallet-entry.ts';
+import {isCryptoAccount} from '@/lib/crypto-platforms.ts';
+import type {InvestmentEvent,InvestmentReport} from '@/models/investment.ts';
+const props=defineProps<{f7route:Router.Route;f7router:Router.Router}>(),accountId=props.f7route.query['accountId']||'',instrumentId=props.f7route.query['instrumentId']||'';
+const {wealth,rows,events,orders,loading,error,zone,load}=useInvestmentData();
+const row=computed(()=>rows.value.find(r=>r.position.accountId===accountId&&r.position.instrumentId===instrumentId)),currency=computed(()=>walletCurrency(row.value?.account));
+const showMenu=ref(false),showVoided=ref(false),selectedEvent=ref<InvestmentEvent>(),showProfit=ref(false),profitInput=ref(''),busy=ref(false),report=ref<InvestmentReport>();
+const scopedEvents=computed(()=>events.value.filter(e=>(e.instrumentId===instrumentId&&(e.accountId===accountId||e.toAccountId===accountId))||(e.settlementInstrumentId===instrumentId&&(e.settlementAccountId||e.accountId)===accountId)||(e.accountId===accountId&&e.additionalMovements?.some(m=>m.instrumentId===instrumentId))));
+const visibleEvents=computed(()=>scopedEvents.value.filter(e=>showVoided.value||!e.voided).sort((a,b)=>b.occurredAt-a.occurredAt));
+const pending=computed(()=>orders.value.filter(o=>o.status==='pending'&&o.accountId===accountId&&o.instrumentId===instrumentId));
+const dayProfit=computed(()=>{const yesterday=moment().tz(zone.value).subtract(1,'day').format('YYYY-MM-DD'),previous=report.value?.history.filter(p=>moment.unix(p.at).tz(zone.value).format('YYYY-MM-DD')===yesterday).at(-1),now=investmentSum([row.value?.position.unrealizedPnl,row.value?.position.realizedPnl]);return previous?.profit!=null&&now!=null?new LedgerDecimal(now).minus(previous.profit).toString():null;});
+function scoped(path:string,extra:Record<string,string>={}):string{return path+'?'+new URLSearchParams({accountId,instrumentId,...extra});}
+const editLink=computed(()=>isCryptoAccount(row.value?.account?.kind)?'/crypto/add?'+new URLSearchParams({id:accountId,kind:row.value!.account!.kind}):scoped('/investments/add'));
+function actionLink(action:string,eventId=''):string{const event=events.value.find(e=>e.id===eventId);if(event?.wallet)return '/crypto/entry?'+new URLSearchParams({eventId,action});if(isCryptoAccount(row.value?.account?.kind)&&['BUY','SELL','TRANSFER'].includes(action))return scoped('/crypto/convert',{mode:({BUY:'cash',SELL:'redeem',TRANSFER:'transfer'} as Record<string,string>)[action]!});return scoped('/investments/record',{action,eventId});}
+function money(v:string|null|undefined):string{return ledgerMoney(v,false);}
+function decimal(v:string|null|undefined,places=4):string{return v==null?'—':new LedgerDecimal(v).toDecimalPlaces(places).toString();}
+function date(at?:number):string{return at?moment.unix(at).tz(zone.value).format('YYYY-MM-DD HH:mm'):'时间未知';}
+function cashName(e:InvestmentEvent):string{const cash=wealth.value?.cashAccounts.find(a=>a.id===e.cashAccountId);return cash?`${e.type==='SELL'?'收款':'付款'}：${cash.name}`:'';}
+function eventAmount(e:InvestmentEvent):string{if(!['BUY','SELL'].includes(e.type))return e.quantity+' 份';const d=new LedgerDecimal(e.amount);return ledgerMoney((e.type==='BUY'?d.plus(e.fee):d.minus(e.fee)).toString(),false)+' '+(wealth.value?.cashAccounts.find(a=>a.id===e.cashAccountId)?.currency||'结算单位');}
+async function refresh():Promise<void>{await load();try{report.value=await investments.report(accountId,instrumentId);}catch{/* 详情仍可使用已取得的持仓；缺少历史收益保持未知。 */}}
+const live=createValuationRefresh(summary=>{wealth.value=summary;});function activate():void{void refresh();live.start();}onUnmounted(live.stop);
+async function toggleHidden():Promise<void>{if(!row.value)return;try{await investments.saveProfile({...row.value.profile,hidden:!row.value.profile.hidden});showMenu.value=false;await load();}catch(e){error.value=investmentError(e);}}
+function openProfit():void{profitInput.value=row.value?.profit||'';showProfit.value=true;}
+async function saveProfit():Promise<void>{if(!row.value||busy.value)return;busy.value=true;try{validInvestmentNumber(profitInput.value,'累计收益',false,true);const base=investmentSum([row.value.position.realizedPnl,row.value.position.unrealizedPnl]);if(base===null)throw Error('成本或报价未知，请先补齐，再调整累计收益');await investments.saveProfile({...row.value.profile,profitOffset:new LedgerDecimal(profitInput.value).minus(base).toString()});showProfit.value=false;await load();}catch(e){error.value=investmentError(e);showProfit.value=false;}finally{busy.value=false;}}
+function exportRows():void{const esc=(s:unknown)=>'"'+String(s??'').replace(/"/g,'""')+'"';const data=[['日期','类型','数量','金额','手续费','历史汇率','备注','状态'],...scopedEvents.value.map(e=>[date(e.occurredAt),investmentNames[e.type],e.quantity,e.amount,e.fee,e.exchangeRate,e.note,e.voided?'已撤销':'有效'])].map(r=>r.map(esc).join(',')).join('\r\n');downloadLedgerFile('\uFEFF'+data,'理财流水.csv','text/csv;charset=utf-8');showMenu.value=false;}
 </script>
-<style scoped>
-.cy-position-body{padding-bottom:90px!important}.cy-value-label{margin-top:22px!important}.cy-position-value{display:block;font-size:34px;margin:7px 0 22px;overflow-wrap:anywhere}.cy-position-metrics{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:0 0 22px}.cy-position-metrics dt{color:var(--cy-muted);font-size:12px}.cy-position-metrics dd{font-size:19px;margin:7px 0 0;overflow-wrap:anywhere}.cy-price{margin:12px 0!important}.cy-price strong{font-size:25px}.cy-panel>p{margin-top:10px}.cy-position-event{padding:18px 0;border-bottom:1px solid var(--cy-line)}.cy-position-event:last-child{border:0}.cy-position-event>div{display:flex;justify-content:space-between;gap:8px}.cy-position-event p{font-size:12px;margin-top:7px}.cy-position-event a{font-size:12px;margin:12px 20px 0 0}.cy-position-actions{position:absolute;bottom:0;left:0;right:0;display:flex;padding:12px 16px calc(12px + env(safe-area-inset-bottom));gap:12px;background:var(--cy-card);border-top:1px solid var(--cy-line);z-index:100}.cy-position-actions a{flex:1;text-align:center;padding:13px 0;border-radius:10px;background:var(--cy-soft);color:var(--cy-accent)}.cy-position-actions a:first-child{background:var(--cy-accent);color:#fff}
-.cy-quote-details{font-size:12px;color:var(--cy-muted);margin-top:12px}.cy-quote-details summary{cursor:pointer;padding:8px 0}
-</style>

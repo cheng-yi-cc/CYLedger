@@ -19,6 +19,7 @@ const (
 	Transfer = "TRANSFER"
 	Income   = "INCOME"
 	Expense  = "EXPENSE"
+	Adjust   = "ADJUST"
 
 	// CalculationPrecision applies explicitly to every division. Input facts
 	// accept 18 decimal places; derived costs retain 36 decimal places.
@@ -273,6 +274,9 @@ func Replay(events []Event) (*Result, error) {
 }
 
 func (r *replay) apply(e Event) error {
+	if e.Type == Adjust {
+		return r.applyAdjustment(e)
+	}
 	if e.Type == Income || e.Type == Expense {
 		return r.applyWallet(e)
 	}

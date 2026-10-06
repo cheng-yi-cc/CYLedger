@@ -34,7 +34,7 @@ const rows=computed(()=>coins.value.filter(c=>(account.value?.instruments||[]).i
 const currency=computed(()=>walletCurrency(account.value));
 const total=computed(()=>summary.value?walletValue(summary.value.positions.filter(p=>p.accountId===id.value),currency.value,summary.value):null);
 const transactions=computed(()=>events.value.filter(e=>[e.accountId,e.toAccountId,e.settlementAccountId].includes(id.value)).sort((a,b)=>b.occurredAt-a.occurredAt||b.id.localeCompare(a.id)));
-const eventNames={OPENING:'已有持仓',BUY:'兑换买入',SELL:'卖币到账',TRANSFER:'账户间转移',INCOME:'收入',EXPENSE:'支出'};
+const eventNames={OPENING:'已有持仓',BUY:'兑换买入',SELL:'卖币到账',TRANSFER:'账户间转移',INCOME:'收入',EXPENSE:'支出',ADJUST:'持仓校准'};
 function displayQuantity(value:string):string{const original=new LedgerDecimal(value),rounded=original.toSignificantDigits(10);return `${rounded.eq(original)?'':'≈ '}${rounded.toFixed()}`;}
 function symbol(id:string):string{return coins.value.find(c=>c.id===id)?.symbol||id;}
 function eventDescription(e:InvestmentEvent):string{if(e.wallet)return `${e.amount} ${e.wallet.currency} · ${[{instrumentId:e.instrumentId,quantity:e.quantity},...(e.additionalMovements||[])].map(m=>`${m.quantity} ${symbol(m.instrumentId)}`).join(' + ')}`;if(e.type==='OPENING')return `${e.quantity} ${symbol(e.instrumentId)}`;if(e.type==='TRANSFER')return `${e.quantity} ${symbol(e.instrumentId)} · ${e.accountId===id.value?'转出':'转入'}`;const payment=`${e.amount} ${e.settlementInstrumentId?symbol(e.settlementInstrumentId):'CNY'}`;const acquired=`${e.quantity} ${symbol(e.instrumentId)}`;return e.type==='BUY'?`${payment} → ${acquired}`:`${acquired} → ${payment}`;}

@@ -6,7 +6,7 @@ import { isUserLogined, isUserUnlocked } from '@/lib/userstate.ts';
 
 export interface MonetaryBinding {
     id: string; accountId: string; code: string; name: string; startDate: string; nextDate: string;
-    bookId: string; categoryId: string; timeZone: string; enabled: boolean; status: string; lastAttempt: number;
+    bookId: string; categoryId: string; timeZone: string; enabled: boolean; status: string; lastAttempt: number; totalIncome?:string; lastPerTenThousand?:string;
 }
 export interface MonetaryFund { name: string; symbol: string; providerId: string }
 export type MonetaryInput = Pick<MonetaryBinding, 'accountId' | 'code' | 'startDate' | 'bookId' | 'categoryId' | 'timeZone' | 'enabled'>;

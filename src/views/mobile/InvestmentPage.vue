@@ -45,6 +45,7 @@
 <script setup lang="ts">
 import { computed, ref, onUnmounted } from 'vue';
 import { walletCurrency, walletValue } from '@/lib/wallet-entry.ts';
+import {monetaryIncome,type MonetaryBinding} from '@/lib/monetary-income.ts';
 import { investments, investmentError } from '@/lib/investments.ts';
 import { LedgerDecimal, ledgerMoney, keepUpToDate } from '@/lib/mobile-ledger.ts';
 import { isCryptoAccount, platformIcon } from '@/lib/crypto-platforms.ts';
@@ -61,7 +62,7 @@ import {useBooksStore} from '@/stores/books.ts';
 const accounts = useAccountsStore();
 const preferences=useAssetToolsStore(),books=useBooksStore();
 const assetMenu=[{tool:'search',name:'搜索账户',icon:'search'},{tool:'reminders',name:'还款提醒',icon:'calendar_badge_plus'},{tool:'books',name:'生效账本',icon:'book'},{tool:'deposits',name:'定期存款',icon:'lock'},{tool:'hidden',name:'资产隐藏',icon:'eye_slash'},{tool:'distribution',name:'资产分布',icon:'chart_pie'},{tool:'more',name:'更多数据',icon:'ellipsis'}];
-const presentedItems=computed(()=>assetItems(summary.value,investmentAccounts.value,accounts.allAccountsMap,preferences.preferences).filter(a=>!a.hidden&&(!books.selectedBookIds.length||books.selectedBookIds.some(id=>preferences.available(a.portfolio?'portfolio':'cash',a.id,id)))));
+const presentedItems=computed(()=>assetItems(summary.value,investmentAccounts.value,accounts.allAccountsMap,preferences.preferences,books.selectedBookIds).filter(a=>!a.hidden&&(!books.selectedBookIds.length||books.selectedBookIds.some(id=>preferences.available(a.portfolio?'portfolio':'cash',a.id,id)))));
 const shownKeys=computed(()=>new Set(presentedItems.value.map(a=>a.key)));
 const presentationTotals=computed(()=>assetTotals(presentedItems.value));
 const presentedValuedAssets=computed(()=>sum(presentedItems.value.filter(a=>a.value!=null&&!a.excluded).map(a=>a.value)));
@@ -69,7 +70,7 @@ const visibleInvestmentPnl=computed(()=>sum(presentedItems.value.filter(a=>a.por
 
 const accountKinds: Record<string,string> = { EXCHANGE: '加密货币交易所', WALLET: '加密钱包', BROKER: '证券账户', OTHER: '其他' };
 const summary = ref<WealthSummary>();
-const claims=ref<ReimbursementClaim[]>([]);
+const claims=ref<ReimbursementClaim[]>([]),monetary=ref<MonetaryBinding[]>([]);
 const investmentAccounts = ref<InvestmentAccount[]>([]);
 
 
@@ -115,7 +116,7 @@ function reimbursementValue(claim:ReimbursementClaim,value:string):string|null {
 const reimbursementPending=computed(()=>sum(visibleClaims.value.filter(c=>!c.closed).map(c=>reimbursementValue(c,c.pending))));
 const reimbursementPaid=computed(()=>sum(visibleClaims.value.map(c=>reimbursementValue(c,c.paid))));
 const payable = computed(() => debtTotal([5], true)), receivable = computed(() => debtTotal([6], false));
-const investmentTotal = computed(() => summary.value ? sum(presentedItems.value.filter(a=>a.portfolio||[7,9].includes(a.category)&&a.kind!=='secondhand').map(a=>a.value)) : null);
+const investmentTotal = computed(() => summary.value ? sum(presentedItems.value.filter(a=>a.portfolio||monetary.value.some(b=>b.accountId===a.id)||[7,9].includes(a.category)&&a.kind!=='secondhand').map(a=>a.value)) : null);
 interface AccountRow {
     id: string; name: string; currency: string; balance: string | null; value: string | null; icon: string; customIcon: boolean; color: string; category: number; href: string;
     platformIcon?: string; portfolio?: boolean; subtitle?: string; group?:string; excluded?:boolean; credit?: { available: string; limit: string; percent: number };
@@ -134,8 +135,8 @@ function cashRow(item: WealthCashAccount): AccountRow {
     return row;
 }
 const portfolios = computed<AccountRow[]>(() => investmentAccounts.value.map(account => {
-    const positions = summary.value?.positions.filter(position => position.accountId === account.id && new LedgerDecimal(position.quantity).gt(0)) || [];
-    const value = sum(positions.map(position => position.marketValue));
+    const positions = summary.value?.positions.filter(position => position.accountId === account.id && new LedgerDecimal(position.quantity).gt(0) && (!position.profile?.bookIds.length||!books.selectedBookIds.length||position.profile.bookIds.some(id=>books.selectedBookIds.includes(id)))) || [];
+    const value = sum(positions.map(position => position.totalValue===undefined?position.marketValue:position.totalValue));
     return { id: account.id, name: account.name, balance: walletValue(positions,walletCurrency(account),summary.value), value, currency: walletCurrency(account), category: 7, icon: account.kind === 'EXCHANGE' ? '1500' : account.kind === 'WALLET' ? '1' : '801', customIcon: false, color: account.kind === 'EXCHANGE' ? '#bf82ca' : '', portfolio: true, platformIcon: platformIcon(account.platform, account.kind), subtitle: `${accountKinds[account.kind] || '其他'} · ${positions.length} 项持仓`, href: isCryptoAccount(account.kind) ? `/crypto/account?id=${encodeURIComponent(account.id)}` : `/investments/ledger?accountId=${encodeURIComponent(account.id)}` };
 }));
 const groups = computed(() => {
@@ -148,7 +149,7 @@ function currencyMoney(value: string | null, currency: string): string { return 
 function amountClass(value: string | null | undefined): string { return value != null && new LedgerDecimal(value).lt(0) ? 'cy-expense' : 'cy-income'; }
 async function refresh(done?: () => void): Promise<void> {
     const version = ++requestNumber; loading.value = true; error.value = '';
-    try { const [wealth, portfolios, reimbursementRows] = await Promise.all([investments.summary(), investments.accounts(), reimbursements.list(), accounts.loadAllAccounts({ force: true }).catch(keepUpToDate), preferences.load(true), books.loadBooks()]); if (version === requestNumber) { summary.value = wealth; investmentAccounts.value = portfolios;claims.value=reimbursementRows; } }
+    try { const [wealth, portfolios, reimbursementRows, monetaryRows] = await Promise.all([investments.summary(), investments.accounts(), reimbursements.list(), monetaryIncome.list(), accounts.loadAllAccounts({ force: true }).catch(keepUpToDate), preferences.load(true), books.loadBooks()]); if (version === requestNumber) { summary.value = wealth; investmentAccounts.value = portfolios;claims.value=reimbursementRows;monetary.value=monetaryRows; } }
     catch (cause) { if (version === requestNumber) error.value = investmentError(cause); }
     finally { if (version === requestNumber) loading.value = false; if (typeof done === 'function') done(); }
 }
