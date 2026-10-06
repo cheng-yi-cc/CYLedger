@@ -1,6 +1,6 @@
 # CYLedger 验收与交接
 
-状态日期：2026-10-05。本次交付为首页、搜索、手动记账及“我的”本地功能改造，以手机现装一木 6.6.6 的布局和交互为参照；默认使用干净浅色主题。账务与破坏性操作只在独立 QA 应用的虚构数据上验证。
+状态日期：2026-10-06；手机功能验收日期为 2026-10-05。本次交付为首页、搜索、手动记账及“我的”本地功能改造，以手机现装一木 6.6.6 的布局和交互为参照；默认使用干净浅色主题。账务与破坏性操作只在独立 QA 应用的虚构数据上验证。
 
 ## 当前交付
 
@@ -13,7 +13,7 @@
 - 正式 APK：`dist/android/CYLedger-Android-arm64.apk`，67,356,248 字节，`0.2.0` / `versionCode=3`。
 - SHA-256：`1ae670c17343ac558ddd867be323f79e37fc3f2fa81e8f2267474eb1612d38f8`。
 - 已对 `com.cyledger.android` 执行原签名 `adb install --no-incremental -r`，升级前后首页可见金额一致，未卸载或清除正式数据，未写入测试账单。正式包未启用调试。
-- 修改保留在工作区分支 `codex/home-entry-profile-parity`。本轮未执行合并主分支、推送或清理；过程证据、QA 包及签名材料保留。
+- 代码与文档已合并到 `main`；开发工作树已从 Git 注销，临时分支已删除。正式 APK 和前端构建位于主仓库 `dist/`，Windows 后端为 `.runtime/cyledger.exe`；原签名材料继续保存在 `.runtime/android-signing/`。
 
 ## 本次验证
 
@@ -27,6 +27,7 @@
 | 导出 | 系统保存窗口导出 Excel 与图片 ZIP；9 笔、19 列，账单 ID 和小数保持文本精度，优惠与手续费正确；Excel 经应用自身解析器重新读取，ZIP 内 CSV 与 Excel 一致，附件 SHA-256 与输入图片一致 |
 | 完整恢复 | 手机创建和导出备份；删除带图测试账单并重置偏好后恢复，9 笔账单与所有账户响应逐项一致，界面偏好原样恢复，0.31 优惠、附件数量和 59,326 字节图片可读性一致 |
 | 系统与正式升级 | Android 验证窗口可唤起并取消；正式原签名覆盖安装为 0.2.0，首页可见金额与升级前一致，首页和“我的”入口可用 |
+| 主仓库交接 | 正式 APK 与 123 个前端/安装文件逐项校验一致；Windows 后端重新构建，在独立空账本启动后健康接口与手机页面均返回 HTTP 200 |
 
 测试命令包括：
 
@@ -73,16 +74,21 @@ python scripts/build_android.py --skip-frontend
 - CSV/Excel 用于查看与交换账单，不承诺完整还原费用关联、附件或所有扩展字段；完整恢复使用数据备份。手机 ZIP 备份未加密，与电脑备份格式不同。
 - 本轮未执行 Docker、公网 HTTPS 或真实一木账本文件的完整迁移。
 
+## 收尾状态
+
+- 工作树内的源文件、构建缓存和验收过程文件已移除；Git 只登记主仓库。原路径仍残留被 Windows 占用的空目录，未强制终止 Codex 解除占用。
+- 主仓库正式账本、附件、历史备份、配置与签名材料保留。历史测试目录、日志、预览图片及旧构建残留的清理被执行环境自动审批拒绝，因此这部分仍在磁盘上；正式构建已逐文件覆盖并校验。
+- 收尾时手机未连接，手机内独立 QA 应用和测试导出文件未清理；此前安装的正式 0.2.0 不受影响。
 ## 预览与后续维护
 
 手机打开 **CYLedger → 首页 / 添加一条新记账 / 我的**。首页右上角“⋮”进入小卡片、模板、预算与截图导入；搜索在放大镜入口；备份及导入导出在“我的”。
 
-电脑在本工作区 `C:\Users\45057\.codex\worktrees\ab3d\CY Finance Manager` 运行：
+电脑在主仓库 `D:\My Project\CY Finance Manager` 运行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Start-CYLedger.ps1 -Build -DirectNpm -Port 18080
+powershell -ExecutionPolicy Bypass -File .\scripts\Start-CYLedger.ps1 -Port 18080
 ```
 
-打开 [手机布局](http://localhost:18080/mobile)。本机 8080 曾被其他应用占用，使用 18080；本命令使用工作区的独立电脑账本，首次登录和创建用户见 [运维说明](CYLEDGER_OPERATIONS.md)。Android 原生锁屏、文件管理和完整备份须在手机内预览。
+打开 [手机布局](http://localhost:18080/mobile)。本机 8080 曾被其他应用占用，使用 18080；本命令使用主仓库原有的电脑账本，不与手机同步。需要从源码重建时添加 `-Build -DirectNpm`；首次登录和创建用户见 [运维说明](CYLEDGER_OPERATIONS.md)。Android 原生锁屏、文件管理和完整备份须在手机内预览。
 
 账务边界与数据结构见 [架构](CYLEDGER_ARCHITECTURE.md)，接口见 [API 指南](CYLEDGER_API.md)，手机构建与签名见 [Android](../android/README.md)。
