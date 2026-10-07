@@ -20,6 +20,10 @@
 - QA 与正式包中的 142 项前端文件、原生库及其他共享资源内容一致；ZIP 容器时间戳不作为内容差异。正式包未开启调试，签名和 16 KB 对齐检查通过。
 - 最终源码与产物统一在主目录 `D:\My Project\CY Finance Manager`；正式网页和 APK 位于 `dist/`，Windows 服务为 `.runtime/cyledger.exe`。运行账本、配置、历史备份和 `.runtime/android-signing/` 为持久材料，不属于过程文件。
 
+## 收尾状态
+
+源码已合并并推送至 `main`，主目录的 145 项正式网页、APK 与电脑程序已逐文件核对摘要。QA 应用与本轮 ADB 调试转发已移除。`80a4` 工作树仍是当前聊天的受保护主工作目录，归档被应用拒绝；该工作树、对应分支、其中的过程文件及主目录旧构建资源尚未清理。正式账本、历史备份和签名材料保留。
+
 ## 本轮已验证
 
 | 层次 | 已通过内容 |
@@ -46,14 +50,14 @@
 
 手机：**CYLedger → 首页 → 任意账单** 查看新版详情；**资产 → 理财 → 比特币** 查看合计并展开账户。
 
-电脑在主目录启动，打开 [本地手机布局预览](http://localhost:8080/mobile)。电脑与手机账本独立：
+电脑在主目录启动，打开 [本地手机布局预览](http://localhost:18083/mobile)。电脑与手机账本独立：
 
 ```powershell
 cd "D:\My Project\CY Finance Manager"
-powershell -ExecutionPolicy Bypass -File .\scripts\Start-CYLedger.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\Start-CYLedger.ps1 -Port 18083
 ```
 
-从源码重新编译加 `-Build -DirectNpm`。首次创建电脑账户见 [运维说明](CYLEDGER_OPERATIONS.md)。本轮临时 18083 预览在收尾时停止。
+从源码重新编译加 `-Build -DirectNpm`。首次创建电脑账户见 [运维说明](CYLEDGER_OPERATIONS.md)。本轮临时预览已停止，主目录服务尚未启动；8080 被本机其他应用占用，因此上述命令使用 18083。
 
 接口见 [API 指南](CYLEDGER_API.md)，数据模型与历史快照规则见 [架构](CYLEDGER_ARCHITECTURE.md)，Android 构建与签名见 [Android 说明](../android/README.md)。
 
