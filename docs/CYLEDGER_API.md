@@ -84,7 +84,7 @@
 
 以下接口只处理当前用户的 `EXCHANGE` 账户，不访问交易所私有 API，不生成普通生活收支。
 
-- `GET /investments/dca` 返回 `{plans,days,alerts,created}`。`days` 包含最多 100 条待处理和 100 条最近完成/跳过安排；`alerts` 按账户和支付币种合并未来三天需求，金额及数量均为十进制字符串。
+- `GET /investments/dca` 返回 `{plans,days,alerts,created}`。`days` 包含最多 100 条待处理，及按计划时间倒序取出的 100 条已完成/跳过安排；`alerts` 按账户和支付币种合并未来三天需求，金额及数量均为十进制字符串。
 - `POST /investments/dca/save` 接收 `{id,revision,requestKey,accountId,instrumentId,paymentInstrumentId,amount,dailyTime,startDate,timeZone,bookId}`。新建 `id=""`，`requestKey` 长度 8–64、重试保持相同内容；更新须携带最新整数 `revision`。数量大于零、最多 18 位小数，时间 `HH:mm`，日期 `YYYY-MM-DD`，时区为有效 IANA 名称。每个用户最多 100 条计划。
 - `POST /investments/dca/enabled` 接收 `{id,revision,enabled}`。暂停停止待处理安排；恢复跳过暂停期间，从未来一次计划时间继续，已处理日期不重建。
 - `POST /investments/dca/sync` 接收 `{force:false}`，返回更新后的状态与本次新增笔数 `created`。同用户同步互斥；每次最多准备每计划 100 天、处理 30 条，联网总预算 20 秒。自动重试间隔至少 15 分钟，`force:true` 仍有 30 秒间隔；没有行情时保持待处理。
@@ -92,6 +92,14 @@
 买入身份固定为 `crypto:bitcoin`、`crypto:ethereum`、`crypto:solana`，支付身份固定为 `crypto:tether`、`crypto:usd-coin`。更新不允许更换账户或币种；调整从后续计划时间生效，旧待处理安排停止。新建允许历史开始日期，但不能使用后来入金倒填历史买入，也不能使后续已保存流水出现负持仓。余额不足会直接暂停且不生成投资事件。
 
 入账沿用 `BUY` 投资事件与同账户稳定币结算，`fee="0"`。响应的 `dca` 保存计划/日期、两种币的美元价格、价格时间/来源、人民币汇率及日期/来源；客户端不能伪造此字段创建定投。人工修订保留原始参考依据，作废保留逐日防重记录。账户删除预览增加 `cryptoDcaPlanCount`，预览令牌覆盖计划和待处理安排，确认删除后停止计划。
+
+创建示例（`POST /investments/dca/save`）：先核对当前用户的交易所账户、稳定币历史持仓及账本，将示例 ID、日期和时间换成实际安排。此请求启用参考记账，历史开始日期可能触发补记。
+
+```json
+{"id":"","revision":0,"requestKey":"crypto-dca-example-0001","accountId":"exchange-id","instrumentId":"crypto:bitcoin","paymentInstrumentId":"crypto:tether","amount":"10","dailyTime":"09:00","startDate":"2026-10-08","timeZone":"Asia/Shanghai","bookId":"book-id"}
+```
+
+保存返回计划及其 `id/revision`。暂停示例为 `POST /investments/dca/enabled` 的 `{"id":"返回的计划ID","revision":1,"enabled":false}`，修订号须替换为当前值；冲突后先重读。`days.status=pending/done/skipped` 分别为待处理、已入账、未买入，`message` 给出原因，`eventId` 关联投资流水。人工恢复不能复活跳过日期，`force:true` 也不能绕过暂停、余额与日期防重规则。
 
 ## 路由清单
 
