@@ -1,46 +1,67 @@
 <template>
-    <f7-page class="cy-main-page cy-mobile-surface" ptr @ptr:refresh="refresh" @page:afterin="activate" @page:beforeout="deactivate">
-        <f7-navbar :title="selectedAccount?.name || '投资理财'" back-link="资产"><f7-nav-right><AccountOptionsMenu v-if="selectedAccount" :edit-href="`/investments/record?action=account&accountId=${selectedAccount.id}`" :target="{id:selectedAccount.id,name:selectedAccount.name,kind:'portfolio',href:`/investments/ledger?accountId=${selectedAccount.id}`}" @deleted="f7router.navigate('/investments',{reloadAll:true})" /></f7-nav-right></f7-navbar>
-        <main class="cy-page-body">
-            <p v-if="error" class="cy-message" role="alert">{{ error }} <button @click="refresh()">重试</button></p>
-            <section class="cy-panel cy-investment-total"><p class="cy-muted">投资参考市值（人民币）</p><strong>{{ ledgerMoney(totalValue) }}</strong><div><span>持有收益 {{ ledgerMoney(unrealized) }}</span><span>全部账户已实现收益 {{ ledgerMoney(summary?.realizedPnl) }}</span></div></section>
-            <nav class="cy-segments cy-investment-types" aria-label="理财类型"><button v-for="item in types" :key="item.value" :aria-pressed="type===item.value" @click="type=item.value">{{ item.name }}</button></nav>
-            <input v-model="search" class="cy-position-search" aria-label="查找持仓" placeholder="查找资产名称或代码" />
-            <p class="cy-muted cy-holding-note">持仓和成本使用全部账本的完整历史。涨跌幅描述价格变化，持有收益还取决于买入成本。</p>
-            <p v-if="loading && !summary" class="cy-empty">正在加载持仓…</p>
-            <section v-for="position in visiblePositions" :key="`${position.accountId}:${position.instrumentId}`" class="cy-panel cy-holding-card">
-                <f7-link :href="positionLink(position)"><div class="cy-holding-title"><span><strong>{{ instrument(position.instrumentId)?.name || position.instrumentId }}</strong><small>{{ instrument(position.instrumentId)?.symbol }} · {{ accountName(position.accountId) }}</small></span><span class="cy-holding-value"><strong>{{ ledgerMoney(position.marketValue) }}</strong><small>{{ quoteStatus(position.quote) }}</small></span></div><dl><div><dt>持有数量</dt><dd>{{ position.quantity }}</dd></div><div><dt>持有收益</dt><dd>{{ ledgerMoney(position.unrealizedPnl) }}</dd></div><div><dt>{{ quoteChangeLabel(position.quote) }}</dt><dd>{{ quoteChange(position.quote) }}</dd></div></dl></f7-link>
-            </section>
-            <section v-if="!loading && !visiblePositions.length" class="cy-panel cy-empty"><p>{{ search || type ? '没有匹配的持仓' : '还没有投资持仓' }}</p><p class="cy-muted">先添加投资账户和资产，再录入已有持仓。</p><f7-link href="/investments/manage">管理账户与资产</f7-link></section>
-            <div class="cy-investment-actions"><f7-link :href="`/investments/record?action=OPENING&accountId=${encodeURIComponent(f7route.query['accountId'] || '')}`">录入已有持仓</f7-link><f7-link :href="`/investments/record?action=BUY&accountId=${encodeURIComponent(f7route.query['accountId'] || '')}`">记录新买入</f7-link></div>
-        </main><template #fixed><LedgerNavigation active="assets" /></template>
-    </f7-page>
+  <f7-page class="cy-mobile-surface cy-investment-page" ptr @ptr:refresh="refresh" @page:afterin="activate" @page:beforeout="live.stop">
+    <f7-navbar :title="selectedAccount?.name || '理财'" back-link="资产">
+      <f7-nav-right>
+        <f7-link class="inv-nav-icon" :href="`/investments/statistics?accountId=${accountId}`" aria-label="理财统计"><f7-icon f7="chart_pie" /></f7-link>
+        <f7-link class="inv-nav-icon" aria-label="搜索理财" @click="showSearch=!showSearch"><f7-icon f7="search" /></f7-link>
+        <f7-link @click="showAdd=true">新增</f7-link>
+      </f7-nav-right>
+    </f7-navbar>
+    <main class="inv-body">
+      <p v-if="error" role="alert" class="cy-message">{{ error }} <button @click="refresh()">重试</button></p>
+      <div v-if="showSearch" class="inv-search"><input v-model="search" aria-label="搜索理财" placeholder="搜索名称或代码" /><button class="inv-link" @click="search='';showSearch=false">取消</button></div>
+      <section class="inv-card inv-summary">
+        <div><span>总资产（元）</span><strong>{{ money(total) }}</strong></div>
+        <f7-link :href="`/investments/statistics?accountId=${accountId}`"><div><span>累计收益（元）</span><strong :class="profitClass(profit)">{{ money(profit) }}</strong></div></f7-link>
+      </section>
+      <f7-link v-if="pending.length" class="inv-card inv-list-button" :href="`/investments/plans?accountId=${accountId}&tab=orders`"><span>{{ pending.length }} 笔待确认</span><f7-icon f7="chevron_right" /></f7-link>
+      <p v-if="loading&&!wealth" class="cy-empty">正在加载理财…</p>
+      <details v-for="group in grouped" :key="group.name" class="inv-card" open>
+        <summary class="inv-group-head"><span>{{ group.name }}</span><span>{{ money(group.value) }}</span><f7-icon f7="chevron_down" /></summary>
+        <f7-link v-for="row in group.rows" :key="row.key" class="inv-holding" :href="holdingLink(row)">
+          <div class="inv-holding-top"><span>{{ row.name }}</span><small class="inv-code">{{ row.asset?.symbol }}</small><strong>{{ money(row.position.marketValue) }}</strong></div>
+          <div class="inv-holding-info">
+            <div><span class="inv-muted">{{ row.asset?.type==='FUND'?'最新净值':'最新价' }}</span><span :class="profitClass(row.position.quote?.changePercent)">{{ row.position.quote?.price || '—' }}</span><span v-if="row.position.quote?.currency && row.position.quote.currency!=='CNY'" class="inv-muted">{{ row.position.quote.currency }}</span><span :class="profitClass(row.position.quote?.changePercent)">{{ quoteChange(row.position.quote) }}</span></div>
+            <div><span class="inv-muted">持有收益</span><span :class="profitClass(row.position.unrealizedPnl)">{{ money(row.position.unrealizedPnl) }}</span><span class="inv-muted inv-profit">累计盈亏</span><span :class="profitClass(row.profit)">{{ money(row.profit) }}</span></div>
+            <div v-if="needsQuoteNote(row)" class="inv-muted">{{ quoteStatus(row.position.quote) }}</div>
+          </div>
+        </f7-link>
+      </details>
+      <details v-if="monetaryRows.length" class="inv-card" open><summary class="inv-group-head"><span>货币基金</span><span>{{ money(investmentSum(monetaryRows.map(r=>r.value))) }}</span><f7-icon f7="chevron_down" /></summary><f7-link v-for="r in monetaryRows" :key="r.id" class="inv-holding" :href="`/account/detail?id=${r.id}`"><div class="inv-holding-top"><span>{{ r.binding.name }}</span><small class="inv-code">{{ r.binding.code }}</small><strong>{{ money(r.value) }}</strong></div><div class="inv-holding-info"><div><span class="inv-muted">已记录收益</span><span :class="profitClass(r.binding.totalIncome)">{{ money(r.binding.totalIncome) }}</span><span class="inv-muted">万份收益</span><span>{{ r.binding.lastPerTenThousand || '—' }}</span></div><div class="inv-muted">{{ r.name }} · {{ r.binding.enabled?'自动收益已启用':'自动收益已暂停' }}</div></div></f7-link></details>
+      <section v-if="!loading&&!grouped.length&&!monetaryRows.length" class="inv-card cy-empty"><p>{{ search?'没有匹配的理财':'还没有理财记录' }}</p><button class="inv-link" @click="showAdd=true">新增一项理财</button></section>
+      <nav class="inv-toolbar"><button class="inv-link" @click="showClosed=!showClosed">{{ showClosed?'收起已清仓':'查看已清仓' }}</button><f7-link href="/investments/plans">理财定投</f7-link><f7-link href="/investments/manage">管理</f7-link></nav>
+    </main>
+    <f7-sheet class="inv-sheet cy-mobile-surface cy-investment-page" v-model:opened="showAdd" swipe-to-close backdrop>
+      <div class="inv-group-head"><span>新增理财</span><button class="inv-link" @click="showAdd=false">取消</button></div>
+      <f7-link class="inv-list-button" :href="addLink('FUND')" sheet-close>基金<f7-icon f7="chevron_right" /></f7-link>
+      <f7-link class="inv-list-button" href="/investments/add?type=MONETARY" sheet-close>基金（货币型）<f7-icon f7="chevron_right" /></f7-link>
+      <f7-link v-for="type in investmentTypes.filter(t=>t.key!=='FUND')" :key="type.key" class="inv-list-button" :href="addLink(type.key)" sheet-close>{{ type.name }}<f7-icon f7="chevron_right" /></f7-link>
+    </f7-sheet>
+  </f7-page>
 </template>
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue';
-import type { Router } from 'framework7/types';
-const props = defineProps<{ f7route: Router.Route; f7router:Router.Router }>();
-import { investments, investmentError } from '@/lib/investments.ts';
-import { LedgerDecimal, ledgerMoney } from '@/lib/ledger-display.ts';
-import { quoteStatus, quoteChange, quoteChangeLabel } from '@/lib/investment-display.ts';
-import type { Instrument, InvestmentAccount, InvestmentPosition, WealthSummary } from '@/models/investment.ts';
-import LedgerNavigation from '@/components/mobile/LedgerNavigation.vue';
-import AccountOptionsMenu from '@/components/mobile/AccountOptionsMenu.vue';
-const summary=ref<WealthSummary>(),instruments=ref<Instrument[]>([]),accounts=ref<InvestmentAccount[]>([]),type=ref(''),search=ref(''),loading=ref(false),error=ref('');
-const selectedAccount=computed(()=>accounts.value.find(a=>a.id===props.f7route.query['accountId']));
-const types=[{value:'',name:'全部'},{value:'STOCK',name:'股票'},{value:'FUND',name:'基金'},{value:'CRYPTO',name:'加密货币'},{value:'OTHER',name:'其他'}];
-function instrument(id:string) {return instruments.value.find(item=>item.id===id);}
-function accountName(id:string):string{return accounts.value.find(item=>item.id===id)?.name || id;}
-const visiblePositions=computed(()=>(summary.value?.positions||[]).filter(position=>{const asset=instrument(position.instrumentId);return (!props.f7route.query['accountId'] || position.accountId===props.f7route.query['accountId'])&& new LedgerDecimal(position.quantity).gt(0)&&(!type.value||asset?.type===type.value)&&(!search.value||`${asset?.name} ${asset?.symbol}`.toLowerCase().includes(search.value.toLowerCase()));}));
-function total(field:'marketValue'|'unrealizedPnl'):string|null{if(!summary.value)return null; const values=visiblePositions.value.map(item=>item[field]);return values.some(value=>value==null)?null:values.reduce<InstanceType<typeof LedgerDecimal>>((sum,value)=>sum.plus(value!),new LedgerDecimal(0)).toString();}
-const totalValue=computed(()=>total('marketValue')),unrealized=computed(()=>total('unrealizedPnl'));
-function positionLink(position:InvestmentPosition):string{return '/investments/position?'+new URLSearchParams({accountId:position.accountId,instrumentId:position.instrumentId}).toString();}
-async function refresh(done?:()=>void):Promise<void>{if(loading.value){if(typeof done==='function')done();return;}loading.value=true;error.value='';try{const [s,i,a]=await Promise.all([investments.summary(),investments.instruments(),investments.accounts()]);summary.value=s;instruments.value=i;accounts.value=a;}catch(cause){error.value=investmentError(cause);}finally{loading.value=false;if(typeof done==='function')done();}}
-let timer:ReturnType<typeof setInterval>|undefined;
-function activate():void{deactivate();void refresh();timer=setInterval(()=>{if(!document.hidden)void refresh();},15000);}
-function deactivate():void{clearInterval(timer);}
-onUnmounted(deactivate);
+import {computed,onUnmounted,ref} from 'vue';
+import type {Router} from 'framework7/types';
+import {LedgerDecimal,ledgerMoney} from '@/lib/ledger-display.ts';
+import {quoteChange,quoteStatus} from '@/lib/investment-display.ts';
+import {createValuationRefresh} from '@/lib/valuation-refresh.ts';
+import {useInvestmentData,investmentSum,investmentTypes,profitClass,type HoldingRow} from '@/lib/investment-mobile.ts';
+const props=defineProps<{f7route:Router.Route}>();
+const {monetary,wealth,accounts,orders,events,rows,books,loading,error,load}=useInvestmentData();
+const accountId=computed(()=>props.f7route.query['accountId']||''),selectedAccount=computed(()=>accounts.value.find(a=>a.id===accountId.value));
+const showAdd=ref(false),showSearch=ref(false),showClosed=ref(false),search=ref('');
+const inScope=computed(()=>rows.value.filter(r=>(!accountId.value||r.position.accountId===accountId.value)&&!r.profile.hidden&&(!r.profile.bookIds?.length||!books.selectedBookIds.length||r.profile.bookIds.some(id=>books.selectedBookIds.includes(id)))));
+const monetaryRows=computed(()=>accountId.value?[]:monetary.value.filter(b=>!books.selectedBookIds.length||books.selectedBookIds.includes(b.bookId)).flatMap(binding=>{const a=wealth.value?.cashAccounts.find(a=>a.id===binding.accountId);return a?[{...a,binding}]:[]}).filter(r=>!search.value||`${r.name} ${r.binding.name} ${r.binding.code}`.includes(search.value)));
+const total=computed(()=>wealth.value?investmentSum(inScope.value.filter(r=>!r.profile.excludeFromTotal).map(r=>r.profile.excludeProfit?r.position.cost:r.position.marketValue).concat(monetaryRows.value.map(r=>r.value))):null);
+const profit=computed(()=>wealth.value?investmentSum(inScope.value.map(r=>r.profit).concat(monetaryRows.value.map(r=>r.binding.totalIncome??null))):null);
+const grouped=computed(()=>{const groups=new Map<string,HoldingRow[]>();for(const r of inScope.value){if(!showClosed.value&&new LedgerDecimal(r.position.quantity).isZero()&&events.value.some(e=>!e.voided&&e.accountId===r.position.accountId&&e.instrumentId===r.position.instrumentId))continue;if(search.value&&!`${r.name} ${r.asset?.symbol}`.toLowerCase().includes(search.value.toLowerCase()))continue;groups.set(r.group,[...(groups.get(r.group)||[]),r]);}return [...groups].map(([name,rs])=>({name,rows:rs,value:investmentSum(rs.map(r=>r.position.marketValue))}));});
+const pending=computed(()=>orders.value.filter(o=>o.status==='pending'&&(!accountId.value||o.accountId===accountId.value)));
+function money(v:string|null|undefined):string{return ledgerMoney(v,false);}
+function holdingLink(row:HoldingRow):string{return '/investments/position?'+new URLSearchParams({accountId:row.position.accountId,instrumentId:row.position.instrumentId});}
+function addLink(type:string):string{return '/investments/add?'+new URLSearchParams({type,accountId:accountId.value});}
+function needsQuoteNote(row:HoldingRow):boolean{return !row.position.quote||['stale','missing','unavailable'].includes(row.position.quote.state)||row.position.quote.fxState==='stale';}
+async function refresh(done?:()=>void):Promise<void>{try{await load();}finally{if(typeof done==='function')done();}}
+const live=createValuationRefresh(summary=>{wealth.value=summary;});
+function activate():void{void load();live.start();}
+onUnmounted(live.stop);
 </script>
-<style scoped>
-.cy-investment-total>strong{font-size:32px;display:block;margin:10px 0 18px;overflow-wrap:anywhere}.cy-investment-total>div{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:12px}.cy-investment-types{display:flex;margin-bottom:16px;overflow:auto}.cy-investment-types button{flex:1;white-space:nowrap;font-size:13px}.cy-position-search{width:100%;padding:13px;border:1px solid var(--cy-line);border-radius:10px;background:var(--cy-card);margin-bottom:10px}.cy-holding-note{margin-bottom:18px!important}.cy-holding-card>a{display:block;color:inherit;width:100%}.cy-holding-title{display:flex;justify-content:space-between;gap:10px}.cy-holding-title strong{font-size:17px}.cy-holding-title small{display:block;font-size:11px;color:var(--cy-muted);margin-top:6px}.cy-holding-value{text-align:right;max-width:52%;overflow-wrap:anywhere}.cy-holding-card dl{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:20px 0 0}.cy-holding-card dt{font-size:10px;color:var(--cy-muted)}.cy-holding-card dd{margin:7px 0 0;font-size:13px;overflow-wrap:anywhere}.cy-investment-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0}.cy-investment-actions a{text-align:center;padding:14px 8px;background:var(--cy-card);border:1px solid var(--cy-accent);border-radius:12px;color:var(--cy-accent)}.cy-investment-actions a:last-child{background:var(--cy-accent);color:#fff}
-</style>

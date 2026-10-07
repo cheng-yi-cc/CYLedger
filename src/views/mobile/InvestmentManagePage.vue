@@ -1,25 +1,19 @@
 <template>
-    <f7-page class="cy-main-page cy-mobile-surface" @page:afterin="load">
-        <f7-navbar title="账户与投资资产" back-link="理财" />
-        <main class="cy-page-body"><p v-if="error" class="cy-message" role="alert">{{ error }}</p>
-            <section class="cy-panel"><div class="cy-section-head"><h2>投资账户</h2><f7-link href="/crypto/add?kind=EXCHANGE">添加交易所</f7-link><f7-link href="/crypto/add?kind=WALLET">添加钱包</f7-link><f7-link href="/investments/record?action=account&kind=BROKER">添加证券账户</f7-link></div><p v-for="account in accounts" :key="account.id" class="cy-management-row">{{ account.name }} <small>{{ kinds[account.kind] || account.kind }}</small></p><p v-if="!accounts.length" class="cy-muted">按交易所、钱包或证券账户建立账户。</p></section>
-            <section class="cy-panel"><InstrumentSearch @saved="added" /></section>
-            <section class="cy-panel"><div class="cy-section-head"><h2>资产目录</h2><f7-link href="/investments/record?action=instrument">手动创建</f7-link></div><p v-if="notice" class="cy-message" role="status">{{ notice }}</p><article v-for="asset in instruments" :key="asset.id" class="cy-asset-management"><strong>{{ asset.name }} · {{ asset.symbol }}</strong><p class="cy-muted">{{ instrumentMarketLabel(asset) }} · {{ asset.provider ? `${asset.provider} / ${asset.providerId}` : isPresetInstrument(asset) ? '自动行情由系统维护' : '手动估值' }}</p><p class="cy-muted">{{ currentQuoteLabel(asset) }}</p><div><button v-if="asset.id.startsWith('custom:')" @click="binding= binding===asset.id ? '' : asset.id">{{ asset.provider ? '更换行情绑定' : '绑定行情' }}</button><f7-link :href="`/investments/record?action=quote&instrumentId=${encodeURIComponent(asset.id)}`">手动报价</f7-link></div><InstrumentSearch v-if="asset.id.startsWith('custom:') && binding===asset.id" :instrument-id="asset.id" @saved="added" /></article></section>
-        </main>
-    </f7-page>
+ <f7-page class="cy-mobile-surface cy-investment-page" @page:afterin="load">
+  <f7-navbar title="理财管理" back-link="理财" />
+  <main class="inv-body"><p v-if="error" role="alert" class="cy-message">{{ error }}</p>
+   <section class="inv-card"><h2>理财显示</h2><p v-if="!rows.length" class="cy-empty">还没有理财</p><article v-for="r in rows" :key="r.key" class="inv-event"><div class="inv-event-line"><strong>{{ r.name }}</strong><button class="inv-link" style="padding:0" @click="toggle(r)">{{ r.profile.hidden?'恢复显示':'隐藏' }}</button></div><p class="inv-muted">{{ r.group }} · {{ r.account?.name }}</p><div class="inv-toolbar"><f7-link :href="`/investments/add?accountId=${r.position.accountId}&instrumentId=${encodeURIComponent(r.position.instrumentId)}`">编辑</f7-link><f7-link :href="`/investments/record?action=quote&accountId=${r.position.accountId}&instrumentId=${encodeURIComponent(r.position.instrumentId)}`">更新价格</f7-link><button v-if="r.asset?.id.startsWith('custom:')" class="inv-link" @click="binding=binding===r.asset.id?'':r.asset.id">行情设置</button></div><InstrumentSearch v-if="binding===r.asset?.id" :instrument-id="binding" :initial-market="searchMarket(r)" @saved="binding='';load()" /></article></section>
+   <section class="inv-card"><div class="inv-event-line"><h2>投资账户</h2><f7-link href="/investments/record?action=account&kind=BROKER">新增</f7-link></div><div v-for="a in accounts" :key="a.id" class="inv-row"><span style="flex:1">{{ a.name }}</span><AccountOptionsMenu :edit-href="['EXCHANGE','WALLET'].includes(a.kind)?`/crypto/add?id=${a.id}&kind=${a.kind}`:`/investments/record?action=account&accountId=${a.id}`" :target="{id:a.id,name:a.name,kind:'portfolio',href:`/investments/ledger?accountId=${a.id}`}" @deleted="load" /></div></section>
+  </main>
+ </f7-page>
 </template>
 <script setup lang="ts">
-import { ref } from 'vue';
+import {ref} from 'vue';
+import {useInvestmentData,type HoldingRow} from '@/lib/investment-mobile.ts';
+import {investments,investmentError} from '@/lib/investments.ts';
+import AccountOptionsMenu from '@/components/mobile/AccountOptionsMenu.vue';
 import InstrumentSearch from '@/components/InstrumentSearch.vue';
-import { investments, investmentError } from '@/lib/investments.ts';
-import { instrumentMarketLabel, isPresetInstrument, quoteStatus } from '@/lib/investment-display.ts';
-import type { Instrument,InvestmentAccount,InvestmentQuote } from '@/models/investment.ts';
-const instruments=ref<Instrument[]>([]),accounts=ref<InvestmentAccount[]>([]),quotes=ref<InvestmentQuote[]>([]),error=ref(''),notice=ref(''),binding=ref('');
-const kinds:Record<string,string>={EXCHANGE:'加密货币交易所',WALLET:'加密钱包',BROKER:'证券账户',OTHER:'其他'};
-function currentQuoteLabel(asset:Instrument):string{const quote=quotes.value.find(item=>item.instrumentId===asset.id);if(quote?.state==='manual')return `当前使用手动报价（人民币）${isPresetInstrument(asset)||asset.provider?'，自动行情已被覆盖':''}`;if(quote?.price&&quote.source)return `当前来源：${quote.source} · ${quoteStatus(quote)}`;return isPresetInstrument(asset)||asset.provider?'自动行情尚无可用报价，可手动估值':'尚未填写手动报价';}
-async function load():Promise<void>{error.value='';try{[instruments.value,accounts.value,quotes.value]=await Promise.all([investments.instruments(),investments.accounts(),investments.quotes()]);}catch(cause){error.value=investmentError(cause);}}
-async function added(asset:Instrument):Promise<void>{notice.value=`${asset.name} 已保存。`;binding.value='';await load();}
+const {rows,accounts,error,load}=useInvestmentData(),binding=ref('');
+async function toggle(row:HoldingRow):Promise<void>{try{await investments.saveProfile({...row.profile,hidden:!row.profile.hidden});await load();}catch(e){error.value=investmentError(e);}}
+function searchMarket(r:HoldingRow):string{const m=r.asset?.market||'';return m.startsWith('CN_')&&m!=='CN_FUND'?'CN':m||'CN_FUND';}
 </script>
-<style scoped>
-.cy-management-row{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--cy-line)}.cy-management-row small{color:var(--cy-muted)}.cy-asset-management{padding:18px 0;border-bottom:1px solid var(--cy-line)}.cy-asset-management:last-child{border:0}.cy-asset-management>div{display:flex;gap:20px;margin:10px 0;font-size:12px}.cy-asset-management button{border:0;background:transparent;padding:0;color:var(--cy-accent)}
-</style>

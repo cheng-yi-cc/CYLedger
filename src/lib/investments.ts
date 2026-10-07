@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { AccountDeletionTarget, AccountDeletionPreview } from '@/models/investment.ts';
+import type { HoldingProfile,HoldingSetup,InvestmentPlan,InvestmentOrder,InvestmentReport } from '@/models/investment.ts';
 import '@/lib/services.ts'; // Reuse the application's authentication, API root and token refresh.
 import type { ApiResponse } from '@/core/api.ts';
 import type { InvestmentAccount, Instrument, InstrumentBinding, InstrumentCandidate, InvestmentEvent, InvestmentSettings, InvestmentPosition, InvestmentPreview, InvestmentQuote, WealthSummary, WealthSnapshot, ConversionInput, InvestmentConversion } from '@/models/investment.ts';
@@ -13,6 +14,18 @@ async function request<T>(method: 'get' | 'post', path: string, data?: unknown, 
 }
 
 export const investments = {
+    profiles:()=>request<HoldingProfile[]>('get','investments/holdings'),
+    saveProfile:(data:HoldingProfile)=>request<HoldingProfile>('post','investments/holdings',data),
+    setupHolding:(data:HoldingSetup,key:string)=>request<HoldingProfile>('post','investments/holdings/setup',data,key,45000),
+    updateHolding:(data:HoldingSetup,key:string)=>request<HoldingProfile>('post','investments/holdings/update',data,key),
+    plans:()=>request<InvestmentPlan[]>('get','investments/plans'),
+    savePlan:(data:InvestmentPlan)=>request<InvestmentPlan>('post','investments/plans',data),
+    orders:()=>request<InvestmentOrder[]>('get','investments/orders'),
+    saveOrder:(data:InvestmentOrder,key:string)=>request<InvestmentOrder>('post','investments/orders',data,key),
+    confirmOrder:(data:{id:string;version:number;price:string;date:string})=>request<InvestmentPreview>('post','investments/orders/confirm',data),
+    cancelOrder:(data:{id:string;version:number})=>request<boolean>('post','investments/orders/cancel',data),
+    syncPlans:(force=false)=>request<{created:number;pending:number}>('post','investments/plans/sync',{force},undefined,120000),
+    report:(accountId='',instrumentId='')=>request<InvestmentReport>('get',`investments/report?${new URLSearchParams({accountId,instrumentId})}`),
     previewAccountDeletion: (target: AccountDeletionTarget) => request<AccountDeletionPreview>('post', 'wealth/accounts/delete/preview', target),
     deleteAccount: (target: AccountDeletionTarget, token: string, deleteRelated: boolean) => request<AccountDeletionPreview>('post', 'wealth/accounts/delete', { ...target, token, deleteRelated }),
     accounts: () => request<InvestmentAccount[]>('get', 'investments/accounts'),
@@ -22,7 +35,8 @@ export const investments = {
     conversion: (data:ConversionInput) => request<InvestmentConversion>('post','investments/conversion',data,undefined,45000),
     instruments: () => request<Instrument[]>('get', 'investments/instruments'),
     createInstrument: (data: { name: string; symbol: string; type: string } & Partial<InstrumentBinding>) => request<Instrument>('post', 'investments/instruments', data),
-    searchInstruments: (query: string, market = '') => request<InstrumentCandidate[]>('get', `investments/instruments/search?q=${encodeURIComponent(query)}&market=${encodeURIComponent(market)}`),
+    // 基金提供方允许 20 秒连接预算，首次查询不能被默认 10 秒前端超时提前取消。
+    searchInstruments: (query: string, market = '') => request<InstrumentCandidate[]>('get', `investments/instruments/search?q=${encodeURIComponent(query)}&market=${encodeURIComponent(market)}`, undefined, undefined, market === 'CN_FUND' ? 30000 : undefined),
     bindInstrument: (instrumentId: string, binding: InstrumentBinding) => request<Instrument>('post', 'investments/instruments/bind', { instrumentId, ...binding }),
     settings: () => request<InvestmentSettings>('get', 'investments/settings'),
     saveSettings: (data: InvestmentSettings) => request<InvestmentSettings>('post', 'investments/settings', data),

@@ -56,7 +56,36 @@ func (s *MonetaryIncomeService) List(c core.Context, uid int64) ([]models.Moneta
 	}
 	items := make([]models.MonetaryIncomeBinding, 0)
 	err := s.UserDataDB(uid).NewSession(c).Where("uid=?", uid).OrderBy("account_id").Find(&items)
-	return items, err
+	if err != nil {
+		return nil, err
+	}
+	for i := range items {
+		days := []models.MonetaryIncomeDay{}
+		if err = s.UserDataDB(uid).NewSession(c).Where("uid=? AND account_id=?", uid, items[i].AccountId).Asc("date").Find(&days); err != nil {
+			return nil, err
+		}
+		ids := []int64{}
+		for _, day := range days {
+			ids = append(ids, day.TransactionId)
+			items[i].LastPerTenThousand = day.PerTenThousand
+		}
+		total := decimal.Zero
+		for start := 0; start < len(ids); start += 200 {
+			end := start + 200
+			if end > len(ids) {
+				end = len(ids)
+			}
+			transactions := []models.Transaction{}
+			if err = s.UserDataDB(uid).NewSession(c).Where("uid=? AND account_id=? AND deleted=? AND type=?", uid, items[i].AccountId, false, models.TRANSACTION_DB_TYPE_INCOME).In("transaction_id", ids[start:end]).Find(&transactions); err != nil {
+				return nil, err
+			}
+			for _, transaction := range transactions {
+				total = total.Add(decimal.NewFromInt(transaction.Amount).Div(decimal.NewFromInt(100)))
+			}
+		}
+		items[i].TotalIncome = total.String()
+	}
+	return items, nil
 }
 
 func (s *MonetaryIncomeService) Save(c core.Context, uid int64, req models.MonetaryIncomeSaveRequest) (*models.MonetaryIncomeBinding, error) {

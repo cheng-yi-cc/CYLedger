@@ -258,6 +258,29 @@ func (s *InvestmentService) DeleteAssetAccount(c core.Context, uid int64, input 
 			}
 			result.CryptoDCAPlanCount = len(dcaPlans)
 		}
+		investmentPlans := []models.InvestmentPlan{}
+		investmentOrders := []models.InvestmentOrder{}
+		allInvestmentPlans := []models.InvestmentPlan{}
+		allInvestmentOrders := []models.InvestmentOrder{}
+		if err := sess.Where("uid=? AND deleted=?", uid, false).Asc("id").Find(&allInvestmentPlans); err != nil {
+			return err
+		}
+		if err := sess.Where("uid=? AND status=?", uid, "pending").Asc("id").Find(&allInvestmentOrders); err != nil {
+			return err
+		}
+		for _, p := range allInvestmentPlans {
+			cashID, _ := strconv.ParseInt(p.CashAccountId, 10, 64)
+			if targets[cashID] || input.Kind == "portfolio" && p.AccountId == input.ID {
+				investmentPlans = append(investmentPlans, p)
+			}
+		}
+		for _, o := range allInvestmentOrders {
+			cashID, _ := strconv.ParseInt(o.CashAccountId, 10, 64)
+			if targets[cashID] || input.Kind == "portfolio" && o.AccountId == input.ID {
+				investmentOrders = append(investmentOrders, o)
+			}
+		}
+		result.DueCount += len(investmentPlans) + len(investmentOrders)
 
 		var portfolios []models.PortfolioAccount
 		if err := sess.Where("uid=?", uid).Asc("id").Find(&portfolios); err != nil {
@@ -276,7 +299,7 @@ func (s *InvestmentService) DeleteAssetAccount(c core.Context, uid int64, input 
 		}
 		// Fingerprint the complete investment history and current balances as well:
 		// another account's sale can change whether this deletion is valid.
-		raw, err := json.Marshal([]any{input.ID, input.Kind, cash, portfolio, portfolios, events, txs, templates, dueItems, depositItems, installmentItems, dcaPlans, dcaDays})
+		raw, err := json.Marshal([]any{input.ID, input.Kind, cash, portfolio, portfolios, events, txs, templates, dueItems, depositItems, installmentItems, dcaPlans, dcaDays, investmentPlans, investmentOrders})
 		if err != nil {
 			return err
 		}
@@ -329,6 +352,16 @@ func (s *InvestmentService) DeleteAssetAccount(c core.Context, uid int64, input 
 		if err := s.voidAccountInvestments(sess, uid, events, voidIDs); err != nil {
 			return err
 		}
+		for _, p := range investmentPlans {
+			if _, err := sess.Where("uid=? AND id=?", uid, p.Id).Cols("paused", "deleted", "version").Update(&models.InvestmentPlan{Paused: true, Deleted: true, Version: p.Version + 1}); err != nil {
+				return err
+			}
+		}
+		for _, o := range investmentOrders {
+			if _, err := sess.Where("uid=? AND id=?", uid, o.Id).Cols("status", "version").Update(&models.InvestmentOrder{Status: "cancelled", Version: o.Version + 1}); err != nil {
+				return err
+			}
+		}
 		now := time.Now().Unix()
 		// Apply the net reversal once per surviving account, avoiding intermediate
 		// overflow and handling both halves of cross-currency transfers exactly.
@@ -377,6 +410,9 @@ func (s *InvestmentService) DeleteAssetAccount(c core.Context, uid int64, input 
 				return err
 			}
 			if _, err := sess.Where("uid=? AND account_id=? AND status=?", uid, input.ID, "pending").Cols("status", "message").Update(&models.CryptoDCADay{Status: "skipped", Message: "账户已删除"}); err != nil {
+				return err
+			}
+			if _, err := sess.Where("uid=? AND account_id=?", uid, input.ID).Delete(&models.InvestmentHoldingProfile{}); err != nil {
 				return err
 			}
 			if _, err := sess.Where("uid=? AND id=?", uid, input.ID).Delete(&models.PortfolioAccount{}); err != nil {

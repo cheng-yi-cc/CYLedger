@@ -36,6 +36,8 @@ Vue 网页 / Android WebView
 | `MonetaryIncomeBinding` / `MonetaryIncomeDay` | 基金绑定与逐日本金、万份收益、金额、流水和永久防重身份 |
 | `InvestmentSettings` / `PortfolioAccount` / `InvestmentInstrument` | 本位币/时区、投资账户及资产身份/公开行情绑定 |
 | `PortfolioAccount.Currency/PaymentInstruments` | 钱包/交易所显示与新增收支默认单位、至多两项默认收付币种；不保存第二份现金余额 |
+| `InvestmentHoldingProfile` | 单项理财名称、分组、备注、盈亏偏差、生效账本和资产计入规则；不保存余额 |
+| `InvestmentPlan` / `InvestmentOrder` | 定投周期与游标、每期永久身份、基金确认状态、净值来源和已入账事件关联 |
 | `InvestmentEventRecord` / `InvestmentEventRevision` | 当前投资事件与历史修订，保留版本/作废状态 |
 | `CryptoDCAPlan` / `CryptoDCADay` | 显式每日定投规则、逐日固定条款与永久防重身份；不维护另一份持仓 |
 | `InvestmentTransactionLink` / `InvestmentIdempotency` | 事件与普通资金流水关系、重复请求结果 |
@@ -56,6 +58,12 @@ Android `LocalBridge` 只允许本机页面且解锁后发起操作。备份同�
 ## 核心流程
 
 **投资**：事件、资金账户与系统结算对手的双边流水、关联和幂等记录在同一事务提交。持仓按用户/账户/资产重放全部有效历史；筛选账本只筛选事件显示，不截断成本历史。普通接口不能修改投资结算，系统账户从正常选择、资产统计和删除中排除。历史修订使相关快照失效，只用已保存历史价格重建。
+
+**手机理财**：`investment_holdings.go` 将新增账户、资产、展示规则与期初事实一次提交；编辑份额/成本使用 `ADJUST` 事件记录目标持仓，校验原数量/成本及规则版本。只改展示信息保留回放所得的完整成本精度，不生成校准事实。`wealth.go` 的 `totalValue` 应用“不计入总资产/盈亏不计入”规则，原市值、成本和盈亏仍保留；历史快照保存当时规则。货币基金从原资金账户显示，累计收益仅统计逐日关联且仍有效的实际收入。
+
+**基金定投和确认**：`investment_plans.go` 在用户锁与事务中生成 `plan:<计划ID>:<日期>` 永久指令，事务外读取 `FundHistory` 已公布单位净值，再在一个事务调用投资入账并完成指令。数量、金额、费率、成本运算都使用十进制；货币基金万份收益不得参与份额确认。缺净值/现金不足保留待确认；暂停阻止入账，删除取消待确认，撤销已入账事件不删除每期标记。账户删除预览令牌包含计划和待确认状态，清理普通账务暂停定投。前台每分钟触发，后端按上次尝试限流并限制单批补齐数量及网络查询；不提供应用退出后的系统唤醒。
+
+**理财统计**：`investment_report.go` 以有效事件回放计算交易效果，资产结算收益按筛选资产归属，组合币种不能准确拆分时保留未知。历史曲线仅从有效快照取值；年化使用资金占用日的简单估算，不伪装成复合收益率。
 
 **钱包收支**：沿用投资事件的 `INCOME/EXPENSE` 和 `wallet` 元数据，保存原币金额、确认的人民币历史汇率、分类和一至两种实际币种数量。`wallet_entries.go` 验证归属与分类，`pkg/investments/wallet.go` 回放数量和成本，`InvestmentService.Mutate` 在同一事务写入事件、修订、关联及一笔人民币收支账单；预览执行后整体回滚。收入取得成本为原金额乘历史汇率；混合支出的处置价值按实际数量分配，释放移动加权成本，未知成本继续未知。人民币统计账单记在受保护的系统账户，不再次形成资产或现金扣款；原币展示从事件读取，修订/撤销同步反转账单、重放持仓并使快照失效。
 
@@ -144,6 +152,10 @@ Android `LocalBridge` 只允许本机页面且解锁后发起操作。备份同�
 | POST | `/investments/events/preview` |
 | POST | `/investments/events/:id/revise` |
 | POST | `/investments/events/:id/void` |
+| GET / POST | `/investments/holdings`、`/investments/plans`、`/investments/orders` |
+| POST | `/investments/holdings/setup`、`/investments/holdings/update` |
+| POST | `/investments/orders/confirm`、`/investments/orders/cancel`、`/investments/plans/sync` |
+| GET | `/investments/report` |
 | GET | `/investments/positions` |
 | GET | `/investments/quotes` |
 | POST | `/investments/quotes/manual` |

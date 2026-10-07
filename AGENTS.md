@@ -13,7 +13,8 @@
 - 稳定币每枚约 1 美元只能用于可修改的收付数量预填，不能作为行情或历史汇率；手动价格保留原币，历史快照重建沿用原有价格与汇率。
 - 不记录密钥或完整财务数据，不把 `.runtime`、`runtime`、备份和测试令牌提交到仓库。
 - 报销到账、债务本金/利息、余额校准、分期费用与定存收益必须在对应服务中原子提交并防重；定存和分期不能再次增加本金，普通行情不能驱动这些入账。
-- `Account.Extend.AssetProfile` 只存展示与账户规则，不维护第二份余额；新增表模型为 `Book`、`CalendarEvent`、`AssetPresentation`、`ReimbursementReceipt`、`AssetAdjustment`、`DebtMovement`、`CreditInstallment`、`FixedDeposit`、`MonetaryIncomeBinding`、`MonetaryIncomeDay`、`StatisticsBudget`、`StatisticsNote`、`StatisticsPreference`、`LocalLedgerItem`，与投资模型统一在 `cmd/database.go` 注册。
+- `Account.Extend.AssetProfile` 只存展示与账户规则，不维护第二份余额；新增表模型为 `Book`、`CalendarEvent`、`AssetPresentation`、`ReimbursementReceipt`、`AssetAdjustment`、`DebtMovement`、`CreditInstallment`、`FixedDeposit`、`MonetaryIncomeBinding`、`MonetaryIncomeDay`、`StatisticsBudget`、`StatisticsNote`、`StatisticsPreference`、`LocalLedgerItem`、`InvestmentHoldingProfile`、`InvestmentPlan`、`InvestmentOrder`，与投资模型统一在 `cmd/database.go` 注册。
+- 基金定投/待确认入账须通过 `investment_plans.go` 原子完成指令、投资事件和资金流水；暂停/删除计划或撤销事件不能移除每期防重身份。展示偏差不改真实盈亏，持仓数量/成本校准必须留下 `ADJUST` 事实。
 - 基金解绑、重绑、删除收益不得删除逐日防重记录；账户级联删除须核对预览令牌，保护转账对端余额和历史投资依赖。
 - 转账手续费与原转账同事务提交、修订、删除；借款约定日期关联日历事项，禁止脱离原账单独立改金额/日期。导入批次须永久幂等，撤回整体事务执行。
 - 预算由账务事实重算，不能维护另一份余额或受临时统计筛选影响；优惠不再次改实收付金额，一级含子级标签统计须按账单去重。预算、总结和统计偏好保存必须校验修订号。
