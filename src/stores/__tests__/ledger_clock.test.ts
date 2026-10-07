@@ -4,9 +4,12 @@ import moment from 'moment-timezone';
 import { useLedgerScopeStore } from '../ledgerScope.ts';
 
 vi.mock('../user.ts', () => ({ useUserStore: () => ({ currentUserBasicInfo: null }) }));
+const { clockSettings } = vi.hoisted(() => ({ clockSettings: { timeZone: '' } }));
+vi.mock('../setting.ts', () => ({ useSettingsStore: () => ({ appSettings: clockSettings }) }));
 
 let pinia: ReturnType<typeof createPinia>;
 beforeEach(() => {
+    clockSettings.timeZone = '';
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-31T15:59:59Z'));
     vi.stubGlobal('window', { setInterval, clearInterval, addEventListener: vi.fn(), removeEventListener: vi.fn() });
@@ -27,6 +30,15 @@ describe('device calendar clock', () => {
         expect(scope.currentDay).toBe('2026-02-01');
         expect(scope.month).toBe('2025-12');
         expect(scope.selectedDay).toBe('2025-12-10');
+    });
+    it('keeps an explicit accounting timezone when the system timezone changes', () => {
+        clockSettings.timeZone = 'Asia/Shanghai';
+        const scope = useLedgerScopeStore();
+        expect(scope.timeZone).toBe('Asia/Shanghai');
+        vi.mocked(moment.tz.guess).mockReturnValue('America/Los_Angeles');
+        scope.syncClock();
+        expect(scope.timeZone).toBe('Asia/Shanghai');
+        expect(scope.currentDay).toBe('2026-01-31');
     });
     it('picks up a system timezone change when the app resumes', () => {
         const scope = useLedgerScopeStore();

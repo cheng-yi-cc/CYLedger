@@ -8,9 +8,11 @@ export const useLedgerScopeStore = defineStore('ledgerScope', () => {
     const users = useUserStore();
     const now = ref(Date.now());
     const settings = useSettingsStore();
-    const timeZone = computed(() => settings.appSettings.timeZone && moment.tz.zone(settings.appSettings.timeZone) ? settings.appSettings.timeZone : moment.tz.guess(true));
+    const systemTimeZone = ref(moment.tz.guess(true));
+    const timeZone = computed(() => settings.appSettings.timeZone && moment.tz.zone(settings.appSettings.timeZone) ? settings.appSettings.timeZone : systemTimeZone.value);
     const currentDay = computed(() => moment(now.value).tz(timeZone.value).format('YYYY-MM-DD'));
     function syncClock(): void {
+        systemTimeZone.value = moment.tz.guess(true);
         now.value = Date.now();
     }
     const clockTimer = window.setInterval(syncClock, 1000);
