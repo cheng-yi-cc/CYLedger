@@ -32,6 +32,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOFLAGS: -mod=readonly
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,9 +46,21 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Market data regression
-        env:
-          GOFLAGS: -mod=readonly
         run: |
           go test -race -count=1 -timeout=5m ./pkg/marketquotes ./pkg/marketrelay ./android/backend
           go build -o /tmp/cyledger-market-relay ./tools/market-relay
           python3 scripts/test_market_network_config.py
+      - name: Android Java compilation
+        run: |
+          platform=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
+          test -n "$platform"
+          mkdir -p /tmp/market-java
+          javac -source 8 -target 8 -encoding UTF-8 -classpath "$platform" -d /tmp/market-java $(find android/app/src/main/java -name '*.java')
+      - name: Android ARM64 and JNI compilation
+        run: |
+          ndk=$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          compiler="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          test -x "$compiler"
+          mkdir -p /tmp/market-native
+          GOOS=android GOARCH=arm64 CGO_ENABLED=1 CC="$compiler" go build -trimpath -buildmode=c-shared -o /tmp/market-native/libcyledger_backend.so ./android/backend
+          "$compiler" -shared -fPIC -O2 -Wl,-z,max-page-size=16384 -I /tmp/market-native android/native/jni.c -L /tmp/market-native -lcyledger_backend -o /tmp/market-native/libcyledger_jni.so
