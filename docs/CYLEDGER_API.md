@@ -32,14 +32,18 @@
 |---|---|
 | `GET /investments/holdings` | 当前用户单项展示规则 |
 | `POST /investments/holdings` | 保存 `accountId/instrumentId/name/group/note/profitOffset/hidden/excludeFromTotal/excludeProfit/bookIds/version`；版本须匹配 |
-| `POST /investments/holdings/setup` | `profile/instrument/quantity/cost/price/bookId/occurredAt`；携带 `Idempotency-Key`，原子建立理财及已有持仓 |
+| `POST /investments/holdings/setup` | `profile/instrument/quantity/cost/price/bookId/occurredAt`；携带 `Idempotency-Key`，可附 `accountName` 和 `purchase`，原子建立账户、产品与期初持仓或实际买入 |
 | `POST /investments/holdings/update` | 同上，附 `expectedQuantity/expectedCost`；原子保存规则与必要的 `ADJUST` 校准，保留未改成本的全部回放精度 |
 | `GET /investments/plans`、`POST /investments/plans` | 定投读取/保存，字段为模型 `InvestmentPlan`；`cycle=daily/weekly/biweekly/monthly`，金额含费，`feePercent` 为0–100，须传 `version` |
 | `GET /investments/orders`、`POST /investments/orders` | 确认指令读取/创建，模型 `InvestmentOrder`；创建携带 `Idempotency-Key`，买入二选一 `amount/quantity`，卖出填 `quantity` |
 | `POST /investments/orders/confirm` | `{id,version,price,date}`；手动确认净值并原子入账 |
 | `POST /investments/orders/cancel` | `{id,version}`；永久取消本期，不删除防重身份 |
 | `POST /investments/plans/sync` | `{force}`；生成到期指令并按历史净值确认，返回 `{created,pending}`；`created` 为本次成功入账数，`pending` 为仍待确认数，大批积压分次处理 |
-| `GET /investments/report?accountId=&instrumentId=` | 回放交易效果、真实快照历史和简单年化估算；未知字段为 `null` |
+| `GET /investments/report?accountId=&instrumentId=` | 回放交易效果、真实快照历史和简单年化估算；可附 `assetScope=1&bookIds=id1,id2` 应用资产展示范围，未知字段为 `null` |
+
+`holdings/setup` 省略 `purchase` 时沿用 `OPENING`；提供 `purchase:{amount,fee,cashAccountId,exchangeRate}` 时写入 `BUY`，`quantity` 必须大于零，`amount` 是不含手续费的成交金额，实际扣款为 `amount+fee`，币种取资金账户，汇率为结算币种对人民币的历史汇率。账户、产品、规则、投资事件和现金结算共同提交，失败全部回滚，重试沿用同一防重键。`cost` 不覆盖实际买入成本。
+
+`report` 的 `assetScope=1` 按当前持仓的生效账本与账户禁用账本交集过滤，并排除“不计入总资产”持仓；隐藏不排除。筛选同时应用于事件效果、快照历史和年化。省略 `assetScope` 保留旧调用行为；`bookIds` 为空表示全部账本。
 
 日期为 `YYYY-MM-DD`、时间 `HH:mm`、会计时区为有效 IANA 名称。指令为基金 `BUY/SELL`，须有人民币资金账户；`amount/fee` 最多两位小数，`quantity/price/feePercent` 使用受限十进制字符串。待确认不影响资金和持仓；15:00起顺延至下一公开净值日期。入账事件附 `fund:{tradeDate,confirmDate,price,priceDate,source,orderId}`，后续可沿用事件修订/撤销接口。已处理或取消的指令不能再次入账。
 

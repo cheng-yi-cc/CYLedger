@@ -11,7 +11,7 @@
    </template>
    <template v-else>
     <div class="inv-toolbar"><button class="inv-link" :disabled="busy" @click="sync">{{ busy?'正在确认…':'刷新并自动确认' }}</button><button class="inv-link" @click="showHistory=!showHistory">{{ showHistory?'只看待确认':'查看全部记录' }}</button></div>
-    <section v-for="o in shownOrders" :key="o.id" class="inv-card"><div class="inv-event-line"><strong>{{ assetName(o.instrumentId) }}</strong><strong>{{ o.amount?money(o.amount):o.quantity+' 份' }}</strong></div><p class="inv-muted" style="margin-top:8px">{{ o.tradeDate }} · {{ o.type==='BUY'?'买入':'卖出' }} · {{ statuses[o.status] }}</p><p v-if="o.error&&o.status==='pending'" class="inv-caption" style="padding:0;margin-bottom:0">{{ o.error }}</p><p v-if="o.priceDate" class="inv-muted">{{ o.priceDate }} 净值 {{ o.price }}</p><div v-if="o.status==='pending'" class="inv-toolbar"><button class="inv-link" @click="openConfirm(o)">填写实际净值</button><button class="inv-link" :disabled="busy" @click="cancel(o)">取消本期</button></div><f7-link v-else-if="o.eventId" class="inv-link" :href="`/investments/record?action=revise&eventId=${o.eventId}&accountId=${o.accountId}&instrumentId=${encodeURIComponent(o.instrumentId)}`">查看入账记录</f7-link></section>
+    <section v-for="o in shownOrders" :key="o.id" class="inv-card"><div class="inv-event-line"><strong>{{ assetName(o.instrumentId) }}</strong><strong>{{ o.amount?money(o.amount):assetText(o.quantity)+' 份' }}</strong></div><p class="inv-muted" style="margin-top:8px">{{ o.tradeDate }} · {{ o.type==='BUY'?'买入':'卖出' }} · {{ statuses[o.status] }}</p><p v-if="o.error&&o.status==='pending'" class="inv-caption" style="padding:0;margin-bottom:0">{{ o.error }}</p><p v-if="o.priceDate" class="inv-muted">{{ o.priceDate }} 净值 {{ o.price }}</p><div v-if="o.status==='pending'" class="inv-toolbar"><button class="inv-link" @click="openConfirm(o)">填写实际净值</button><button class="inv-link" :disabled="busy" @click="cancel(o)">取消本期</button></div><f7-link v-else-if="o.eventId" class="inv-link" :href="`/investments/record?action=revise&eventId=${o.eventId}&accountId=${o.accountId}&instrumentId=${encodeURIComponent(o.instrumentId)}`">查看入账记录</f7-link></section>
     <p v-if="!loading&&!shownOrders.length" class="cy-empty">没有{{ showHistory?'':'待确认' }}记录</p>
     <p class="inv-caption">待确认记录尚未扣款或增加持仓。确认后将资金与份额一起入账；已取消的本期不会再次自动生成。</p>
    </template>
@@ -30,7 +30,7 @@ import type {Router} from 'framework7/types';
 import moment from 'moment-timezone';
 import {investments,investmentError} from '@/lib/investments.ts';
 import {useInvestmentData,invalidateInvestmentData,validInvestmentNumber} from '@/lib/investment-mobile.ts';
-import {ledgerMoney} from '@/lib/ledger-display.ts';
+import {assetMoney as ledgerMoney,assetText} from '@/lib/asset-visibility.ts';
 import BookPicker from '@/components/mobile/BookPicker.vue';
 import type {InvestmentPlan,InvestmentOrder} from '@/models/investment.ts';
 const props=defineProps<{f7route:Router.Route}>(),q=props.f7route.query;

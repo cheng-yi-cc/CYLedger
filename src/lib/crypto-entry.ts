@@ -6,6 +6,7 @@ export interface CryptoDraft {
     mode: CryptoMode; fromAccount: string; toAccount: string; fromCoin: string; toCoin: string;
     amount: string; received: string; bookId: string; note: string;
     cashEntryMode?: CashEntryMode; buyPrice?: string;
+    cost?: string; fee?: string; occurredAt?: number; exchangeRate?: string;
 }
 const PurchaseDecimal = LedgerDecimal.clone({ precision: 80 });
 /** Normalize keypad input without converting accounting values to floating point. */
@@ -48,16 +49,25 @@ export function calculateCashPurchase(mode: CashEntryMode, amount: string, quant
     return { amount: payment, quantity: received };
 }
 export function buildCryptoEvent(d: CryptoDraft, quote: InvestmentConversion | undefined, now: number): InvestmentEvent {
+    const occurredAt = d.occurredAt ?? now;
+    if (!Number.isSafeInteger(occurredAt) || occurredAt <= 0 || occurredAt > now + 60) throw Error('请选择有效的发生时间，不能晚于当前时间');
+    const nonnegative = (raw: string): string => {
+        if (raw.length > 60 || !/^\d+(\.\d{1,18})?$/.test(raw)) throw Error('成本或手续费格式无效');
+        return new LedgerDecimal(raw).toFixed();
+    };
+    const fee = d.mode === 'transfer' ? nonnegative(d.fee?.trim() || '0') : '0';
+    const cost = d.mode === 'opening' && d.cost?.trim() ? nonnegative(d.cost.trim()) : null;
     const purchase = d.mode === 'cash' ? calculateCashPurchase(d.cashEntryMode || 'amount', d.amount, d.received, d.buyPrice || '') : undefined;
     const amount = purchase?.amount || cryptoInput(d.amount, 18);
     const needsQuote = ['coin', 'redeem'].includes(d.mode);
-    const received = purchase?.quantity || (needsQuote ? cryptoInput(d.received, d.mode === 'redeem' ? 2 : 18) : amount);
+    const received = purchase?.quantity || (needsQuote ? cryptoInput(d.received, d.mode === 'redeem' ? 2 : 18) : d.mode === 'transfer' ? cryptoInput(d.received || new LedgerDecimal(amount).minus(fee).toFixed()) : amount);
     if (!d.toAccount || (d.mode !== 'opening' && !d.fromAccount)) throw Error('请选择转出和转入账户');
     if (d.mode !== 'redeem' && !d.toCoin || !['opening', 'cash'].includes(d.mode) && !d.fromCoin) throw Error('请选择币种');
     if (d.mode === 'transfer' && d.fromAccount === d.toAccount) throw Error('请选择另一个转入账户');
     if (d.mode === 'coin' && d.fromCoin === d.toCoin) throw Error('请选择不同币种；同币种请使用转移');
+    if (d.mode === 'transfer' && !new LedgerDecimal(received).plus(fee).eq(amount)) throw Error('总扣除数量必须等于实际到账数量加手续费');
     // Only a matching, unexpired observation can establish a historical reference FX.
-    const observed = needsQuote && quote && quote.expiresAt > now && quote.observedAt <= now + 5 &&
+    const observed = needsQuote && Math.abs(occurredAt-now) <= 120 && quote && quote.expiresAt > now && quote.observedAt <= now + 5 &&
         quote.fromInstrumentId === (d.mode === 'cash' ? '' : d.fromCoin) &&
         quote.toInstrumentId === (d.mode === 'redeem' ? '' : d.toCoin) &&
         new LedgerDecimal(quote.fromQuantity).eq(amount) ? quote : undefined;
@@ -66,12 +76,12 @@ export function buildCryptoEvent(d: CryptoDraft, quote: InvestmentConversion | u
         id: '', type: d.mode === 'opening' ? 'OPENING' : d.mode === 'transfer' ? 'TRANSFER' : d.mode === 'redeem' ? 'SELL' : 'BUY',
         accountId: outgoing ? d.fromAccount : d.toAccount, instrumentId: outgoing ? d.fromCoin : d.toCoin,
         toAccountId: d.mode === 'transfer' ? d.toAccount : '', bookId: d.bookId,
-        quantity: ['opening', 'redeem', 'transfer'].includes(d.mode) ? amount : received,
-        amount: d.mode === 'redeem' ? received : d.mode === 'cash' || needsQuote ? amount : '0', fee: '0', cost: null,
+        quantity: ['opening', 'redeem'].includes(d.mode) ? amount : received,
+        amount: d.mode === 'redeem' ? received : d.mode === 'cash' || needsQuote ? amount : '0', fee, cost,
         settlementInstrumentId: d.mode === 'coin' ? d.fromCoin : '', settlementAccountId: d.mode === 'coin' ? d.fromAccount : '',
         cashAccountId: d.mode === 'cash' ? d.fromAccount : d.mode === 'redeem' ? d.toAccount : '',
-        exchangeRate: d.mode === 'coin' ? observed?.fromPrice || '' : d.mode === 'transfer' ? '' : '1',
-        occurredAt: now, note: d.note.trim(), version: 0, voided: false,
-        ...(observed ? { conversion: observed } : {})
+        exchangeRate: d.mode === 'coin' ? d.exchangeRate?.trim() ? cryptoInput(d.exchangeRate) : observed?.fromPrice || '' : d.mode === 'transfer' ? '' : '1',
+        occurredAt, note: d.note.trim(), version: 0, voided: false,
+        ...(observed && !d.exchangeRate?.trim() ? { conversion: observed } : {})
     };
 }

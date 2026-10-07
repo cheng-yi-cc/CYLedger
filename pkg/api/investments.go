@@ -7,6 +7,7 @@ import (
 	"github.com/mayswind/ezbookkeeping/pkg/models"
 	"github.com/mayswind/ezbookkeeping/pkg/services"
 	"net/http"
+	"strings"
 )
 
 type InvestmentsApi struct{}
@@ -232,6 +233,13 @@ func (a *InvestmentsApi) SyncPlans(c *core.WebContext) (any, *errs.Error) {
 	return investmentResponse(services.Investments.SyncInvestmentPlans(c, c.GetCurrentUid(), input.Force))
 }
 func (a *InvestmentsApi) Report(c *core.WebContext) (any, *errs.Error) {
+	if c.Query("assetScope") == "1" {
+		var books []string
+		if ids := c.Query("bookIds"); ids != "" {
+			books = strings.Split(ids, ",")
+		}
+		return investmentResponse(services.Investments.InvestmentReport(c, c.GetCurrentUid(), c.Query("accountId"), c.Query("instrumentId"), services.InvestmentReportScope{BookIds: books}))
+	}
 	return investmentResponse(services.Investments.InvestmentReport(c, c.GetCurrentUid(), c.Query("accountId"), c.Query("instrumentId")))
 }
 func (a *InvestmentsApi) UpdateHolding(c *core.WebContext) (any, *errs.Error) {

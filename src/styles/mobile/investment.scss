@@ -36,14 +36,14 @@
 .dark .cy-investment-page{--cy-bg:#151e27;--cy-card:#212c36;--cy-line:#303a43;--cy-muted:#97a1a7;--cy-ink:#d7dcdf;--f7-navbar-bg-color:var(--cy-card)}
 
 // 新增基金遵循参考页面的 50px 输入行、56px 设置行和 15px 卡片间距。
-.cy-fund-setup,.fund-overlay {
+[data-fund-setup="true"],.fund-overlay {
   --fund-bg:#f5f5f5;--fund-card:#fff;--fund-text:#333;--fund-hint:#999;--fund-accent:#399e8c;
   color:var(--fund-text);font-family:Roboto,"Noto Sans",Arial,sans-serif;
 }
-.dark .cy-fund-setup,.dark .fund-overlay {
+.dark [data-fund-setup="true"],.dark .fund-overlay {
   --fund-bg:#161c23;--fund-card:#232a32;--fund-text:#b8b8b8;--fund-hint:#999;--fund-accent:#63a994;
 }
-.cy-investment-page.cy-fund-setup {
+.cy-investment-page[data-fund-setup="true"] {
   --cy-bg:var(--fund-bg);--cy-card:var(--fund-card);--cy-ink:var(--fund-text);--cy-muted:var(--fund-hint);
   --f7-navbar-height:50px;--f7-navbar-bg-color:var(--fund-card);--f7-navbar-text-color:var(--fund-text);--f7-navbar-link-color:var(--fund-text);
   .navbar-inner {padding:0!important;gap:0!important;}
@@ -57,7 +57,7 @@
   .fund-card {margin:0 0 15px;background:var(--fund-card);border-radius:10px;}
   .fund-fields {position:relative;padding:0 15px;}
   .fund-field {display:flex;align-items:center;gap:15px;height:50px;position:relative;}
-  .fund-field>span {flex:0 0 62px;min-width:62px;text-align:right;white-space:nowrap;font-size:14px;}
+  .fund-field>span {flex:0 0 62px;min-width:62px;text-align:right;white-space:normal;line-height:1.35;font-size:14px;}
   .fund-field input {flex:1;min-width:0;width:100%;height:100%;margin:0;padding:0;border:0;background:none;color:var(--fund-text);text-align:left;font-size:14px;line-height:normal;outline:0;caret-color:var(--fund-accent);}
   .fund-field input::placeholder {font-size:14px;color:var(--fund-hint);opacity:1;}
   .fund-field:nth-last-child(2) input::placeholder {font-size:12px;}
@@ -80,9 +80,9 @@
   .fund-candidates button {display:flex;gap:12px;align-items:center;width:100%;padding:14px 10px;border:0;border-bottom:1px solid #8883;background:none;color:var(--fund-text);text-align:left;font:inherit;font-size:14px;}
   .fund-candidates button>span:first-child {white-space:nowrap;}
 }
-.dark .cy-fund-setup .fund-switch {background:#555e65;}
-.dark .cy-fund-setup .fund-switch:checked {background:#2e4144;}
-.dark .cy-fund-setup .fund-switch:before,.dark .cy-fund-setup .fund-switch:checked:before {background:#b8b8b8;}
+.dark [data-fund-setup="true"] .fund-switch {background:#555e65;}
+.dark [data-fund-setup="true"] .fund-switch:checked {background:#2e4144;}
+.dark [data-fund-setup="true"] .fund-switch:before,.dark [data-fund-setup="true"] .fund-switch:checked:before {background:#b8b8b8;}
 .fund-overlay {background:var(--fund-card);color:var(--fund-text);font-size:14px;}
 .fund-overlay button {border:0;background:none;padding:0;color:inherit;font:inherit;}
 .fund-group-sheet.sheet-modal,.fund-new-group-sheet.sheet-modal {height:auto;max-height:80dvh;border-radius:10px 10px 0 0!important;overflow:hidden;box-shadow:none!important;border:0!important;backdrop-filter:none!important;}

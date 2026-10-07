@@ -21,10 +21,11 @@
  </f7-page>
 </template>
 <script setup lang="ts">
+import {assetMoney as ledgerMoney} from '@/lib/asset-visibility.ts';
 import {computed,ref} from 'vue';
 import type {Router} from 'framework7/types';
 import {creditAccounts,type CreditReport} from '@/lib/credit-accounts.ts';
-import {LedgerDecimal,ledgerMoney,keepUpToDate} from '@/lib/mobile-ledger.ts';
+import {LedgerDecimal,keepUpToDate} from '@/lib/mobile-ledger.ts';
 import {investmentError} from '@/lib/investments.ts';
 import {useAccountsStore} from '@/stores/account.ts';
 import {useLedgerScopeStore} from '@/stores/ledgerScope.ts';

@@ -8,9 +8,9 @@
      <label v-if="mode==='opening'">持仓账户<select v-model="toAccount" required><option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option></select></label>
      <template v-else><label>{{ mode==='cash'?'付款账户':'转出账户' }}<select v-model="fromAccount" required><option disabled value="">选择账户</option><option v-for="a in mode==='cash'?cashAccounts:accounts" :key="a.id" :value="a.id">{{ a.name }}</option></select></label>
       <label v-if="mode!=='cash'">转出币种<select v-model="fromCoin" required><option disabled value="">暂无可转出持仓</option><option v-for="c in sourceCoins" :key="c.id" :value="c.id">{{ c.symbol }} · {{ c.name }}</option></select></label>
-      <div class="available"><span>可用 {{ available }} {{ mode==='cash'?'CNY':symbol(fromCoin) }}</span><button v-if="fromCoin && mode!=='cash'" type="button" @click="amount=available">全部</button></div>
+      <div class="available"><span>可用 {{ assetText(available) }} {{ mode==='cash'?'CNY':symbol(fromCoin) }}</span><button v-if="fromCoin && mode!=='cash'" type="button" @click="amount=available">全部</button></div>
      </template>
-     <label v-if="mode!=='cash'" class="amount-label">{{ mode==='opening'?'持有数量':`转出数量（${symbol(fromCoin)}）` }}<input v-model="amount" required inputmode="decimal" autocomplete="off" placeholder="0" aria-label="转出金额或数量" class="amount-input" /></label>
+     <label v-if="mode!=='cash'" class="amount-label">{{ mode==='opening'?'持有数量':`${mode==='transfer'?'总扣除数量':'转出数量'}（${symbol(fromCoin)}）` }}<input v-model="amount" required inputmode="decimal" autocomplete="off" placeholder="0" aria-label="转出金额或数量" class="amount-input" /></label>
     </section>
     <section class="cy-panel">
      <label v-if="mode!=='opening'">{{ mode==='redeem'?'收款账户':'转入账户' }}<select v-model="toAccount" required><option disabled value="">选择账户</option><option v-for="a in destinationAccounts" :key="a.id" :value="a.id">{{ a.name }}</option></select></label>
@@ -29,11 +29,20 @@
       <p v-if="quoteError" class="hint" role="status">行情暂不可用，仍可按实际成交记账。</p><p v-else-if="quote" class="hint">{{ quoteTime }} · 参考换算，可按实收修改。</p>
       <p v-if="mode==='coin' && !quote" class="hint">没有人民币参考汇率时，相关成本与盈亏保持未知。</p>
      </template>
-     <p v-else-if="mode==='transfer'" class="hint">到账 {{ amount || '0' }} {{ symbol(fromCoin) }}（无手续费转移）</p>
+     <template v-else-if="mode==='transfer'">
+      <label>实际到账（{{ symbol(fromCoin) }}）<input v-model="received" required inputmode="decimal" maxlength="60" aria-label="转移实际到账" @input="transferReceiptChanged" /></label>
+      <label>手续费（{{ symbol(fromCoin) }}）<input v-model="transferFee" inputmode="decimal" maxlength="60" aria-label="转移手续费" @input="transferFeeChanged" /></label>
+      <p class="hint">总扣除 = 实际到账 + 同币种手续费。费用随本次转移一起保存，成本按转移数量结转。</p>
+     </template>
      <details v-if="mode!=='transfer' && mode!=='redeem'" class="more-coins"><summary>查找其他币种</summary><CryptoCoinSearch :instruments="coins" @selected="addCoin" /></details>
     </section>
     <p v-if="emptyAccount" class="hint">{{ emptyAccount }} <f7-link :href="emptyAccountLink">添加账户</f7-link></p>
-    <section class="cy-panel"><label>备注<input v-model="note" maxlength="300" placeholder="可留空" /></label><p v-if="mode==='opening'" class="hint">已有持仓不扣资金账户；未录入成本时不计算盈亏。</p></section>
+    <section class="cy-panel">
+      <label>发生时间<input v-model="occurredAt" type="datetime-local" required aria-label="发生时间" /></label>
+      <label v-if="mode==='opening'">总成本（人民币，可留空）<input v-model="openingCost" inputmode="decimal" maxlength="60" placeholder="不知道时留空，不按零计算" aria-label="已有持仓总成本" /></label>
+      <label v-if="mode==='coin'">历史人民币单价（元 / {{ symbol(fromCoin) }}，可留空）<input v-model="historicalRate" inputmode="decimal" maxlength="60" placeholder="补记过去的交易时填实际历史换算" aria-label="历史人民币单价" /></label>
+      <p v-if="mode==='coin'" class="hint">补记历史交易不使用当前行情确立成本；没有历史换算时成本与盈亏保持未知。</p>
+      <label>备注<input v-model="note" maxlength="300" placeholder="可留空" /></label><p v-if="mode==='opening'" class="hint">已有持仓不扣资金账户；未录入成本时不计算盈亏。</p></section>
    </fieldset><p v-if="error" ref="errorElement" class="error" role="alert">{{ error }}</p><button class="primary" :disabled="busy || !initialized || !!emptyAccount">{{ busy?'正在保存…':'保存记账' }}</button></form>
   </main>
  </f7-page>
@@ -46,6 +55,7 @@ import moment from 'moment-timezone';
 import { investments, investmentError } from '@/lib/investments.ts';
 import { isCryptoAccount } from '@/lib/crypto-platforms.ts';
 import { LedgerDecimal } from '@/lib/ledger-display.ts';
+import {assetText} from '@/lib/asset-visibility.ts';
 import { cryptoInput, heldCryptoCoins, defaultCryptoCoin, receivedAfterQuote, calculateCashPurchase, buildCryptoEvent, type CryptoMode, type CashEntryMode } from '@/lib/crypto-entry.ts';
 import { generateRandomUUID } from '@/lib/misc.ts';
 import { useBooksStore } from '@/stores/books.ts';
@@ -59,6 +69,7 @@ const title=computed(()=>({cash:'人民币买币',coin:'币币兑换',redeem:'�
 const needsQuote=computed(()=>['coin','redeem'].includes(mode.value));
 const accounts=ref<InvestmentAccount[]>([]), coins=ref<Instrument[]>([]), summary=ref<WealthSummary>();
 const fromAccount=ref(''), toAccount=ref(''), fromCoin=ref(''), toCoin=ref('crypto:tether'), amount=ref(''), received=ref(''), bookId=ref(''), note=ref(''), zone=ref('Asia/Shanghai');
+const occurredAt=ref(''),openingCost=ref(''),transferFee=ref('0'),historicalRate=ref('');
 const cashEntryMode=ref<CashEntryMode>('amount'),buyPrice=ref('');
 const cashPurchase=computed(()=>{if(mode.value!=='cash')return undefined;try{return calculateCashPurchase(cashEntryMode.value,amount.value,received.value,buyPrice.value);}catch{return undefined;}});
 const quote=ref<InvestmentConversion>(), receivedEdited=ref(false), busy=ref(false), quoteLoading=ref(false), error=ref(''), loadError=ref(''), quoteError=ref(''), errorElement=ref<HTMLElement>(), initialized=ref(false);
@@ -81,7 +92,7 @@ async function load():Promise<void> {
   const [a,c,s,t]=await Promise.all([investments.accounts(),investments.instruments(),investments.summary(),investments.settings(),books.loadBooks()]);
   accounts.value=a.filter(x=>isCryptoAccount(x.kind)); coins.value=c.filter(x=>x.type==='CRYPTO'); summary.value=s; zone.value=t.timeZone || zone.value;
   if(!initialized.value){
-   bookId.value=books.defaultBookId;
+   bookId.value=books.defaultBookId;occurredAt.value=moment().tz(zone.value).format('YYYY-MM-DDTHH:mm');
    const id=props.f7route.query['accountId'] || accounts.value[0]?.id || '', instrument=props.f7route.query['instrumentId'] || '';
    fromAccount.value=mode.value==='cash'?cashAccounts.value[0]?.id || '':id;
    fromCoin.value=defaultCryptoCoin(heldCryptoCoins(coins.value,s.positions,id),['redeem','transfer'].includes(mode.value)?instrument:'');
@@ -101,13 +112,16 @@ watch(fromAccount,()=>{
 });
 watch([amount,fromCoin,toCoin,fromAccount,toAccount],()=>{
  quote.value=undefined; quoteError.value=''; sequence++; quoteLoading.value=false; clearTimeout(timer);
- if(mode.value!=='cash'&&!receivedEdited.value)received.value='';
+ if(!['cash','transfer'].includes(mode.value)&&!receivedEdited.value)received.value='';
+ if(mode.value==='transfer')transferFeeChanged();
  if(mode.value==='transfer'&&toCoin.value!==fromCoin.value)toCoin.value=fromCoin.value;
  if(mode.value==='coin'&&toCoin.value===fromCoin.value)toCoin.value=targetCoins.value[0]?.id || '';
  try { cryptoInput(amount.value,mode.value==='cash'?2:18); if(active&&needsQuote.value)timer=setTimeout(()=>void refreshQuote(),650); } catch { /* Wait for a complete input before requesting a quote. */ }
 });
-watch([fromCoin,toCoin],()=>{receivedEdited.value=false; received.value='';});
+watch([fromCoin,toCoin],()=>{receivedEdited.value=false; received.value='';if(mode.value==='transfer')transferFeeChanged();});
 watch(toCoin,()=>{buyPrice.value='';});
+function transferFeeChanged():void{try{received.value=new LedgerDecimal(amount.value||'0').minus(transferFee.value||'0').toFixed();}catch{received.value='';}}
+function transferReceiptChanged():void{try{transferFee.value=new LedgerDecimal(amount.value||'0').minus(received.value||'0').toFixed();}catch{transferFee.value='';}}
 async function refreshQuote():Promise<void> {
  clearTimeout(timer); const version=++sequence; quote.value=undefined; quoteError.value='';
  if(!needsQuote.value || !amount.value || busy.value)return;
@@ -121,12 +135,13 @@ async function refreshQuote():Promise<void> {
 async function save():Promise<void> {
  if(busy.value || !initialized.value)return; busy.value=true; error.value=''; clearTimeout(timer); sequence++; quoteLoading.value=false;
  try {
-  const draft={mode:mode.value,fromAccount:fromAccount.value,toAccount:toAccount.value,fromCoin:fromCoin.value,toCoin:toCoin.value,amount:amount.value,received:received.value,bookId:bookId.value,note:note.value,cashEntryMode:cashEntryMode.value,buyPrice:buyPrice.value};
+  const date=moment.tz(occurredAt.value,'YYYY-MM-DDTHH:mm',true,zone.value);if(!date.isValid())throw Error('请选择有效发生时间');
+  const draft={cost:openingCost.value,fee:transferFee.value,occurredAt:date.unix(),exchangeRate:historicalRate.value,mode:mode.value,fromAccount:fromAccount.value,toAccount:toAccount.value,fromCoin:fromCoin.value,toCoin:toCoin.value,amount:amount.value,received:received.value,bookId:bookId.value,note:note.value,cashEntryMode:cashEntryMode.value,buyPrice:buyPrice.value};
   const signature=JSON.stringify(draft);
   if(!pending || signature!==pendingSignature){
    pending=buildCryptoEvent(draft,quote.value,Math.floor(Date.now()/1000)); pendingSignature=signature; requestKey=generateRandomUUID();
   }
-  if(mode.value!=='opening' && new LedgerDecimal(pending.type==='BUY'?pending.amount:pending.quantity).gt(available.value))throw Error('转出金额或数量超过当前可用余额');
+  if(mode.value!=='opening' && new LedgerDecimal(pending.type==='BUY'?pending.amount:pending.type==='TRANSFER'?new LedgerDecimal(pending.quantity).plus(pending.fee).toFixed():pending.quantity).gt(available.value))throw Error('转出金额或数量超过当前可用余额');
   await investments.saveEvent(pending,requestKey);
   useTransactionsStore().updateStoreInvalidState({transactionList:true,accountList:true,overview:true,statistics:true,explorer:true,reconciliationStatement:true});
   if(active){f7.toast.create({text:'已保存记账',closeTimeout:1800}).open();props.f7router.back();}

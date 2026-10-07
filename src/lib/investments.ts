@@ -25,7 +25,7 @@ export const investments = {
     confirmOrder:(data:{id:string;version:number;price:string;date:string})=>request<InvestmentPreview>('post','investments/orders/confirm',data),
     cancelOrder:(data:{id:string;version:number})=>request<boolean>('post','investments/orders/cancel',data),
     syncPlans:(force=false)=>request<{created:number;pending:number}>('post','investments/plans/sync',{force},undefined,120000),
-    report:(accountId='',instrumentId='')=>request<InvestmentReport>('get',`investments/report?${new URLSearchParams({accountId,instrumentId})}`),
+    report:(accountId='',instrumentId='',bookIds?:string[])=>request<InvestmentReport>('get',`investments/report?${new URLSearchParams({accountId,instrumentId,...(bookIds?{assetScope:'1',bookIds:bookIds.join(',')}:{})})}`),
     previewAccountDeletion: (target: AccountDeletionTarget) => request<AccountDeletionPreview>('post', 'wealth/accounts/delete/preview', target),
     deleteAccount: (target: AccountDeletionTarget, token: string, deleteRelated: boolean) => request<AccountDeletionPreview>('post', 'wealth/accounts/delete', { ...target, token, deleteRelated }),
     accounts: () => request<InvestmentAccount[]>('get', 'investments/accounts'),

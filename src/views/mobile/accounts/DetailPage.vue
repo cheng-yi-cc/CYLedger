@@ -16,13 +16,14 @@
     </f7-page>
 </template>
 <script setup lang="ts">
+import {assetMoney as ledgerMoney} from '@/lib/asset-visibility.ts';
 import {computed,ref} from 'vue';
 import {f7} from 'framework7-vue';
 import {investmentError} from '@/lib/investments.ts';
 import type {Router} from 'framework7/types';
 import {useAccountsStore} from '@/stores/account.ts';
 import {useLedgerScopeStore} from '@/stores/ledgerScope.ts';
-import {LedgerDecimal,ledgerMoney,useMobileLedger} from '@/lib/mobile-ledger.ts';
+import {LedgerDecimal,useMobileLedger} from '@/lib/mobile-ledger.ts';
 import LedgerDayList from '@/components/mobile/LedgerDayList.vue';
 import AccountOptionsMenu from '@/components/mobile/AccountOptionsMenu.vue';
 import AssetBalanceSheet from '@/components/mobile/AssetBalanceSheet.vue';

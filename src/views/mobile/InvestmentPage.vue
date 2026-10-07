@@ -44,6 +44,8 @@
 </template>
 <script setup lang="ts">
 import { computed, ref, onUnmounted, watch } from 'vue';
+import {assetAmountsVisible as visible} from '@/lib/asset-visibility.ts';
+import {holdingInBooks} from '@/lib/investment-scope.ts';
 import { walletCurrency, walletValue } from '@/lib/wallet-entry.ts';
 import {monetaryIncome,monetaryIncomeRevision,type MonetaryBinding} from '@/lib/monetary-income.ts';
 import {createValuationRefresh} from '@/lib/valuation-refresh.ts';
@@ -63,11 +65,12 @@ import {useBooksStore} from '@/stores/books.ts';
 const accounts = useAccountsStore();
 const preferences=useAssetToolsStore(),books=useBooksStore();
 const assetMenu=[{tool:'search',name:'搜索账户',icon:'search'},{tool:'reminders',name:'还款提醒',icon:'calendar_badge_plus'},{tool:'books',name:'生效账本',icon:'book'},{tool:'deposits',name:'定期存款',icon:'lock'},{tool:'hidden',name:'资产隐藏',icon:'eye_slash'},{tool:'distribution',name:'资产分布',icon:'chart_pie'},{tool:'more',name:'更多数据',icon:'ellipsis'}];
-const presentedItems=computed(()=>assetItems(summary.value,investmentAccounts.value,accounts.allAccountsMap,preferences.preferences,books.selectedBookIds).filter(a=>!a.hidden&&(!books.selectedBookIds.length||books.selectedBookIds.some(id=>preferences.available(a.portfolio?'portfolio':'cash',a.id,id)))));
+const scopedItems=computed(()=>assetItems(summary.value,investmentAccounts.value,accounts.allAccountsMap,preferences.preferences,books.selectedBookIds).filter(a=>!books.selectedBookIds.length||books.selectedBookIds.some(id=>preferences.available(a.portfolio?'portfolio':'cash',a.id,id))));
+const presentedItems=computed(()=>scopedItems.value.filter(a=>!a.hidden));
 const shownKeys=computed(()=>new Set(presentedItems.value.map(a=>a.key)));
-const presentationTotals=computed(()=>assetTotals(presentedItems.value));
-const presentedValuedAssets=computed(()=>sum(presentedItems.value.filter(a=>a.value!=null&&!a.excluded).map(a=>a.value)));
-const visibleInvestmentPnl=computed(()=>sum(presentedItems.value.filter(a=>a.portfolio).map(a=>a.unrealizedPnl)));
+const presentationTotals=computed(()=>assetTotals(scopedItems.value));
+const presentedValuedAssets=computed(()=>sum(scopedItems.value.filter(a=>a.value!=null&&!a.excluded).map(a=>a.value)));
+const visibleInvestmentPnl=computed(()=>sum(scopedItems.value.filter(a=>a.portfolio&&!a.excluded).map(a=>a.unrealizedPnl)));
 
 const accountKinds: Record<string,string> = { EXCHANGE: '加密货币交易所', WALLET: '加密钱包', BROKER: '证券账户', OTHER: '其他' };
 const summary = ref<WealthSummary>();
@@ -75,7 +78,7 @@ const claims=ref<ReimbursementClaim[]>([]),monetary=ref<MonetaryBinding[]>([]);
 const investmentAccounts = ref<InvestmentAccount[]>([]);
 
 
-const loading = ref(true), error = ref(''), visible = ref(true);
+const loading = ref(true), error = ref('');
 const showMenu = ref(false), showAdd = ref(false);
 const showAccountActions = ref(false), deleting = ref(false);
 const selectedAccount = ref<AccountRow>();
@@ -117,7 +120,7 @@ function reimbursementValue(claim:ReimbursementClaim,value:string):string|null {
 const reimbursementPending=computed(()=>sum(visibleClaims.value.filter(c=>!c.closed).map(c=>reimbursementValue(c,c.pending))));
 const reimbursementPaid=computed(()=>sum(visibleClaims.value.map(c=>reimbursementValue(c,c.paid))));
 const payable = computed(() => debtTotal([5], true)), receivable = computed(() => debtTotal([6], false));
-const investmentTotal = computed(() => summary.value ? sum(presentedItems.value.filter(a=>a.portfolio||monetary.value.some(b=>b.accountId===a.id)||[7,9].includes(a.category)&&a.kind!=='secondhand').map(a=>a.value)) : null);
+const investmentTotal = computed(() => summary.value ? sum(scopedItems.value.filter(a=>!a.excluded&&(a.portfolio||monetary.value.some(b=>b.accountId===a.id)||[7,9].includes(a.category)&&a.kind!=='secondhand')).map(a=>a.value)) : null);
 interface AccountRow {
     id: string; name: string; currency: string; balance: string | null; value: string | null; icon: string; customIcon: boolean; color: string; category: number; href: string;
     platformIcon?: string; portfolio?: boolean; subtitle?: string; group?:string; excluded?:boolean; credit?: { available: string; limit: string; percent: number };
@@ -136,7 +139,7 @@ function cashRow(item: WealthCashAccount): AccountRow {
     return row;
 }
 const portfolios = computed<AccountRow[]>(() => investmentAccounts.value.map(account => {
-    const positions = summary.value?.positions.filter(position => position.accountId === account.id && new LedgerDecimal(position.quantity).gt(0) && (!position.profile?.bookIds.length||!books.selectedBookIds.length||position.profile.bookIds.some(id=>books.selectedBookIds.includes(id)))) || [];
+    const positions = summary.value?.positions.filter(position => position.accountId === account.id && new LedgerDecimal(position.quantity).gt(0) && holdingInBooks(position.profile||{accountId:position.accountId,bookIds:[]},preferences.preferences,books.selectedBookIds)) || [];
     const value = sum(positions.map(position => position.totalValue===undefined?position.marketValue:position.totalValue));
     return { id: account.id, name: account.name, balance: walletValue(positions,walletCurrency(account),summary.value), value, currency: walletCurrency(account), category: 7, icon: account.kind === 'EXCHANGE' ? '1500' : account.kind === 'WALLET' ? '1' : '801', customIcon: false, color: account.kind === 'EXCHANGE' ? '#bf82ca' : '', portfolio: true, platformIcon: platformIcon(account.platform, account.kind), subtitle: `${accountKinds[account.kind] || '其他'} · ${positions.length} 项持仓`, href: isCryptoAccount(account.kind) ? `/crypto/account?id=${encodeURIComponent(account.id)}` : `/investments/ledger?accountId=${encodeURIComponent(account.id)}` };
 }));

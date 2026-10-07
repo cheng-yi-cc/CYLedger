@@ -65,4 +65,27 @@ describe('crypto entry facts',()=>{
   expect(()=>buildCryptoEvent({...draft,mode:'transfer',fromAccount:'wallet',fromCoin:'crypto:bitcoin'},undefined,1000)).toThrow('另一个');
   expect(()=>buildCryptoEvent({...draft,mode:'coin',fromCoin:'crypto:bitcoin'},undefined,1000)).toThrow('不同币种');
  });
+ it('records known opening cost and historical time without inventing cost when omitted',()=>{
+  const d:CryptoDraft={...draft,mode:'opening',amount:'0.1',cost:'68000.25',occurredAt:500};
+  expect(buildCryptoEvent(d,quote,1000)).toMatchObject({type:'OPENING',quantity:'0.1',cost:'68000.25',occurredAt:500});
+  expect(buildCryptoEvent({...d,cost:''},quote,1000).cost).toBeNull();
+  expect(buildCryptoEvent({...d,cost:'0'},quote,1000).cost).toBe('0');
+  expect(()=>buildCryptoEvent({...d,cost:'-1'},undefined,1000)).toThrow();
+  expect(()=>buildCryptoEvent({...d,occurredAt:2000},undefined,1000)).toThrow('发生时间');
+ });
+ it('transfers actual receipt and network fee out of the entered total debit',()=>{
+  const d:CryptoDraft={...draft,mode:'transfer',fromAccount:'exchange',toAccount:'wallet',fromCoin:'crypto:bitcoin',toCoin:'crypto:bitcoin',amount:'0.1',received:'0.099',fee:'0.001'};
+  expect(buildCryptoEvent(d,undefined,1000)).toMatchObject({type:'TRANSFER',quantity:'0.099',fee:'0.001',amount:'0',cost:null});
+  expect(()=>buildCryptoEvent({...d,received:'0.1'},undefined,1000)).toThrow('总扣除');
+  expect(()=>buildCryptoEvent({...d,fee:'-1'},undefined,1000)).toThrow();
+  expect(buildCryptoEvent({...d,received:'',fee:'0'},undefined,1000).quantity).toBe('0.1');
+ });
+ it('never applies a live reference to a backdated coin trade',()=>{
+  const d:CryptoDraft={...draft,mode:'coin',fromCoin:'crypto:tether',occurredAt:500};
+  const current={...quote,fromInstrumentId:'crypto:tether',fromPrice:'7'};
+  const unknown=buildCryptoEvent(d,current,1000);
+  expect(unknown.exchangeRate).toBe('');expect(unknown.conversion).toBeUndefined();
+  const known=buildCryptoEvent({...d,exchangeRate:'6.5'},current,1000);
+  expect(known.exchangeRate).toBe('6.5');expect(known.conversion).toBeUndefined();
+ });
 });

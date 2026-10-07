@@ -9,6 +9,10 @@ import (
 	"time"
 )
 
+type InvestmentReportScope struct {
+	BookIds []string
+}
+
 type InvestmentReportItem struct {
 	Event  InvestmentEvent         `json:"event"`
 	Effect investments.EventEffect `json:"effect"`
@@ -25,7 +29,7 @@ type InvestmentReport struct {
 	TimeZone   string                  `json:"timeZone"`
 }
 
-func (s *InvestmentService) InvestmentReport(c core.Context, uid int64, account, instrument string) (*InvestmentReport, error) {
+func (s *InvestmentService) InvestmentReport(c core.Context, uid int64, account, instrument string, scopes ...InvestmentReportScope) (*InvestmentReport, error) {
 	if len(account) > 64 || len(instrument) > 64 {
 		return nil, investmentError("筛选条件无效")
 	}
@@ -49,12 +53,63 @@ func (s *InvestmentService) InvestmentReport(c core.Context, uid int64, account,
 		zone = "Asia/Shanghai"
 	}
 	result := &InvestmentReport{Items: []InvestmentReportItem{}, History: []InvestmentReportPoint{}, TimeZone: zone}
+	profiles := map[string]models.InvestmentHoldingProfile{}
+	var preferences *models.AssetPreferences
+	var bookIds []string
+	if len(scopes) > 0 {
+		bookIds = scopes[0].BookIds
+		if len(bookIds) > 100 {
+			return nil, investmentError("账本筛选过多")
+		}
+		for _, id := range bookIds {
+			if len(id) > 64 {
+				return nil, investmentError("账本筛选无效")
+			}
+		}
+		rows, err := s.HoldingProfiles(c, uid)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range rows {
+			profiles[p.AccountId+":"+p.InstrumentId] = p
+		}
+		preferences, err = s.AssetPreferences(c, uid)
+		if err != nil {
+			return nil, err
+		}
+	}
 	byID := map[string]investments.EventEffect{}
 	for _, e := range replayed.Effects {
 		byID[e.EventID] = e
 	}
 	matches := func(a, i string) bool {
-		return (account == "" || a == account) && (instrument == "" || i == instrument)
+		if (account != "" && a != account) || (instrument != "" && i != instrument) {
+			return false
+		}
+		if len(scopes) == 0 {
+			return true
+		}
+		p := profiles[a+":"+i]
+		if p.ExcludeFromTotal {
+			return false
+		}
+		if len(bookIds) == 0 {
+			return true
+		}
+		contains := func(ids []string, value string) bool {
+			for _, id := range ids {
+				if id == value {
+					return true
+				}
+			}
+			return false
+		}
+		for _, book := range bookIds {
+			if (len(p.BookIds) == 0 || contains(p.BookIds, book)) && !contains(preferences.Rules["portfolio:"+a].DisabledBooks, book) {
+				return true
+			}
+		}
+		return false
 	}
 	for _, e := range events {
 		if e.Voided {

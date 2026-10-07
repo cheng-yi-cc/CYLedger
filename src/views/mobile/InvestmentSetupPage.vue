@@ -1,11 +1,22 @@
 <template>
-  <f7-page class="cy-mobile-surface cy-investment-page" :class="{'cy-fund-setup':type==='FUND'}" @page:beforein="start" @page:afterin="focusName">
+  <f7-page class="cy-mobile-surface cy-investment-page" :data-fund-setup="type==='FUND'?'true':undefined" @page:beforein="start" @page:afterin="focusName">
     <f7-navbar v-if="type==='FUND'" :title="title"><f7-nav-left><f7-link :aria-label="editing?'取消编辑基金':'取消新增基金'" @click="f7router.back()"><svg class="fund-nav-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18" /></svg></f7-link></f7-nav-left><f7-nav-right><f7-link :disabled="busy||loading||searching" aria-label="保存基金" @click="save"><f7-preloader v-if="busy" /><svg v-else class="fund-nav-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 4 4 9-8" /></svg></f7-link></f7-nav-right></f7-navbar>
-    <f7-navbar v-else :title="title" back-link="理财"><f7-nav-right v-if="!['CRYPTO','MONETARY'].includes(type)"><f7-link :disabled="busy||loading" aria-label="保存理财" @click="save"><f7-preloader v-if="busy" /><f7-icon v-else f7="checkmark" /></f7-link></f7-nav-right></f7-navbar>
+    <f7-navbar v-else :title="title" back-link="理财"><f7-nav-right v-if="editing||!['CRYPTO','MONETARY'].includes(type)"><f7-link :disabled="busy||loading" aria-label="保存理财" @click="save"><f7-preloader v-if="busy" /><f7-icon v-else f7="checkmark" /></f7-link></f7-nav-right></f7-navbar>
     <main class="inv-body">
       <p v-if="error" class="cy-message" role="alert">{{ error }} <button v-if="type==='FUND'&&searchFailed" type="button" class="inv-link" @click="searchLater(searchField==='code'?symbol:name,searchField)">重试查询</button></p>
+      <section v-if="!loading&&!['MONETARY'].includes(type)&&(type!=='CRYPTO'||editing)" class="inv-card inv-form">
+        <label class="inv-row"><span>所属投资账户</span><select v-model="profile.accountId" :disabled="editing" aria-label="所属投资账户"><option value="">新建投资账户</option><option v-for="a in accountChoices" :key="a.id" :value="a.id">{{ a.name }}</option></select></label>
+        <label v-if="!profile.accountId" class="inv-row"><span>新账户名称</span><input ref="accountNameInput" v-model="accountName" maxlength="64" placeholder="例如支付宝、招商证券" aria-label="新账户名称" /></label>
+        <p class="inv-caption">账户代表持仓所在的平台；同一产品可以分别记在不同账户。</p>
+        <label v-if="!editing" class="inv-row"><span>记录方式</span><select v-model="entryMode" aria-label="记录方式"><option value="opening">录入已有持仓</option><option value="buy">记录一笔买入</option></select></label>
+        <template v-if="!editing&&market">
+          <label class="inv-row"><span>手动记录（未绑定行情）</span><input v-model="manual" type="checkbox" aria-label="手动记录" @change="manualChanged" /></label>
+          <p v-if="manual" class="inv-caption">只保存您填写的名称、代码与事实，不猜测基金身份。以后可在理财管理中绑定行情。</p>
+          <label v-if="manual" class="inv-row"><span>手动参考价（CNY）</span><input v-model="manualPrice" inputmode="decimal" maxlength="80" placeholder="可留空，估值保持未知" aria-label="手动参考价格" /></label>
+        </template>
+      </section>
       <p v-if="loading" class="cy-empty">正在加载…</p>
-      <template v-else-if="type==='CRYPTO'">
+      <template v-else-if="type==='CRYPTO'&&!editing">
         <section class="inv-card"><f7-link href="/crypto/add?kind=EXCHANGE" class="inv-list-button">加密货币交易所<f7-icon f7="chevron_right" /></f7-link><f7-link href="/crypto/add?kind=WALLET" class="inv-list-button">加密钱包<f7-icon f7="chevron_right" /></f7-link></section>
         <section v-if="cryptoAccounts.length" class="inv-card"><p class="inv-muted">录入到已有账户</p><f7-link v-for="a in cryptoAccounts" :key="a.id" :href="`/crypto/convert?mode=opening&accountId=${a.id}`" class="inv-list-button">{{ a.name }}<f7-icon f7="chevron_right" /></f7-link></section>
       </template>
@@ -16,32 +27,35 @@
       </template>
       <form v-else-if="type==='FUND'" class="fund-form" @submit.prevent="save">
         <section class="fund-card fund-fields" @keydown.enter.prevent="nextFundField">
-          <label class="fund-field"><span>基金名称</span><input ref="nameInput" v-model="name" maxlength="64" placeholder="输入名称进行查询" aria-label="基金名称" autocomplete="off" enterkeyhint="next" @input="nameChanged" /></label>
-          <label class="fund-field"><span>基金代码</span><input v-model="symbol" maxlength="6" placeholder="输入代码进行查询" aria-label="基金代码" inputmode="numeric" autocomplete="off" :disabled="editing" enterkeyhint="next" @input="searchLater(symbol,'code')" /><f7-preloader v-if="searching" class="fund-query-loading" /></label>
+          <label class="fund-field"><span>基金名称</span><input ref="nameInput" v-model="name" maxlength="64" :placeholder="manual?'填写基金名称':'输入名称进行查询'" aria-label="基金名称" autocomplete="off" enterkeyhint="next" @input="nameChanged" /></label>
+          <label class="fund-field"><span>基金代码</span><input v-model="symbol" maxlength="6" :placeholder="manual?'填写已知基金代码':'输入代码进行查询'" aria-label="基金代码" inputmode="numeric" autocomplete="off" :disabled="editing" enterkeyhint="next" @input="searchLater(symbol,'code')" /><f7-preloader v-if="searching" class="fund-query-loading" /></label>
           <div v-if="candidates.length" class="fund-candidates" :class="{'fund-candidates-name':searchField==='name'}"><button v-for="candidate in candidates" :key="candidate.provider+candidate.providerId" type="button" @click="choose(candidate)"><span>{{ candidate.symbol }}</span><span>{{ candidate.name }}</span></button></div>
-          <label class="fund-field"><span>持仓成本</span><input v-model="unitCost" inputmode="decimal" maxlength="80" placeholder="请输入每份额的持仓成本价" aria-label="持仓成本" enterkeyhint="next" /></label>
+          <label v-if="editing||entryMode==='opening'" class="fund-field"><span>每份成本价（元）</span><input v-model="unitCost" inputmode="decimal" maxlength="80" placeholder="请输入每份额的持仓成本价" aria-label="每份成本价" enterkeyhint="next" /></label>
           <label class="fund-field"><span>持仓份额</span><input v-model="quantity" inputmode="decimal" maxlength="80" placeholder="请输入持仓份额" aria-label="持仓份额" enterkeyhint="next" /></label>
-          <label class="fund-field"><span>盈亏偏差</span><input v-model="profile.profitOffset" inputmode="decimal" maxlength="80" placeholder="默认为0，当持有收益存在偏差时设置" aria-label="盈亏偏差" enterkeyhint="next" /></label>
+
           <label class="fund-field"><span>备注</span><input v-model="profile.note" maxlength="300" placeholder="请输入备注" aria-label="备注" enterkeyhint="done" /></label>
         </section>
+        <InvestmentInitialTransaction :buy="!editing&&entryMode==='buy'" :editing="editing" :cash-accounts="purchaseCash" v-model:cash-account-id="cashAccountId" v-model:payment="payment" v-model:fee="purchaseFee" v-model:exchange-rate="exchangeRate" v-model:date="date" v-model:book-id="bookId" />
         <section class="fund-card fund-options">
           <button class="fund-option" type="button" @click="openGroups"><span>所属分组</span><span class="fund-option-value">{{ profile.group }}<f7-icon f7="chevron_right" /></span></button>
           <label class="fund-option"><span>计入总资产</span><input class="fund-switch" type="checkbox" role="switch" :checked="!profile.excludeFromTotal" aria-label="计入总资产" @change="profile.excludeFromTotal=!($event.target as HTMLInputElement).checked" /></label>
           <label class="fund-option"><span>盈亏计入总资产</span><input class="fund-switch" type="checkbox" role="switch" :checked="!profile.excludeProfit" aria-label="盈亏计入总资产" @change="profile.excludeProfit=!($event.target as HTMLInputElement).checked" /></label>
-          <button class="fund-option" type="button" @click="openBooks"><span>选择生效账本<small>账户仅显示在指定账本</small></span><span class="fund-option-value"><span>{{ selectedBookNames }}</span><f7-icon f7="chevron_right" /></span></button>
+          <button class="fund-option" type="button" @click="openBooks"><span>选择生效账本<small>持仓仅在指定账本生效</small></span><span class="fund-option-value"><span>{{ selectedBookNames }}</span><f7-icon f7="chevron_right" /></span></button>
         </section>
-        <p class="fund-tip">提示：<br />盈亏偏差：部分平台会将分红或手续费计入盈亏，设置该数值使累计盈亏与三方平台相同<br />初次创建理财账户不会生成交易记录，如要生成，可将持仓份额设为0，再添加买入卖出记录</p>
+        <details v-if="editing" class="inv-card inv-details"><summary>对账修正</summary><label class="inv-row"><span>累计收益显示修正（元）</span><input v-model="profile.profitOffset" inputmode="decimal" maxlength="80" aria-label="累计收益显示修正" /></label><p>仅修正显示，不改变真实收益、成本、现金或收益曲线。请先核对交易、费用和分红。</p></details>
+        <p class="fund-tip">{{ editing?'修改份额或成本会留下持仓校准记录。':entryMode==='buy'?'成交份额与实付金额将一起记账。':'已有持仓不扣付款账户；成本留空时保持未知。' }}</p>
       </form>
       <form v-else @submit.prevent="save">
         <section class="inv-card inv-form">
           <label class="inv-row"><span>{{ type==='FUND'?'基金名称':'理财名称' }}</span><input v-model="name" maxlength="64" :placeholder="searchable?'输入名称进行查询':'输入理财名称'" aria-label="理财名称" @input="nameChanged" /></label>
           <label v-if="type!=='OTHER'" class="inv-row"><span>{{ type==='FUND'?'基金代码':'资产代码' }}</span><input v-model="symbol" maxlength="24" placeholder="输入代码进行查询" aria-label="资产代码" :disabled="editing" @input="searchLater(symbol)" /></label>
           <label class="inv-row"><span>{{ type==='OTHER'?'持有金额':'持有份额' }}</span><input v-model="quantity" inputmode="decimal" :placeholder="type==='OTHER'?'输入持有金额':'没有持仓可填0'" aria-label="持有份额" /></label>
-          <label v-if="type!=='OTHER'" class="inv-row"><span>持仓成本价</span><input v-model="unitCost" inputmode="decimal" placeholder="每份人民币成本，可留空" aria-label="持仓成本价" /></label>
-          <label class="inv-row"><span>盈亏偏差</span><input v-model="profile.profitOffset" inputmode="decimal" placeholder="默认0，可填负数" aria-label="盈亏偏差" /></label>
+          <label v-if="type!=='OTHER'&&(editing||entryMode==='opening')" class="inv-row"><span>每份成本价（元）</span><input v-model="unitCost" inputmode="decimal" placeholder="每份人民币成本，可留空" aria-label="持仓成本价" /></label>
+
           <label class="inv-row"><span>备注</span><input v-model="profile.note" maxlength="300" placeholder="输入备注" aria-label="备注" /></label>
         </section>
         <section v-if="searching||candidates.length" class="inv-card inv-results"><p v-if="searching" class="inv-muted">正在查询…</p><button v-for="candidate in candidates" :key="candidate.provider+candidate.providerId" type="button" @click="choose(candidate)"><strong>{{ candidate.name }}</strong><small>{{ candidate.symbol }} · {{ candidate.market }} · {{ candidate.currency }}</small></button></section>
+        <InvestmentInitialTransaction :buy="!editing&&entryMode==='buy'" :editing="editing" :cash-accounts="purchaseCash" v-model:cash-account-id="cashAccountId" v-model:payment="payment" v-model:fee="purchaseFee" v-model:exchange-rate="exchangeRate" v-model:date="date" v-model:book-id="bookId" />
         <p v-if="selected" class="inv-caption">已选择 {{ selected.name }} · {{ selected.symbol }} · {{ selected.market }} · {{ selected.currency }}</p>
         <section class="inv-card inv-form">
           <label class="inv-row"><span>所属分组</span><input v-model="profile.group" list="investment-groups" maxlength="32" placeholder="输入或选择分组" aria-label="所属分组" /></label>
@@ -51,15 +65,12 @@
           <button class="inv-list-button" type="button" @click="showBooks=!showBooks"><span>选择生效账本</span><span class="inv-muted">{{ profile.bookIds.length?`已选${profile.bookIds.length}个`:'全部账本' }} <f7-icon f7="chevron_down" /></span></button>
           <template v-if="showBooks"><label v-for="book in books.allBooks" :key="book.id" class="inv-row"><span>{{ book.name }}</span><input v-model="profile.bookIds" type="checkbox" :value="book.id" /></label></template>
         </section>
-        <details class="inv-card inv-details"><summary>更多设置</summary>
-          <label v-if="!editing" class="inv-row"><span>所属投资账户</span><select v-model="profile.accountId" aria-label="所属投资账户"><option value="">单独建立本项理财</option><option v-for="a in accounts.filter(a=>!['EXCHANGE','WALLET'].includes(a.kind))" :key="a.id" :value="a.id">{{ a.name }}</option></select></label>
-          <label class="inv-row"><span>{{ editing?'校准日期':'持仓日期' }}</span><input v-model="date" type="datetime-local" required aria-label="持仓日期" /></label>
-          <div class="inv-row"><span>记入账本</span><BookPicker v-model="bookId" compact /></div>
-          <label v-if="!editing&&!selected&&type!=='OTHER'" class="inv-row"><span>手动参考价格</span><input v-model="manualPrice" inputmode="decimal" placeholder="每份人民币价格，可留空" aria-label="手动参考价格" /></label>
-          <label v-if="!editing&&searchable" class="inv-row"><span>使用手动估值</span><input v-model="manual" type="checkbox" /></label>
-          <p>成本按人民币填写；留空保留为未知。盈亏偏差只调整累计收益的显示，不修改余额。关闭“盈亏计入总资产”时，该项按剩余成本计入。</p>
+        <details class="inv-card inv-details"><summary>{{ editing?'对账修正':'估值设置' }}</summary>
+          <label v-if="editing" class="inv-row"><span>累计收益显示修正（元）</span><input v-model="profile.profitOffset" inputmode="decimal" maxlength="80" aria-label="累计收益显示修正" /></label>
+          <label v-if="!editing&&!market&&type!=='OTHER'" class="inv-row"><span>手动参考价格（元）</span><input v-model="manualPrice" inputmode="decimal" placeholder="可留空" /></label>
+          <p>成本按人民币填写，留空保持未知。累计收益显示修正不改变真实盈亏、现金或历史曲线。关闭“盈亏计入总资产”时，按剩余成本计入。</p>
         </details>
-        <p class="inv-caption">{{ editing?'修改份额或成本会保存一笔持仓校准记录，可在流水中查看和撤销。':'已有持仓不会扣付款账户。想记录一次真实买入，可先填0份，再从详情页买入。' }}</p>
+        <p class="inv-caption">{{ editing?'修改份额或成本会保存一笔持仓校准记录，可在流水中查看和撤销。':'录入已有持仓不扣款；记录买入时按实际支付扣款。' }}</p>
         <button class="inv-save" :disabled="busy||searching">{{ busy?'正在保存…':'保存' }}</button>
       </form>
     </main>
@@ -87,15 +98,18 @@ import {investments,investmentError} from '@/lib/investments.ts';
 import {blankHolding,useInvestmentData,investmentGroup,validInvestmentNumber,invalidateInvestmentData} from '@/lib/investment-mobile.ts';
 import {LedgerDecimal,ledgerMoney} from '@/lib/ledger-display.ts';
 import {generateRandomUUID} from '@/lib/misc.ts';
-import BookPicker from '@/components/mobile/BookPicker.vue';
+import InvestmentInitialTransaction from '@/components/mobile/InvestmentInitialTransaction.vue';
 import type {Instrument,InstrumentCandidate,HoldingSetup} from '@/models/investment.ts';
 const props=defineProps<{f7route:Router.Route;f7router:Router.Router}>();
-const {wealth,accounts,rows,books,loading,error,zone,load}=useInvestmentData();
+const {wealth,accounts,rows,books,loading,error,ready,zone,load}=useInvestmentData();
 const type=ref(props.f7route.query['type']||'FUND'),editing=!!props.f7route.query['instrumentId'];
 const profile=ref(blankHolding(props.f7route.query['accountId']||'',props.f7route.query['instrumentId']||''));
 const name=ref(''),symbol=ref(''),quantity=ref(''),unitCost=ref(''),manualPrice=ref(''),manual=ref(false),date=ref(''),bookId=ref(''),busy=ref(false),showBooks=ref(false),searching=ref(false);
+const entryMode=ref<'opening'|'buy'>('opening'),accountName=ref(''),cashAccountId=ref(''),payment=ref(''),purchaseFee=ref('0'),exchangeRate=ref('1');
+const purchaseCash=computed(()=>wealth.value?.cashAccounts||[]),cashCurrency=computed(()=>purchaseCash.value.find(a=>a.id===cashAccountId.value)?.currency||'CNY');
+const accountChoices=computed(()=>accounts.value.filter(a=>editing||!['EXCHANGE','WALLET'].includes(a.kind)));
 const selected=ref<InstrumentCandidate>(),candidates=ref<InstrumentCandidate[]>([]),asset=ref<Instrument>();
-const nameInput=ref<HTMLInputElement>(),groupInput=ref<HTMLInputElement>(),searchField=ref<'name'|'code'>('name');
+const accountNameInput=ref<HTMLInputElement>(),nameInput=ref<HTMLInputElement>(),groupInput=ref<HTMLInputElement>(),searchField=ref<'name'|'code'>('name');
 const searchFailed=ref(false);
 const showGroups=ref(false),showNewGroup=ref(false),showFundBooks=ref(false),newGroup=ref(''),addedGroups=ref<string[]>([]),allBooksDraft=ref(true),draftBookIds=ref<string[]>([]);
 const fundGroups=computed(()=>[...new Set(['基金','期货','股票（沪深）','港股','美股',...rows.value.map(r=>r.profile.group).filter(Boolean),...addedGroups.value])]);
@@ -108,8 +122,9 @@ const cryptoAccounts=computed(()=>accounts.value.filter(a=>['EXCHANGE','WALLET']
 const cashChoices=computed(()=>wealth.value?.cashAccounts.filter(a=>a.currency==='CNY'&&!a.liability)||[]);
 let initialized=false,timer:ReturnType<typeof setTimeout>|undefined,searchVersion=0,initialUnitCost='',expectedQuantity='0',expectedCost:string|null='0';
 const requestKey=generateRandomUUID();
-if(type.value==='FUND'&&!editing)profile.value.profitOffset='';
-async function start():Promise<void>{if(initialized)return;await load();if(error.value)return;initialized=true;bookId.value=books.defaultBookId;date.value=moment().tz(zone.value).format('YYYY-MM-DDTHH:mm');if(editing){const row=rows.value.find(r=>r.position.accountId===profile.value.accountId&&r.position.instrumentId===profile.value.instrumentId);if(!row){error.value='找不到这项理财';return;}asset.value=row.asset;type.value=row.asset?.type==='STOCK'?row.asset.market==='HK'?'HK':row.asset.market==='US'?'US':'CN':row.asset?.type||'OTHER';profile.value=JSON.parse(JSON.stringify(row.profile));name.value=row.name;symbol.value=row.asset?.symbol||'';quantity.value=row.position.quantity;expectedQuantity=row.position.quantity;expectedCost=row.position.cost;unitCost.value=row.position.averageCost?new LedgerDecimal(row.position.averageCost).toDecimalPlaces(18).toString():'';initialUnitCost=unitCost.value;}else{profile.value.group=type.value==='METAL'?'期货 / 贵金属':investmentGroup({type:type.value==='FUND'?'FUND':type.value==='OTHER'?'OTHER':'STOCK',market:market.value} as Instrument);}await focusName();}
+
+async function start():Promise<void>{if(initialized)return;await load();if(!ready.value)return;initialized=true;const preferred=type.value==='US'?'USD':type.value==='HK'?'HKD':'CNY';cashAccountId.value=purchaseCash.value.find(a=>a.currency===preferred&&!a.liability)?.id||'';exchangeRate.value=cashCurrency.value==='CNY'?'1':'';bookId.value=books.defaultBookId;date.value=moment().tz(zone.value).format('YYYY-MM-DDTHH:mm');if(editing){const row=rows.value.find(r=>r.position.accountId===profile.value.accountId&&r.position.instrumentId===profile.value.instrumentId);if(!row){error.value='找不到这项理财';return;}asset.value=row.asset;type.value=row.asset?.type==='STOCK'?row.asset.market==='HK'?'HK':row.asset.market==='US'?'US':'CN':row.asset?.type||'OTHER';profile.value=JSON.parse(JSON.stringify(row.profile));name.value=row.name;symbol.value=row.asset?.symbol||'';quantity.value=row.position.quantity;expectedQuantity=row.position.quantity;expectedCost=row.position.cost;unitCost.value=row.position.averageCost?new LedgerDecimal(row.position.averageCost).toDecimalPlaces(18).toString():'';initialUnitCost=unitCost.value;}else{profile.value.group=type.value==='METAL'?'期货 / 贵金属':investmentGroup({type:type.value==='FUND'?'FUND':type.value==='OTHER'?'OTHER':'STOCK',market:market.value} as Instrument);}await focusName();}
+function manualChanged():void{searchVersion++;clearTimeout(timer);searching.value=false;selected.value=undefined;candidates.value=[];error.value='';searchFailed.value=false;}
 function nameChanged():void{if(editing)return;searchLater(name.value,'name');}
 function searchLater(query:string,field:'name'|'code'='code'):void{
   clearTimeout(timer);const version=++searchVersion;searchField.value=field;
@@ -119,7 +134,7 @@ function searchLater(query:string,field:'name'|'code'='code'):void{
   searching.value=true;timer=setTimeout(async()=>{try{const found=await investments.searchInstruments(text,market.value);if(version!==searchVersion)return;const exact=found.filter(item=>item.type==='FUND'&&item.market==='CN_FUND'&&item.symbol===text);if(type.value==='FUND'&&field==='code'&&exact.length===1){choose(exact[0]!);}else{candidates.value=found;if(type.value==='FUND'&&!found.length)error.value='未找到该基金，请核对名称或代码';}}catch(e){if(version===searchVersion){searchFailed.value=true;error.value=type.value==='FUND'?'基金查询暂不可用，请检查网络后重试':investmentError(e);}}finally{if(version===searchVersion)searching.value=false;}},350);
 }
 function choose(value:InstrumentCandidate):void{searchVersion++;clearTimeout(timer);selected.value={...value};name.value=value.name;symbol.value=value.symbol;candidates.value=[];searching.value=false;error.value='';}
-async function focusName():Promise<void>{await nextTick();if(type.value==='FUND'&&!editing&&!name.value&&!symbol.value)nameInput.value?.focus();}
+async function focusName():Promise<void>{await nextTick();if(!editing&&!profile.value.accountId&&!accountName.value)accountNameInput.value?.focus();else if(type.value==='FUND'&&!editing&&!name.value&&!symbol.value)nameInput.value?.focus();}
 function nextFundField(event:KeyboardEvent):void{const target=event.target as HTMLInputElement;const fields=Array.from(target.closest('.fund-fields')?.querySelectorAll<HTMLInputElement>('input:not(:disabled)')||[]);const next=fields[fields.indexOf(target)+1];if(next)next.focus();else target.blur();}
 function blurInput():void{if(document.activeElement instanceof HTMLElement)document.activeElement.blur();}
 function openGroups():void{blurInput();showGroups.value=true;}
@@ -128,6 +143,6 @@ function addGroup():void{const group=newGroup.value.trim();if(!group)return;adde
 function openBooks():void{blurInput();draftBookIds.value=[...profile.value.bookIds];allBooksDraft.value=!draftBookIds.value.length;showFundBooks.value=true;}
 function toggleDraftBook(id:string,checked:boolean):void{allBooksDraft.value=false;draftBookIds.value=checked?[...new Set([...draftBookIds.value,id])]:draftBookIds.value.filter(item=>item!==id);}
 function confirmBooks():void{if(!allBooksDraft.value&&!draftBookIds.value.length)return;profile.value.bookIds=allBooksDraft.value?[]:[...draftBookIds.value];showFundBooks.value=false;}
-async function save():Promise<void>{if(busy.value||!initialized)return;error.value='';try{validInvestmentNumber(quantity.value,'持有份额');validInvestmentNumber(profile.value.profitOffset||'0','盈亏偏差',false,true);if(!name.value.trim())throw Error('请输入理财名称');if(searchable.value&&!selected.value)throw Error(type.value==='FUND'?'请输入有效基金代码，或按名称查询并选择基金':'请从查询结果选择资产；找不到时可在更多设置中选择手动估值');const q=new LedgerDecimal(quantity.value);let cost:string|null=unitCost.value?new LedgerDecimal(validInvestmentNumber(unitCost.value,'成本价')).mul(q).toDecimalPlaces(18).toString():null;if(type.value==='OTHER')cost=q.toString();if(editing&&quantity.value===expectedQuantity&&unitCost.value===initialUnitCost)cost=expectedCost;if(q.isZero())cost='0';const at=moment.tz(date.value,'YYYY-MM-DDTHH:mm',true,zone.value);if(!at.isValid())throw Error('请选择有效日期');const data:HoldingSetup={profile:{...profile.value,name:name.value.trim()},instrument:selected.value||asset.value||{name:name.value.trim(),symbol:symbol.value||'自定义',type:type.value==='FUND'?'FUND':['CN','HK','US'].includes(type.value)?'STOCK':'OTHER'},quantity:q.toString(),cost,price:editing?'':type.value==='OTHER'?'1':manualPrice.value,bookId:bookId.value,occurredAt:at.unix(),expectedQuantity,expectedCost};busy.value=true;const saved=editing?await investments.updateHolding(data,requestKey):await investments.setupHolding(data,requestKey);invalidateInvestmentData();if(editing||type.value==='FUND')props.f7router.back();else props.f7router.navigate('/investments/position?'+new URLSearchParams({accountId:saved.accountId,instrumentId:saved.instrumentId}),{reloadCurrent:true});}catch(e){error.value=investmentError(e);}finally{busy.value=false;}}
+async function save():Promise<void>{if(busy.value||!initialized)return;error.value='';try{validInvestmentNumber(quantity.value,'持有份额');validInvestmentNumber(profile.value.profitOffset||'0','盈亏偏差',false,true);if(!name.value.trim())throw Error('请输入理财名称');if(searchable.value&&!selected.value)throw Error('请从查询结果选择资产，或启用“手动记录”');if(!profile.value.accountId&&!accountName.value.trim())throw Error('请输入持仓所在的新账户名称');const q=new LedgerDecimal(quantity.value);let cost:string|null=unitCost.value?new LedgerDecimal(validInvestmentNumber(unitCost.value,'成本价')).mul(q).toDecimalPlaces(18).toString():null;if(type.value==='OTHER')cost=q.toString();if(editing&&quantity.value===expectedQuantity&&unitCost.value===initialUnitCost)cost=expectedCost;if(q.isZero())cost='0';const at=moment.tz(date.value,'YYYY-MM-DDTHH:mm',true,zone.value);if(!at.isValid())throw Error('请选择有效日期');const data:HoldingSetup={profile:{...profile.value,name:name.value.trim()},instrument:selected.value||asset.value||{name:name.value.trim(),symbol:symbol.value||'自定义',type:type.value==='FUND'?'FUND':['CN','HK','US'].includes(type.value)?'STOCK':'OTHER'},quantity:q.toString(),cost,price:editing?'':type.value==='OTHER'?'1':selected.value?'':manualPrice.value,bookId:bookId.value,occurredAt:at.unix(),expectedQuantity,expectedCost,accountName:accountName.value.trim()};if(!editing&&entryMode.value==='buy'){validInvestmentNumber(quantity.value,'成交份额',true);const paid=new LedgerDecimal(validInvestmentNumber(payment.value,'实际支付',true)),fee=new LedgerDecimal(validInvestmentNumber(purchaseFee.value||'0','手续费'));if(paid.decimalPlaces()>2||fee.decimalPlaces()>2)throw Error('实付金额和手续费最多两位小数');if(!cashAccountId.value)throw Error('请选择付款账户');if(!paid.gt(fee))throw Error('实际支付必须大于手续费');data.cost=null;data.purchase={amount:paid.minus(fee).toString(),fee:fee.toString(),cashAccountId:cashAccountId.value,exchangeRate:validInvestmentNumber(cashCurrency.value==='CNY'?'1':exchangeRate.value,'历史汇率',true)};}busy.value=true;const saved=editing?await investments.updateHolding(data,requestKey):await investments.setupHolding(data,requestKey);invalidateInvestmentData();if(editing||type.value==='FUND')props.f7router.back();else props.f7router.navigate('/investments/position?'+new URLSearchParams({accountId:saved.accountId,instrumentId:saved.instrumentId}),{reloadCurrent:true});}catch(e){error.value=investmentError(e);}finally{busy.value=false;}}
 onUnmounted(()=>{clearTimeout(timer);searchVersion++;});
 </script>

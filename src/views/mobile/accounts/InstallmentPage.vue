@@ -36,7 +36,7 @@
      <header><strong>{{plan.data.note||`${plan.statementMonth||'单笔账单'}分期`}}</strong><span>{{plan.data.periods}}期</span></header>
      <div class="installment-summary"><span>本金<strong>{{ledgerMoney(plan.data.principal,false)}}</strong></span><span>总服务费<strong>{{ledgerMoney(plan.data.totalFee,false)}}</strong></span><span>已到期<strong>{{plan.data.payments.filter(p=>p.accrued).length}}期</strong></span></div>
      <button class="installment-expand" @click="expanded=expanded===plan.id?'':plan.id">{{expanded===plan.id?'收起':'查看每期计划'}}<f7-icon f7="chevron_down"/></button>
-     <template v-if="expanded===plan.id"><div v-for="(p,i) in plan.data.payments" :key="i" class="installment-payment"><span>{{p.date}}<small>{{p.accrued?'已到期':'未到期'}}<f7-link v-if="p.feeTransactionId" :href="`/transaction/detail?id=${p.feeTransactionId}&type=3`"> · 服务费流水</f7-link></small></span><strong>{{ledgerMoney(new LedgerDecimal(p.principal).plus(p.fee).toString(),false)}}<small>本金 {{p.principal}} + 服务费 {{p.fee}}</small></strong></div></template>
+     <template v-if="expanded===plan.id"><div v-for="(p,i) in plan.data.payments" :key="i" class="installment-payment"><span>{{p.date}}<small>{{p.accrued?'已到期':'未到期'}}<f7-link v-if="p.feeTransactionId" :href="`/transaction/detail?id=${p.feeTransactionId}&type=3`"> · 服务费流水</f7-link></small></span><strong>{{ledgerMoney(new LedgerDecimal(p.principal).plus(p.fee).toString(),false)}}<small>本金 {{ledgerMoney(p.principal)}} + 服务费 {{ledgerMoney(p.fee)}}</small></strong></div></template>
      <footer v-if="!plan.closed"><button @click="edit(plan)">编辑</button><button @click="close(plan)">结束分期</button><f7-link :href="repay(plan)">还款</f7-link></footer>
     </section>
    </template>
@@ -44,12 +44,13 @@
  </f7-page>
 </template>
 <script setup lang="ts">
+import {assetMoney as ledgerMoney} from '@/lib/asset-visibility.ts';
 import {computed,ref} from 'vue';
 import {f7} from 'framework7-vue';
 import type {Router} from 'framework7/types';
 import moment from 'moment-timezone';
 import {creditAccounts,type CreditInstallment,type InstallmentInput,type CreditStatement} from '@/lib/credit-accounts.ts';
-import {LedgerDecimal,ledgerMoney,keepUpToDate} from '@/lib/mobile-ledger.ts';
+import {LedgerDecimal,keepUpToDate} from '@/lib/mobile-ledger.ts';
 import {investmentError} from '@/lib/investments.ts';
 import services from '@/lib/services.ts';
 import type {TransactionInfoResponse} from '@/models/transaction.ts';

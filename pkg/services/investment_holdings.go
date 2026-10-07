@@ -17,6 +17,8 @@ import (
 )
 
 type HoldingSetupInput struct {
+	AccountName      string                          `json:"accountName"`
+	Purchase         *HoldingPurchaseInput           `json:"purchase,omitempty"`
 	Profile          models.InvestmentHoldingProfile `json:"profile"`
 	Instrument       models.InvestmentInstrument     `json:"instrument"`
 	Quantity         string                          `json:"quantity"`
@@ -26,6 +28,14 @@ type HoldingSetupInput struct {
 	OccurredAt       int64                           `json:"occurredAt"`
 	ExpectedQuantity string                          `json:"expectedQuantity"`
 	ExpectedCost     *string                         `json:"expectedCost"`
+}
+
+// 新产品与首笔实际买入在同一事务中保存，金额使用结算账户币种。
+type HoldingPurchaseInput struct {
+	Amount        string `json:"amount"`
+	Fee           string `json:"fee"`
+	CashAccountId string `json:"cashAccountId"`
+	ExchangeRate  string `json:"exchangeRate"`
 }
 
 func (s *InvestmentService) UpdateHolding(c core.Context, uid int64, input HoldingSetupInput, key string) (*models.InvestmentHoldingProfile, error) {
@@ -260,6 +270,12 @@ func (s *InvestmentService) SetupHolding(c core.Context, uid int64, input Holdin
 	if err != nil {
 		return nil, err
 	}
+	if input.Purchase != nil && !q.IsPositive() {
+		return nil, investmentError("买入数量必须大于零")
+	}
+	if len([]rune(strings.TrimSpace(input.AccountName))) > 64 {
+		return nil, investmentError("账户名称过长")
+	}
 	if input.Cost != nil {
 		if _, err = investmentDecimal(*input.Cost, "持仓成本", true); err != nil {
 			return nil, err
@@ -322,6 +338,9 @@ func (s *InvestmentService) SetupHolding(c core.Context, uid int64, input Holdin
 		}
 		if p.AccountId == "" {
 			a := models.PortfolioAccount{Id: investmentID(), Uid: uid, Name: p.Name, Kind: "BROKER", Currency: "CNY", Instruments: []string{p.InstrumentId}}
+			if strings.TrimSpace(input.AccountName) != "" {
+				a.Name = strings.TrimSpace(input.AccountName)
+			}
 			if asset.Type == "OTHER" {
 				a.Kind = "OTHER"
 			}
@@ -331,6 +350,11 @@ func (s *InvestmentService) SetupHolding(c core.Context, uid int64, input Holdin
 			p.AccountId = a.Id
 		}
 		e := InvestmentEvent{Event: investments.Event{Type: investments.Opening, AccountID: p.AccountId, InstrumentID: p.InstrumentId, Quantity: q.String(), Cost: input.Cost, Amount: "0", Fee: "0", ExchangeRate: "1", OccurredAt: input.OccurredAt, Note: input.Profile.Note}, BookID: input.BookId}
+		if buy := input.Purchase; buy != nil {
+			e.Type = investments.Buy
+			e.Amount, e.Fee, e.CashAccountID, e.ExchangeRate = buy.Amount, buy.Fee, buy.CashAccountId, buy.ExchangeRate
+			e.Cost = nil
+		}
 		if err = s.validateEvent(sess, uid, &e); err != nil {
 			return err
 		}

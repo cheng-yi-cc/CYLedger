@@ -21,13 +21,14 @@
  </f7-page>
 </template>
 <script setup lang="ts">
+import {assetMoney as ledgerMoney} from '@/lib/asset-visibility.ts';
 import {computed,ref} from 'vue';
 import {f7} from 'framework7-vue';
 import type {Router} from 'framework7/types';
 import moment from 'moment-timezone';
 import {reimbursements,type ReimbursementClaim} from '@/lib/reimbursements.ts';
 import {investmentError} from '@/lib/investments.ts';
-import {LedgerDecimal,ledgerMoney,keepUpToDate} from '@/lib/mobile-ledger.ts';
+import {LedgerDecimal,keepUpToDate} from '@/lib/mobile-ledger.ts';
 import {generateRandomUUID} from '@/lib/misc.ts';
 import {useAccountsStore} from '@/stores/account.ts';
 import {useBooksStore} from '@/stores/books.ts';

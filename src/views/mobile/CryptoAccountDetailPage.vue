@@ -8,7 +8,7 @@
     <nav class="wallet-actions"><f7-link :href="entryLink('EXPENSE')">记支出</f7-link><f7-link :href="entryLink('INCOME')">记收入</f7-link></nav>
     <nav class="actions"><f7-link :href="convertLink('cash')">人民币买币</f7-link><f7-link :href="convertLink('coin')">币币兑换</f7-link><f7-link :href="convertLink('transfer')">转移</f7-link><f7-link :href="convertLink('redeem')">卖币到账</f7-link></nav>
     <section v-if="account.kind==='EXCHANGE'" class="cy-panel"><div class="section-head"><h2>每日定投</h2><f7-link :href="`/crypto/dca?accountId=${id}`">管理定投 →</f7-link></div><p class="hint">设置每日投入与时间，自动记录买入、成本与收益；余额不足时暂停。</p></section>
-    <section class="cy-panel"><div class="section-head"><h2>持有币种</h2><f7-link :href="convertLink('opening')">添加已有持仓</f7-link></div><p v-if="!rows.length" class="hint">还没有持仓。可录入已有数量，或从其他账户转入。</p><f7-link v-for="row in rows" :key="row.coin.id" :href="positionLink(row.coin.id)" class="holding"><div><strong>{{ row.coin.symbol }}</strong><small>{{ row.coin.name }}</small></div><div><strong :title="row.position?.quantity || '0'">{{ displayQuantity(row.position?.quantity || '0') }}</strong><small>{{ currencyMoney(positionValue(row.position,currency,summary),currency) }}</small></div></f7-link></section>
+    <section class="cy-panel"><div class="section-head"><h2>持有币种</h2><f7-link :href="convertLink('opening')">添加已有持仓</f7-link></div><p v-if="!rows.length" class="hint">还没有持仓。可录入已有数量，或从其他账户转入。</p><f7-link v-for="row in rows" :key="row.coin.id" :href="positionLink(row.coin.id)" class="holding"><div><strong>{{ row.coin.symbol }}</strong><small>{{ row.coin.name }}</small></div><div><strong :title="assetText(row.position?.quantity || '0')">{{ displayQuantity(row.position?.quantity || '0') }}</strong><small>{{ currencyMoney(positionValue(row.position,currency,summary),currency) }}</small></div></f7-link></section>
     <section class="cy-panel"><div class="section-head"><h2>交易记录</h2><span>{{ transactions.length }} 笔</span></div><p v-if="!transactions.length" class="hint">兑换与持仓记录会显示在这里。</p><article v-for="event in transactions" :key="event.id" class="event"><div><strong>{{ event.dca ? '每日定投' : eventNames[event.type] }}<small v-if="event.voided"> · 已撤销</small></strong><span>{{ date(event.occurredAt) }}</span></div><p>{{ eventDescription(event) }}</p><p v-if="event.conversion" class="hint">行情换算 · {{ date(event.conversion.observedAt) }}<template v-if="event.conversion.toQuantity !== (event.type==='SELL'?event.amount:event.quantity)"> · 已校正到账数量</template></p><f7-link :href="event.wallet?`/crypto/entry?eventId=${event.id}`:positionLink(event.instrumentId, event.accountId)">查看记录</f7-link></article></section>
    </template>
   </main>
@@ -16,13 +16,15 @@
 </template>
 <script setup lang="ts">
 import { computed,ref,onMounted,onUnmounted } from 'vue';
-import { walletCurrency, walletValue, positionValue, currencyMoney, usdFX } from '@/lib/wallet-entry.ts';
+import { walletCurrency, walletValue, positionValue, currencyMoney as rawCurrencyMoney, usdFX } from '@/lib/wallet-entry.ts';
 import type { Router } from 'framework7/types';
 import moment from 'moment-timezone';
 import { investments, investmentError } from '@/lib/investments.ts';
 import { createValuationRefresh } from '@/lib/valuation-refresh.ts';
 import { platformIcon,platformName } from '@/lib/crypto-platforms.ts';
 import { LedgerDecimal } from '@/lib/ledger-display.ts';
+import {assetAmountsVisible,assetText} from '@/lib/asset-visibility.ts';
+function currencyMoney(value:string|null|undefined,currency:string):string{return assetAmountsVisible.value?rawCurrencyMoney(value,currency):'••••';}
 import type { Instrument,InvestmentAccount,InvestmentEvent,WealthSummary } from '@/models/investment.ts';
 import AccountOptionsMenu from '@/components/mobile/AccountOptionsMenu.vue';
 const props=defineProps<{f7route:Router.Route;f7router:Router.Router}>();
@@ -37,9 +39,9 @@ const currency=computed(()=>walletCurrency(account.value));
 const total=computed(()=>summary.value?walletValue(summary.value.positions.filter(p=>p.accountId===id.value),currency.value,summary.value):null);
 const transactions=computed(()=>events.value.filter(e=>[e.accountId,e.toAccountId,e.settlementAccountId].includes(id.value)).sort((a,b)=>b.occurredAt-a.occurredAt||b.id.localeCompare(a.id)));
 const eventNames={OPENING:'已有持仓',BUY:'兑换买入',SELL:'卖币到账',TRANSFER:'账户间转移',INCOME:'收入',EXPENSE:'支出',ADJUST:'持仓校准'};
-function displayQuantity(value:string):string{const original=new LedgerDecimal(value),rounded=original.toSignificantDigits(10);return `${rounded.eq(original)?'':'≈ '}${rounded.toFixed()}`;}
+function displayQuantity(value:string):string{if(!assetAmountsVisible.value)return '••••';const original=new LedgerDecimal(value),rounded=original.toSignificantDigits(10);return `${rounded.eq(original)?'':'≈ '}${rounded.toFixed()}`;}
 function symbol(id:string):string{return coins.value.find(c=>c.id===id)?.symbol||id;}
-function eventDescription(e:InvestmentEvent):string{if(e.wallet)return `${e.amount} ${e.wallet.currency} · ${[{instrumentId:e.instrumentId,quantity:e.quantity},...(e.additionalMovements||[])].map(m=>`${m.quantity} ${symbol(m.instrumentId)}`).join(' + ')}`;if(e.type==='OPENING')return `${e.quantity} ${symbol(e.instrumentId)}`;if(e.type==='TRANSFER')return `${e.quantity} ${symbol(e.instrumentId)} · ${e.accountId===id.value?'转出':'转入'}`;const payment=`${e.amount} ${e.settlementInstrumentId?symbol(e.settlementInstrumentId):'CNY'}`;const acquired=`${e.quantity} ${symbol(e.instrumentId)}`;return e.type==='BUY'?`${payment} → ${acquired}`:`${acquired} → ${payment}`;}
+function eventDescription(e:InvestmentEvent):string{if(!assetAmountsVisible.value)return '••••';if(e.wallet)return `${e.amount} ${e.wallet.currency} · ${[{instrumentId:e.instrumentId,quantity:e.quantity},...(e.additionalMovements||[])].map(m=>`${m.quantity} ${symbol(m.instrumentId)}`).join(' + ')}`;if(e.type==='OPENING'||e.type==='ADJUST')return `${e.quantity} ${symbol(e.instrumentId)}`;if(e.type==='TRANSFER')return `${e.quantity} ${symbol(e.instrumentId)} · ${e.accountId===id.value?'转出':'转入'}`;const payment=`${e.amount} ${e.settlementInstrumentId?symbol(e.settlementInstrumentId):'CNY'}`;const acquired=`${e.quantity} ${symbol(e.instrumentId)}`;return e.type==='BUY'?`${payment} → ${acquired}`:`${acquired} → ${payment}`;}
 function entryLink(type:string):string{return '/crypto/entry?'+new URLSearchParams({accountId:id.value,type}).toString();}
 function convertLink(mode:string):string{return '/crypto/convert?'+new URLSearchParams({accountId:id.value,mode}).toString();}
 function positionLink(instrumentId:string,accountId=id.value):string{return '/investments/position?'+new URLSearchParams({accountId,instrumentId}).toString();}

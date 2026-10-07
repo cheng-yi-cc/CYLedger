@@ -47,6 +47,78 @@ func TestHoldingSetupAtomicRetryAndValuationPreferences(t *testing.T) {
 	require.Equal(t, int64(1), f.count(&models.InvestmentHoldingProfile{}))
 }
 
+func TestHoldingSetupPurchaseAtomicSettlementAndRetry(t *testing.T) {
+	f := newInvestmentDBFixture(t)
+	input := HoldingSetupInput{AccountName: "测试证券账户", Instrument: models.InvestmentInstrument{Name: "手动基金", Symbol: "FUND1", Type: "FUND"}, Quantity: "10", Price: "12", OccurredAt: f.at,
+		Purchase: &HoldingPurchaseInput{Amount: "100", Fee: "2", CashAccountId: fmt.Sprint(f.bankID), ExchangeRate: "1"}}
+	p, err := f.s.SetupHolding(nil, f.uid, input, "purchase-setup-1")
+	require.NoError(t, err)
+	require.Equal(t, int64(1989800), f.balance())
+	positions := f.summary(true).Positions
+	require.Len(t, positions, 1)
+	requireMoney(t, "102", positions[0].Cost)
+	require.Equal(t, "10", positions[0].Quantity)
+	events, err := f.s.Events(nil, f.uid)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, investments.Buy, events[0].Type)
+	account := new(models.PortfolioAccount)
+	has, err := f.engine.ID(p.AccountId).Get(account)
+	require.NoError(t, err)
+	require.True(t, has)
+	require.Equal(t, input.AccountName, account.Name)
+	again, err := f.s.SetupHolding(nil, f.uid, input, "purchase-setup-1")
+	require.NoError(t, err)
+	require.Equal(t, p.Id, again.Id)
+	require.Equal(t, int64(1989800), f.balance())
+	require.Equal(t, int64(1), f.count(&models.InvestmentEventRecord{}))
+	bad := input
+	bad.Purchase = &HoldingPurchaseInput{Amount: "30000", Fee: "0", CashAccountId: fmt.Sprint(f.bankID), ExchangeRate: "1"}
+	_, err = f.s.SetupHolding(nil, f.uid, bad, "purchase-setup-bad")
+	require.Error(t, err)
+	require.Equal(t, int64(1989800), f.balance())
+	require.Equal(t, int64(1), f.count(&models.InvestmentInstrument{}))
+	require.Equal(t, int64(1), f.count(&models.InvestmentHoldingProfile{}))
+	require.Equal(t, int64(2), f.count(&models.PortfolioAccount{})) // 原测试钱包与新增证券账户。
+	_, err = f.s.Mutate(nil, f.uid, events[0], "", "void", false)
+	require.NoError(t, err)
+	require.Equal(t, int64(2000000), f.balance())
+	require.Empty(t, f.summary(false).Positions)
+}
+
+func TestInvestmentReportAssetScopeIncludesHiddenAndExcludesOtherBooks(t *testing.T) {
+	f := newInvestmentDBFixture(t)
+	_, err := f.engine.Insert(&models.Book{Id: "scope-book-a", Uid: f.uid, Name: "账本甲"}, &models.Book{Id: "scope-book-b", Uid: f.uid, Name: "账本乙"})
+	require.NoError(t, err)
+	cost := "20"
+	makeHolding := func(name string, profile models.InvestmentHoldingProfile) *models.InvestmentHoldingProfile {
+		p, err := f.s.SetupHolding(nil, f.uid, HoldingSetupInput{Profile: profile, Instrument: models.InvestmentInstrument{Name: name, Symbol: name, Type: "OTHER"}, Quantity: "10", Cost: &cost, Price: "3", OccurredAt: f.at}, "scope-setup-"+name)
+		require.NoError(t, err)
+		return p
+	}
+	hidden := makeHolding("hidden", models.InvestmentHoldingProfile{Hidden: true, BookIds: []string{"scope-book-a"}})
+	makeHolding("excluded", models.InvestmentHoldingProfile{ExcludeFromTotal: true, BookIds: []string{"scope-book-a"}})
+	makeHolding("otherbook", models.InvestmentHoldingProfile{BookIds: []string{"scope-book-b"}})
+	f.summary(true)
+	report, err := f.s.InvestmentReport(nil, f.uid, "", "", InvestmentReportScope{BookIds: []string{"scope-book-a"}})
+	require.NoError(t, err)
+	require.Len(t, report.Items, 1)
+	require.Equal(t, hidden.AccountId, report.Items[0].Event.AccountID)
+	require.NotEmpty(t, report.History)
+	requireMoney(t, "30", report.History[len(report.History)-1].Value)
+	requireMoney(t, "10", report.History[len(report.History)-1].Profit)
+	prefs := defaultAssetPreferences()
+	prefs.Rules["portfolio:"+hidden.AccountId] = models.AssetAccountRule{Hidden: true, DisabledBooks: []string{"scope-book-a"}}
+	_, err = f.s.SaveAssetPreferences(nil, f.uid, *prefs)
+	require.NoError(t, err)
+	report, err = f.s.InvestmentReport(nil, f.uid, hidden.AccountId, "", InvestmentReportScope{BookIds: []string{"scope-book-a", "scope-book-b"}})
+	require.NoError(t, err)
+	require.Empty(t, report.Items) // 不能用账户允许的乙账本绕过持仓仅在甲生效的限制。
+	report, err = f.s.InvestmentReport(nil, f.uid, hidden.AccountId, "", InvestmentReportScope{})
+	require.NoError(t, err)
+	require.Len(t, report.Items, 1) // 全部账本汇总仍包括隐藏账户。
+}
+
 func TestHoldingEditCalibrationConflictAndSnapshotReplay(t *testing.T) {
 	f := newInvestmentDBFixture(t)
 	cost := "20"
