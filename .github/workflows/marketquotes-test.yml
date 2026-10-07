@@ -1,0 +1,36 @@
+name: Market data regression
+on:
+  push:
+    branches: [fix/market-data-routing]
+  pull_request:
+    paths:
+      - 'pkg/marketquotes/**'
+      - 'pkg/marketrelay/**'
+      - 'cmd/market-relay/**'
+      - '.github/workflows/marketquotes-test.yml'
+permissions:
+  contents: read
+concurrency:
+  group: marketquotes-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Export reproducible source for review
+        run: git archive --format=tar.gz -o /tmp/cyledger-source.tar.gz HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cyledger-source
+          path: /tmp/cyledger-source.tar.gz
+          retention-days: 1
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Market data tests
+        run: go test -race ./pkg/marketquotes
