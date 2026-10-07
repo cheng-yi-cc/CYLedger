@@ -102,6 +102,7 @@ public final class MainActivity extends Activity {
                         if (!directory.isDirectory() && !directory.mkdirs()) throw new Exception("private directory");
                         prepareAssets(directory);
                         prepareTrustStore(directory);
+                        MarketNetwork.start(getApplicationContext());
                         startupError = NativeBridge.start(directory.getAbsolutePath(), port);
                     } catch (Throwable error) {
                         startupError = "手机账本服务启动失败。请保留应用数据，关闭后重新打开。";
@@ -350,6 +351,9 @@ public final class MainActivity extends Activity {
         }
         try (InputStream stream = getAssets().open("defaults.ini"); OutputStream output = new FileOutputStream(new File(rootDirectory, "defaults.ini"))) {
             copy(stream, output);
+        }
+        try (InputStream stream = getAssets().open("market-network.json"); OutputStream output = new FileOutputStream(new File(rootDirectory, "market-network.json"))) {
+            output.write(readBounded(stream, 4096));
         }
         try (OutputStream output = new FileOutputStream(marker)) { output.write(revision.getBytes(StandardCharsets.UTF_8)); }
     }

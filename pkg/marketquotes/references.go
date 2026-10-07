@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -110,8 +109,11 @@ func (s *Service) Register(b Binding) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if old, exists := s.references[b.Key()]; exists && old != b {
-		return errors.New("行情绑定的市场或币种不一致")
+	if old, exists := s.references[b.Key()]; exists {
+		if old != b {
+			return errors.New("行情绑定的市场或币种不一致")
+		}
+		return nil
 	}
 	if len(s.references) >= 500 {
 		if _, exists := s.references[b.Key()]; !exists {
@@ -119,6 +121,12 @@ func (s *Service) Register(b Binding) error {
 		}
 	}
 	s.references[b.Key()] = b
+	if wake := s.referenceWake[b.Provider]; wake != nil {
+		select {
+		case wake <- struct{}{}:
+		default:
+		}
+	}
 	return nil
 }
 
@@ -200,7 +208,7 @@ func (s *Service) getText(ctx context.Context, address string) (string, error) {
 		return "", err
 	}
 	req.Header.Set("User-Agent", "CYLedger/0.1 public-reference-prices")
-	res, err := s.config.HTTPClient.Do(req)
+	res, err := s.doPublicRequest(req)
 	if err != nil {
 		return "", err
 	}
@@ -233,49 +241,50 @@ func (s *Service) Search(ctx context.Context, query, market string) ([]Candidate
 		return nil, errors.New("市场无效")
 	}
 	key := market + ":" + strings.ToLower(query)
-	// 缓存锁只保护内存，不让一次慢查询阻塞其他市场和新输入。
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	s.searchMu.Lock()
-	if cached, ok := s.searchCache[key]; ok && s.config.Now().Sub(cached.at) < 10*time.Minute {
-		s.searchMu.Unlock()
+	cached, cachedOK := s.searchCache[key]
+	s.searchMu.Unlock()
+	if cachedOK && s.config.Now().Sub(cached.at) < 10*time.Minute {
 		return append([]Candidate{}, cached.items...), nil
 	}
-	s.searchMu.Unlock()
-	var items []Candidate
-	var failures []error
-	if market == "" || market == "CRYPTO" {
-		coins, err := s.searchCrypto(ctx, query)
-		items = append(items, coins...)
-		if err != nil {
-			failures = append(failures, err)
+	return s.coalescedSearch(ctx, "asset:"+key, searchLane(market), func(work context.Context) ([]Candidate, error) {
+		s.searchMu.Lock()
+		cached, ok := s.searchCache[key]
+		s.searchMu.Unlock()
+		if ok && s.config.Now().Sub(cached.at) < 10*time.Minute {
+			return append([]Candidate{}, cached.items...), nil
 		}
-	}
-	if market != "CRYPTO" && market != "CN_FUND" {
-		securities, err := s.searchTencent(ctx, query, market)
-		items = append(items, securities...)
-		if err != nil {
-			failures = append(failures, err)
+		tasks := make([]candidateTask, 0, 3)
+		if market == "" || market == "CRYPTO" {
+			tasks = append(tasks, func(c context.Context) ([]Candidate, error) { return s.searchCrypto(c, query) })
 		}
-	}
-	if market == "" || market == "CN_FUND" {
-		funds, err := s.searchFunds(ctx, query)
-		items = append(items, funds...)
-		if err != nil {
-			failures = append(failures, err)
+		if market != "CRYPTO" && market != "CN_FUND" {
+			tasks = append(tasks, func(c context.Context) ([]Candidate, error) { return s.searchTencent(c, query, market) })
 		}
-	}
-	if len(items) == 0 && len(failures) > 0 {
-		return nil, errors.New("公开行情搜索暂不可用，请稍后重试或创建手动估值资产")
-	}
-	if len(items) > 50 {
-		items = items[:50]
-	}
-	s.searchMu.Lock()
-	defer s.searchMu.Unlock()
-	if len(s.searchCache) >= 200 {
-		s.searchCache = make(map[string]searchEntry)
-	}
-	s.searchCache[key] = searchEntry{items: append([]Candidate{}, items...), at: s.config.Now()}
-	return append([]Candidate{}, items...), nil
+		if market == "" || market == "CN_FUND" {
+			tasks = append(tasks, func(c context.Context) ([]Candidate, error) { return s.searchFunds(c, query) })
+		}
+		items, incomplete := parallelCandidates(work, tasks)
+		if len(items) == 0 && incomplete != nil {
+			return nil, errors.New("公开行情搜索暂不可用，请稍后重试或创建手动估值资产")
+		}
+		if len(items) > 50 {
+			items = items[:50]
+		}
+		// Never cache an incomplete result as an authoritative empty catalogue.
+		if incomplete == nil {
+			s.searchMu.Lock()
+			if len(s.searchCache) >= 200 {
+				evictSearchEntry(s.searchCache)
+			}
+			s.searchCache[key] = searchEntry{items: append([]Candidate{}, items...), at: s.config.Now()}
+			s.searchMu.Unlock()
+		}
+		return items, nil
+	})
 }
 
 func (s *Service) searchTencent(ctx context.Context, query, market string) ([]Candidate, error) {
@@ -407,6 +416,13 @@ func (s *Service) searchFunds(ctx context.Context, query string) ([]Candidate, e
 }
 
 func (s *Service) searchCrypto(ctx context.Context, query string) ([]Candidate, error) {
+	return parallelCandidates(ctx, []candidateTask{
+		func(c context.Context) ([]Candidate, error) { return s.searchGeckoCatalogue(c, query) },
+		func(c context.Context) ([]Candidate, error) { return s.searchCoinbaseCatalogue(c, query) },
+	})
+}
+
+func (s *Service) searchGeckoCatalogue(ctx context.Context, query string) ([]Candidate, error) {
 	var response struct {
 		Coins []struct {
 			ID     string `json:"id"`
@@ -428,6 +444,11 @@ func (s *Service) searchCrypto(ctx context.Context, query string) ([]Candidate, 
 			}
 		}
 	}
+	return items, geckoErr
+}
+
+func (s *Service) searchCoinbaseCatalogue(ctx context.Context, query string) ([]Candidate, error) {
+	items := make([]Candidate, 0)
 	// Coinbase is an independently verified alternative, including when the
 	// keyless CoinGecko endpoint is unavailable in the deployment region.
 	var products struct {
@@ -450,10 +471,7 @@ func (s *Service) searchCrypto(ctx context.Context, query string) ([]Candidate, 
 			}
 		}
 	}
-	if len(items) == 0 && geckoErr != nil && err != nil {
-		return nil, err
-	}
-	return items, nil
+	return items, err
 }
 
 // Resolve verifies identity and a usable price before saving a new binding.
@@ -553,83 +571,6 @@ func (s *Service) Resolve(ctx context.Context, b Binding) (*Candidate, error) {
 	s.lastReferenceAttempt[b.Key()] = s.config.Now()
 	s.mu.Unlock()
 	return item, nil
-}
-
-func (s *Service) referenceLoop(ctx context.Context) {
-	for ctx.Err() == nil {
-		s.refreshReferences(ctx)
-		if !waitContext(ctx, 30*time.Second) {
-			return
-		}
-	}
-}
-
-func (s *Service) refreshReferences(ctx context.Context) {
-	s.mu.Lock()
-	groups := make(map[string][]Binding)
-	now := s.config.Now()
-	keys := make([]string, 0, len(s.references))
-	for k := range s.references {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		b := s.references[k]
-		// Presets and custom CoinGecko bindings share the same periodic batch
-		// and attempt budget in refreshCoinGecko.
-		if b.Provider == "coingecko" {
-			continue
-		}
-		interval := time.Minute
-		if b.Provider == "eastmoney" {
-			interval = 30 * time.Minute
-			if now.Before(s.activeUntil) {
-				interval = 5 * time.Minute
-			}
-		}
-		if previous := s.lastReferenceAttempt[k]; !previous.IsZero() && now.Sub(previous) < interval {
-			continue
-		}
-		s.lastReferenceAttempt[k] = now
-		groups[b.Provider] = append(groups[b.Provider], b)
-	}
-	s.mu.Unlock()
-	for provider, bindings := range groups {
-		if ctx.Err() != nil {
-			return
-		}
-		switch provider {
-		case "tencent":
-			for start := 0; start < len(bindings); start += 50 {
-				end := start + 50
-				if end > len(bindings) {
-					end = len(bindings)
-				}
-				quotes, err := s.fetchTencent(ctx, bindings[start:end])
-				if err == nil {
-					for _, q := range quotes {
-						s.putReferenceQuote(q)
-					}
-				}
-			}
-		case "eastmoney", "coinbase":
-			for _, b := range bindings {
-				if ctx.Err() != nil {
-					return
-				}
-				var q Quote
-				var err error
-				if provider == "eastmoney" {
-					q, err = s.fetchFund(ctx, b)
-				} else {
-					_, q, err = s.fetchCoinbaseReference(ctx, b)
-				}
-				if err == nil {
-					s.putReferenceQuote(q)
-				}
-			}
-		}
-	}
 }
 
 func (s *Service) fetchTencent(ctx context.Context, bindings []Binding) (map[string]Quote, error) {

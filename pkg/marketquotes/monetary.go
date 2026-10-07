@@ -23,6 +23,23 @@ func (s *Service) SearchMonetaryFunds(ctx context.Context, query string) ([]Cand
 	if utf8.RuneCountInString(query) < 2 || len(query) > 100 {
 		return nil, errors.New("请输入基金代码或至少两个字的名称")
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.monetarySearchMu.Lock()
+	cached, ok := s.monetarySearchCache[strings.ToLower(query)]
+	s.monetarySearchMu.Unlock()
+	if ok && s.config.Now().Sub(cached.at) < 10*time.Minute {
+		return append([]Candidate{}, cached.items...), nil
+	}
+	return s.coalescedSearch(ctx, "monetary:"+strings.ToLower(query), 0, func(work context.Context) ([]Candidate, error) { return s.searchMonetaryFunds(work, query) })
+}
+
+func (s *Service) searchMonetaryFunds(ctx context.Context, query string) ([]Candidate, error) {
+	query = strings.TrimSpace(query)
+	if utf8.RuneCountInString(query) < 2 || len(query) > 100 {
+		return nil, errors.New("请输入基金代码或至少两个字的名称")
+	}
 	key := strings.ToLower(query)
 	// A selected public catalogue result remains valid for the following save.
 	// This caches identities only, never yields, prices, or account data.

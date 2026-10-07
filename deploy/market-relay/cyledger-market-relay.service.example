@@ -1,0 +1,23 @@
+# 安装前创建无登录权限的 cyledger-market 用户，并替换可执行文件路径。
+# /etc/cyledger-market-relay.env 由管理员保存，权限 0600；包含 MARKET_RELAY_TOKEN。
+[Unit]
+Description=CYLedger public market relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cyledger-market
+Group=cyledger-market
+EnvironmentFile=/etc/cyledger-market-relay.env
+ExecStart=/opt/cyledger/cyledger-market-relay
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

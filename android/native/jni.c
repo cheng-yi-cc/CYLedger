@@ -27,3 +27,12 @@ const char *a=(*env)->GetStringUTFChars(env,directory,NULL),*b=(*env)->GetString
 char *value=CYLedgerBackup((char*)a,(char*)b,(char*)c);(*env)->ReleaseStringUTFChars(env,directory,a);(*env)->ReleaseStringUTFChars(env,destination,b);(*env)->ReleaseStringUTFChars(env,settings,c);jstring result=(*env)->NewStringUTF(env,value);CYLedgerFree(value);return result;}
 JNIEXPORT jstring JNICALL Java_com_cyledger_android_NativeBridge_stageRestore(JNIEnv *env,jclass type,jstring archive,jstring parent){
 const char *a=(*env)->GetStringUTFChars(env,archive,NULL),*b=(*env)->GetStringUTFChars(env,parent,NULL);char *value=CYLedgerStageRestore((char*)a,(char*)b);(*env)->ReleaseStringUTFChars(env,archive,a);(*env)->ReleaseStringUTFChars(env,parent,b);jstring result=(*env)->NewStringUTF(env,value);CYLedgerFree(value);return result;}
+
+JNIEXPORT void JNICALL
+Java_com_cyledger_android_NativeBridge_directNetwork(JNIEnv *env, jclass type, jlong handle, jstring servers) {
+    if (servers == NULL) return;
+    const char *dns = (*env)->GetStringUTFChars(env, servers, NULL);
+    if (dns == NULL) return;
+    CYLedgerDirectNetwork((unsigned long long)handle, (char *)dns);
+    (*env)->ReleaseStringUTFChars(env, servers, dns);
+}
