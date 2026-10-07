@@ -29,6 +29,6 @@ onMounted(()=>window.addEventListener('cyledger-native-change',refreshSecurity))
 onUnmounted(()=>window.removeEventListener('cyledger-native-change',refreshSecurity));
 function change(key:keyof LedgerPreferences,value:string){experience.set(key,value as never);}
 function moveTab(index:number,offset:number){const tabs=[...p.value.tabs],to=index+offset;if(to<0||to>=tabs.length)return;tabs.splice(to,0,tabs.splice(index,1)[0]!);experience.set('tabs',tabs);}
-function nativeAction(action:string,value?:boolean){if(!window.CYLedgerLocal){error.value='此功能需在 CYLedger 手机应用中使用';return;}window.CYLedgerLocal.action(action,JSON.stringify({enabled:value}));setTimeout(refreshSecurity,600);}
+function nativeAction(action:string,value?:boolean){if(!window.CYLedgerLocal){error.value='此功能需在 OpenBill 手机应用中使用';return;}window.CYLedgerLocal.action(action,JSON.stringify({enabled:value}));setTimeout(refreshSecurity,600);}
 </script>
 <style scoped>.cy-settings-body{padding:0 0 30px;max-width:720px;margin:auto}.cy-settings-details{margin:14px 16px}.cy-settings-details summary{font-size:15px;cursor:pointer}.cy-settings-details label{display:flex;align-items:center;gap:10px;padding-top:18px;font-size:14px}.cy-settings-details select{margin-left:auto;color:var(--cy-ink);background:transparent;border:0;max-width:60%}.cy-tab-setting{display:flex;gap:8px;align-items:center;padding:15px 0;border-bottom:1px solid var(--cy-line)}.cy-tab-setting span{flex:1}.cy-tab-setting button{background:transparent;border:0;color:var(--cy-muted);padding:5px 9px}</style>

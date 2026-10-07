@@ -1,18 +1,18 @@
 {
-  "name": "ezbookkeeping",
+  "name": "openbill",
   "version": "2.0.0",
   "private": true,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cheng-yi-cc/CYLedger.git"
+    "url": "git+https://github.com/cheng-yi-cc/OpenBill.git"
   },
-  "author": "CYLedger contributors",
+  "author": "OpenBill contributors",
   "contributors": [
     "MaysWind <i@mayswind.net>"
   ],
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/cheng-yi-cc/CYLedger/issues"
+    "url": "https://github.com/cheng-yi-cc/OpenBill/issues"
   },
   "scripts": {
     "serve": "cross-env NODE_ENV=development vite",
@@ -43,9 +43,7 @@
     "line-awesome": "1.3.0",
     "moment": "2.30.1",
     "moment-timezone": "0.6.3",
-    "monaco-editor": "0.56.0",
     "pinia": "4.0.3",
-    "register-service-worker": "1.7.2",
     "skeleton-elements": "4.0.1",
     "swiper": "12.2.0",
     "tesseract.js": "6.0.1",
@@ -54,7 +52,6 @@
     "vue": "3.5.42",
     "vue-echarts": "8.3.0",
     "vue-i18n": "11.4.10",
-    "vue-router": "5.3.1",
     "vuedraggable": "4.1.0",
     "vuetify": "4.2.1"
   },
@@ -80,19 +77,10 @@
     "typescript": "6.0.3",
     "vite": "8.2.2",
     "vite-plugin-checker": "0.14.5",
-    "vite-plugin-pwa": "1.3.0",
-    "vite-plugin-vuetify": "2.1.3",
     "vitest": "5.0.0",
     "vue-tsc": "3.3.11"
   },
   "browserslist": [
-    "last 5 Chrome versions",
-    "last 5 Firefox versions",
-    "last 5 Safari versions",
-    "last 5 Edge versions",
-    "last 5 ChromeAndroid versions",
-    "last 5 iOS versions",
-    "not IE <= 11",
-    "not dead"
+    "last 5 ChromeAndroid versions"
   ]
 }

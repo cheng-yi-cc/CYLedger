@@ -219,19 +219,8 @@ export const useSettingsStore = defineStore('settings', () => {
     }
 
     // Navigation Bar
-    function setShowAddTransactionButtonInDesktopNavbar(value: boolean): void {
-        updateApplicationSettingsValue('showAddTransactionButtonInDesktopNavbar', value);
-        appSettings.value.showAddTransactionButtonInDesktopNavbar = value;
-        updateUserApplicationCloudSettingValue('showAddTransactionButtonInDesktopNavbar', value);
-    }
 
     // Overview Page
-    function setDesktopOverviewPageLayout(value: string): void {
-        updateApplicationSettingsValue('desktopOverviewPageLayout', value);
-        appSettings.value.desktopOverviewPageLayout = value;
-        updateUserApplicationCloudSettingValue('desktopOverviewPageLayout', value);
-    }
-
     function setMobileOverviewPageLayout(value: string): void {
         updateApplicationSettingsValue('mobileOverviewPageLayout', value);
         appSettings.value.mobileOverviewPageLayout = value;
@@ -391,11 +380,6 @@ export const useSettingsStore = defineStore('settings', () => {
         updateUserApplicationCloudSettingValue('defaultCreditCardAmountDisplayTypeInMobile', value);
     }
 
-    function setReconciliationStatementButtonDefaultDateRangeTypeInDesktop(value: number): void {
-        updateApplicationSettingsValue('reconciliationStatementButtonDefaultDateRangeTypeInDesktop', value);
-        appSettings.value.reconciliationStatementButtonDefaultDateRangeTypeInDesktop = value;
-        updateUserApplicationCloudSettingValue('reconciliationStatementButtonDefaultDateRangeTypeInDesktop', value);
-    }
 
     function setReconciliationStatementPageDefaultDateRangeTypeInMobile(value: number): void {
         updateApplicationSettingsValue('reconciliationStatementPageDefaultDateRangeTypeInMobile', value);
@@ -628,9 +612,7 @@ export const useSettingsStore = defineStore('settings', () => {
         setEnableApplicationLock,
         setEnableApplicationLockWebAuthn,
         // -- Navigation Bar
-        setShowAddTransactionButtonInDesktopNavbar,
         // -- Overview Page
-        setDesktopOverviewPageLayout,
         setMobileOverviewPageLayout,
         setShowAmountInHomePage,
         setTimezoneUsedForStatisticsInHomePage,
@@ -662,7 +644,6 @@ export const useSettingsStore = defineStore('settings', () => {
         setTotalAmountExcludeAccountIds,
         setHideCategoriesWithoutAccounts,
         setDefaultCreditCardAmountDisplayTypeInMobile,
-        setReconciliationStatementButtonDefaultDateRangeTypeInDesktop,
         setReconciliationStatementPageDefaultDateRangeTypeInMobile,
         // -- Exchange Rates Data Page
         setCurrencySortByInExchangeRatesPage,

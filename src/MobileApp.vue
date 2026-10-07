@@ -30,7 +30,6 @@ import { APPLICATION_LOGO_PATH } from '@/consts/asset.ts';
 import { ThemeType } from '@/core/theme.ts';
 
 import { isFunction } from '@/lib/common.ts';
-import { isProduction } from '@/lib/version.ts';
 import { syncNativeSettings, isNativePersonalMode, syncNativeAppearance } from '@/lib/native.ts';
 import {syncAssetAutomationOnOpen} from '@/lib/asset-tools.ts';
 import {syncInvestmentPlansOnOpen} from '@/lib/investment-mobile.ts';
@@ -75,7 +74,7 @@ function applyAppearance(): void {
 watch(()=>[settingsStore.appSettings.theme,ledgerExperience.preferences.nightSchedule,ledgerExperience.preferences.nightStart,ledgerExperience.preferences.nightEnd],applyAppearance);
 
 const f7params = ref<Framework7Parameters>({
-    name: 'CYLedger',
+    name: 'OpenBill',
     theme: 'ios',
     colors: {
         primary: '#12786f'
@@ -95,10 +94,6 @@ const f7params = ref<Framework7Parameters>({
     touch: {
         disableContextMenu: true,
         tapHold: true
-    },
-    serviceWorker: {
-        path: isProduction() && !isNativePersonalMode() ? './sw.js' : undefined,
-        scope: './',
     },
     actions: {
         animate: isEnableAnimate(),

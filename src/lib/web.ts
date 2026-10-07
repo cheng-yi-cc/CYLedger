@@ -9,7 +9,7 @@ export function getBasePath(): string {
     return path.substring(0, lastSlashIndex);
 }
 
-export function navigateToHomePage(type: 'desktop' | 'mobile'): void {
+export function navigateToHomePage(type: 'mobile'): void {
     if (__EZBOOKKEEPING_IS_PRODUCTION__) {
         window.location.replace(`${type}#/`);
     } else {

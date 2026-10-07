@@ -120,11 +120,12 @@ def main():
             shutil.copyfile(path, notices / path.name)
     shutil.copytree(ROOT / "android/app/src/main/res", resources, dirs_exist_ok=True)
     (resources / "drawable").mkdir(exist_ok=True)
-    shutil.copyfile(ROOT / "public/favicon.png", resources / "drawable/icon.png")
+    # Launcher assets are native adaptive vector resources.
+    (resources / "drawable/icon.png").unlink(missing_ok=True)
     manifest_text = (ROOT / "android/app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
     application_id = "com.cyledger.android.qa" if args.qa else "com.cyledger.android"
     manifest_text = manifest_text.replace("@APPLICATION_ID@", application_id)
-    manifest_text = manifest_text.replace("@APP_LABEL@", "CYLedger 测试" if args.qa else "CYLedger")
+    manifest_text = manifest_text.replace("@APP_LABEL@", "OpenBill 测试" if args.qa else "OpenBill")
     manifest_text = manifest_text.replace("@DEBUGGABLE@", "true" if args.qa else "false")
     manifest = build / "AndroidManifest.xml"
     manifest.write_text(manifest_text, encoding="utf-8")
@@ -132,7 +133,7 @@ def main():
     run([tools / "aapt2.exe", "compile", "--dir", resources, "-o", compiled_resources])
     unsigned = build / "unsigned.apk"
     run([tools / "aapt2.exe", "link", "-o", unsigned, "--manifest", manifest,
-         "-I", platform, "-A", assets, "--version-code", "3", "--version-name", "0.2.0", compiled_resources])
+         "-I", platform, "-A", assets, "--version-code", "4", "--version-name", "0.3.0", compiled_resources])
     sources = sorted((ROOT / "android/app/src/main/java").rglob("*.java"))
     bootclasspath = os.pathsep.join([str(tools / "core-lambda-stubs.jar"), str(platform)])
     run([java, "-encoding", "UTF-8", "-source", "8", "-target", "8", "-bootclasspath", bootclasspath,
@@ -159,7 +160,7 @@ def main():
         raise SystemExit("Signing password is missing; preserve the existing key for APK updates")
     output = ROOT / "dist/android"
     output.mkdir(exist_ok=True)
-    apk = output / ("CYLedger-Android-arm64-qa.apk" if args.qa else "CYLedger-Android-arm64.apk")
+    apk = output / ("OpenBill-Android-arm64-qa.apk" if args.qa else "OpenBill-Android-arm64.apk")
     run([tools / "apksigner.bat", "sign", "--ks", keystore, "--ks-pass", "file:" + str(password_file),
          "--ks-key-alias", "cyledger", "--out", apk, aligned])
     run([tools / "apksigner.bat", "verify", "--verbose", apk])

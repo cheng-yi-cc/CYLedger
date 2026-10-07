@@ -929,10 +929,10 @@ export default {
     cancelRequest: (cancelableUuid: string) => {
         cancelableRequests[cancelableUuid] = true;
     },
-    generateOAuth2LoginUrl: (platform: 'mobile' | 'desktop', clientSessionId: string): string => {
+    generateOAuth2LoginUrl: (platform: 'mobile', clientSessionId: string): string => {
         return `${getBasePath()}/oauth2/login?platform=${platform}&client_session_id=${clientSessionId}`;
     },
-    generateOAuth2LinkUrl: (platform: 'mobile' | 'desktop', clientSessionId: string): string => {
+    generateOAuth2LinkUrl: (platform: 'mobile', clientSessionId: string): string => {
         return `${getBasePath()}/oauth2/login?platform=${platform}&client_session_id=${clientSessionId}&token=${getCurrentToken()}`;
     },
     generateQrCodeUrl: (qrCodeName: string): string => {

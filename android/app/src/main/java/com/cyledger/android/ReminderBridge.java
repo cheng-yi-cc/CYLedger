@@ -17,5 +17,5 @@ final class ReminderBridge {
     @JavascriptInterface public void requestPermission(){activity.runOnUiThread(()->{if(trusted()&&Build.VERSION.SDK_INT>=33)activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},701);});}
     @JavascriptInterface public void replace(String json){activity.runOnUiThread(()->{if(trusted())ReminderReceiver.replace(activity,json);});}
     @JavascriptInterface public void clear(){replace("[]");}
-    @JavascriptInterface public void test(){activity.runOnUiThread(()->{if(!trusted())return;try{JSONArray items=ReminderReceiver.stored(activity);items.put(new JSONObject().put("id","test-notification").put("at",System.currentTimeMillis()+8000).put("title","CYLedger 提醒测试").put("text","系统到期提醒已正常发送"));ReminderReceiver.replace(activity,items.toString());}catch(Exception ignored){}});}
+    @JavascriptInterface public void test(){activity.runOnUiThread(()->{if(!trusted())return;try{JSONArray items=ReminderReceiver.stored(activity);items.put(new JSONObject().put("id","test-notification").put("at",System.currentTimeMillis()+8000).put("title","OpenBill 提醒测试").put("text","系统到期提醒已正常发送"));ReminderReceiver.replace(activity,items.toString());}catch(Exception ignored){}});}
 }

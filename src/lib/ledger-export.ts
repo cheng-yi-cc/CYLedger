@@ -24,7 +24,7 @@ export function ledgerEntriesCSV(entries: LedgerEntry[], timeZone: string): stri
     return '\ufeff'+rows.map((row,index) => row.map((cell,column) => csvCell(cell, index > 0 && [8,11,12,13].includes(column))).join(',')).join('\r\n');
 }
 export function exportLedgerEntries(entries: LedgerEntry[], timeZone: string): void {
-    downloadLedgerFile(ledgerEntriesCSV(entries,timeZone),`CYLedger-账单-${moment().format('YYYYMMDD-HHmmss')}.csv`,'text/csv;charset=utf-8');
+    downloadLedgerFile(ledgerEntriesCSV(entries,timeZone),`OpenBill-账单-${moment().format('YYYYMMDD-HHmmss')}.csv`,'text/csv;charset=utf-8');
 }
 
 function xml(value:string):string{return value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'');}
@@ -38,10 +38,10 @@ export function ledgerWorkbook(rows:string[][]):Uint8Array {
     files['xl/_rels/workbook.xml.rels']=strToU8('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>');
     files['xl/worksheets/sheet1.xml']=strToU8(sheet);return zipSync(files,{level:6});
 }
-export function exportLedgerWorkbook(rows:string[][],name='账单'):void{const bytes=ledgerWorkbook(rows);downloadLedgerFile(bytes.slice().buffer,`CYLedger-${name}-${moment().format('YYYYMMDD-HHmmss')}.xlsx`,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');}
+export function exportLedgerWorkbook(rows:string[][],name='账单'):void{const bytes=ledgerWorkbook(rows);downloadLedgerFile(bytes.slice().buffer,`OpenBill-${name}-${moment().format('YYYYMMDD-HHmmss')}.xlsx`,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');}
 export async function exportLedgerPictures(entries:LedgerEntry[],timeZone:string,progress:(value:string)=>void):Promise<void>{
     const files:Record<string,Uint8Array>={},pictures=entries.flatMap(e=>(e.pictures||[]).map(p=>({entry:e,picture:p})));let total=0;
     if(!pictures.length)throw Error('所选范围没有账单图片');
     for(let i=0;i<pictures.length;i++){const item=pictures[i]!;progress(`正在整理图片 ${i+1} / ${pictures.length}`);const response=await fetch(services.getTransactionPictureUrlWithToken(item.picture.originalUrl));if(!response.ok)throw Error('账单图片读取失败，请重试');const bytes=new Uint8Array(await response.arrayBuffer());total+=bytes.length;if(total>18*1024*1024)throw Error('图片超过 18 MB，请缩小日期范围分批导出');const ext=response.headers.get('content-type')?.includes('png')?'png':response.headers.get('content-type')?.includes('webp')?'webp':'jpg';files[`${item.entry.day}-${item.entry.id}-${i+1}.${ext}`]=bytes;}
-    files['账单.csv']=strToU8(ledgerEntriesCSV(entries,timeZone));const bytes=zipSync(files,{level:0});downloadLedgerFile(bytes.slice().buffer,`CYLedger-账单图片-${moment().format('YYYYMMDD-HHmmss')}.zip`,'application/zip');
+    files['账单.csv']=strToU8(ledgerEntriesCSV(entries,timeZone));const bytes=zipSync(files,{level:0});downloadLedgerFile(bytes.slice().buffer,`OpenBill-账单图片-${moment().format('YYYYMMDD-HHmmss')}.zip`,'application/zip');
 }

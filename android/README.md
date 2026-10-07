@@ -1,12 +1,12 @@
-# CYLedger Android 独立运行版
+# OpenBill Android 独立运行版
 
-APK 内包含 Vue / Framework7 界面、ARM64 Go / SQLite 共享库和 Java / JNI 外壳。正式包为 `com.cyledger.android`，只访问手机回环服务 `127.0.0.1:18761`，不需要电脑常驻。界面操作见 [使用入口](../README.CYLEDGER.md)，本次 APK 校验值与实测范围见 [验收与交接](../docs/CYLEDGER_ACCEPTANCE.md)。
+APK 内包含 Vue / Framework7 界面、ARM64 Go / SQLite 共享库和 Java / JNI 外壳。正式包为 `com.cyledger.android`，只访问手机回环服务 `127.0.0.1:18761`，不需要电脑常驻。界面操作见 [使用入口](../README.OPENBILL.md)，本次 APK 校验值与实测范围见 [验收与交接](../docs/OPENBILL_ACCEPTANCE.md)。
 
 ## 使用与数据边界
 
-打开 **CYLedger** 直接进入个人账本。首次使用自动建立简体中文/人民币档案；升级沿用已有唯一档案及 UID，保留账本。多个、停用或删除档案会阻止自动进入，避免误选。注册接口关闭；会话由 Go 经 JNI 仅交给本应用 WebView，没有公开自动登录 HTTP 接口。
+打开 **OpenBill** 直接进入个人账本。首次使用自动建立简体中文/人民币档案；升级沿用已有唯一档案及 UID，保留账本。多个、停用或删除档案会阻止自动进入，避免误选。注册接口关闭；会话由 Go 经 JNI 仅交给本应用 WebView，没有公开自动登录 HTTP 接口。
 
-数据库为应用私有目录 `files/ledger/data/cyledger.db`，附件为 `files/ledger/storage`。离线记账直接写入手机数据库。电脑与手机账本独立，没有自动同步。“我的 → 数据备份”可创建、导出、删除和恢复完整手机备份；CSV/Excel 不能替代完整备份。
+数据库为应用私有目录 `files/ledger/data/cyledger.db`，附件为 `files/ledger/storage`。离线记账直接写入手机数据库。账本保存在本机，没有多设备自动同步。“我的 → 数据备份”可创建、导出、删除和恢复完整手机备份；CSV/Excel 不能替代完整备份。
 
 正式版关闭 WebView 调试和系统云备份，提供指纹/面容/系统锁屏凭据及本机手势锁。返回手势、系统栏/键盘、文件选择、CSV/Excel/图片 ZIP 和消费分析文本保存由原生外壳接入。导出时在系统文件选择器指定保存位置；导出文件不能替代完整账本备份。深色、浅色及跟随系统主题均可用。
 
@@ -18,7 +18,7 @@ APK 内包含 Vue / Framework7 界面、ARM64 Go / SQLite 共享库和 Java / JN
 
 在“我的 → 数据备份”创建备份；可开启每天首次打开时自动保存一份，默认关闭。备份保存在应用私有的 `files/backups`，通过系统文件选择器导出到用户选定位置。备份包含 SQLite 全库、配置、附件、主题/卡片/搜索等显示偏好，附逐文件 SHA-256；不包含登录令牌、手机锁屏/手势凭据以及每日提醒、自动备份等原生开关。
 
-备份先阻止请求与定时任务修改数据，再用 SQLite `VACUUM INTO` 获取一致快照。恢复先校验格式、路径、大小、摘要、SQLite 完整性及唯一有效本机档案，用户确认后自动备份当前账本；独立维护进程关闭主进程后替换目录并重启。恢复前目录和备份保留供回退，不静默删除。手机格式为 `cyledger-mobile-backup-v1`，单包最多 2 GiB / 50,000 文件，与电脑停服备份格式不同。ZIP 未加密，应保管好导出的副本。
+备份先阻止请求与定时任务修改数据，再用 SQLite `VACUUM INTO` 获取一致快照。恢复先校验格式、路径、大小、摘要、SQLite 完整性及唯一有效本机档案，用户确认后自动备份当前账本；独立维护进程关闭主进程后替换目录并重启。恢复前目录和备份保留供回退，不静默删除。手机格式为 `cyledger-mobile-backup-v1`，单包最多 2 GiB / 50,000 文件，保留旧版本格式身份以便恢复历史备份。ZIP 未加密，应保管好导出的副本。
 
 应用锁在启动或进入后台超过 30 秒后启用；手势连续五次失败冷却一分钟，可使用系统凭据解锁。指纹/面容和凭据依赖手机系统已配置的锁屏。系统任务列表的内容隐藏可单独开启；每日提醒需通知权限，系统节电可能推迟提醒。系统快捷开关可直接打开手动记账。
 
@@ -45,7 +45,7 @@ python .\scripts\build_android.py
 
 脚本构建前端、Go 共享库、JNI、Java、D8 和签名 APK，检查 APK/ELF 的 16 KB 对齐。不需要另装 Android Studio、Gradle 或模拟器。脚本面向 Windows；SDK 可由 `ANDROID_HOME` 或 `--sdk` 指定，NDK 用 `--ndk` 指定。
 
-产物为 `dist/android/CYLedger-Android-arm64.apk`。当前仅构建 ARM64，声明最低 Android 8.0，实际验收仅覆盖 Android 16 真机。前端和后端源码均未变化且缓存仍存在时，可使用 `--skip-frontend --skip-backend`；清理构建缓存后应执行完整构建。
+产物为 `dist/android/OpenBill-Android-arm64.apk`。当前仅构建 ARM64，声明最低 Android 8.0，实际验收仅覆盖 Android 16 真机。前端和后端源码均未变化且缓存仍存在时，可使用 `--skip-frontend --skip-backend`；清理构建缓存后应执行完整构建。
 
 APK 只打包网页资源、原生库、默认配置和许可证，排除运行账本、个人配置、签名材料及 `dist/android` 中的安装包。
 
@@ -53,7 +53,7 @@ APK 只打包网页资源、原生库、默认配置和许可证，排除运行�
 
 ```powershell
 adb devices -l
-adb -s <手机序列号> install --no-incremental -r .\dist\android\CYLedger-Android-arm64.apk
+adb -s <手机序列号> install --no-incremental -r .\dist\android\OpenBill-Android-arm64.apk
 adb -s <手机序列号> shell am start -n com.cyledger.android/com.cyledger.android.MainActivity
 ```
 
@@ -65,7 +65,7 @@ adb -s <手机序列号> shell am start -n com.cyledger.android/com.cyledger.and
 
 ```powershell
 python .\scripts\build_android.py --qa
-adb -s <手机序列号> install --no-incremental -r .\dist\android\CYLedger-Android-arm64-qa.apk
+adb -s <手机序列号> install --no-incremental -r .\dist\android\OpenBill-Android-arm64-qa.apk
 ```
 
 QA 包 `com.cyledger.android.qa` 使用独立私有目录与端口 `18762`，允许 WebView 调试，只能放虚构数据。需要电脑调用测试 API 时使用 `adb forward tcp:18862 tcp:18762`；结束后执行 `adb forward --remove tcp:18862`。不得把测试脚本指向正式端口。

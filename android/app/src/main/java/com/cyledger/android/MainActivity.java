@@ -13,6 +13,7 @@ import android.os.Looper;
 import android.util.Base64;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.webkit.CookieManager;
@@ -26,6 +27,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -66,6 +68,8 @@ public final class MainActivity extends Activity {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private LinearLayout root;
     private WebView web;
+    private OpenBillSplash splash;
+    private boolean checkingPage;
     private String origin;
     private ValueCallback<Uri[]> uploadCallback;
     private byte[] pendingDownload;
@@ -79,6 +83,9 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            getSplashScreen().setOnExitAnimationListener(provider -> provider.remove());
+        }
         try { MaintenanceActivity.recover(getFilesDir()); } catch(Exception error){ finish(); return; }
         local=new LocalBridge(this);
         int port = getPackageName().endsWith(".qa") ? 18762 : 18761;
@@ -86,13 +93,16 @@ public final class MainActivity extends Activity {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         setContentView(root);
+        appearanceDark = false;
         applyInsets();
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             backCallback = this::onBackPressed;
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
                 android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, backCallback);
         }
-        showStatus("正在打开手机账本…", false);
+        root.setBackgroundColor(Color.rgb(247, 244, 235));
+        splash = new OpenBillSplash(this);
+        root.addView(splash, new LinearLayout.LayoutParams(-1, -1));
         synchronized (START_LOCK) {
             if (!backendStarted) {
                 backendStarted = true;
@@ -135,6 +145,8 @@ public final class MainActivity extends Activity {
     }
 
     private void showStatus(String message, boolean retry) {
+        splash = null;
+        checkingPage = false;
         root.removeAllViews();
         root.setBackgroundColor(Color.rgb(247, 244, 237));
         TextView label = new TextView(this);
@@ -246,7 +258,18 @@ public final class MainActivity extends Activity {
                     }
                 }
                 @Override public void onPageFinished(WebView view, String url) {
-                    if (isLocal(url)) root.requestApplyInsets();
+                    if (isLocal(url)) {
+                        root.requestApplyInsets();
+                        if (splash != null && !checkingPage) {
+                            checkingPage = true;
+                            revealLedger(0);
+                        }
+                    }
+                }
+                @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
+                    if (request.isForMainFrame() && isLocal(request.getUrl().toString())) {
+                        showStatus("手机账本页面加载失败，请重试。", true);
+                    }
                 }
             });
             web.setWebChromeClient(new WebChromeClient() {
@@ -289,7 +312,12 @@ public final class MainActivity extends Activity {
                 else if (isLocal(url)) io.execute(() -> download(url, userAgent, filename, mime));
             });
         }
-        root.addView(web, new LinearLayout.LayoutParams(-1, -1));
+        if (web.getParent() instanceof ViewGroup) ((ViewGroup) web.getParent()).removeView(web);
+        FrameLayout stage = new FrameLayout(this);
+        stage.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        if (splash == null) splash = new OpenBillSplash(this);
+        stage.addView(splash, new FrameLayout.LayoutParams(-1, -1));
+        root.addView(stage, new LinearLayout.LayoutParams(-1, -1));
         if (state != null && web.restoreState(state) != null) return;
         web.loadUrl(origin + "/personal"+(getIntent().getBooleanExtra("quickEntry",false)?"#!/transaction/add?type=3":""));
     }
@@ -299,6 +327,25 @@ public final class MainActivity extends Activity {
         Uri uri = Uri.parse(url);
         Uri local = Uri.parse(origin);
         return "http".equals(uri.getScheme()) && "127.0.0.1".equals(uri.getHost()) && uri.getPort() == local.getPort();
+    }
+
+    // Wait for the actual Framework7 page, rather than only the HTML load event.
+    private void revealLedger(int attempt) {
+        if (destroyed || web == null || splash == null) return;
+        web.evaluateJavascript("!!document.querySelector('.view-main .page-current')", value -> {
+            if (destroyed || splash == null) return;
+            if ("true".equals(value)) {
+                OpenBillSplash finished = splash;
+                splash = null;
+                checkingPage = false;
+                Runnable remove = () -> {
+                    if (finished.getParent() instanceof ViewGroup) ((ViewGroup) finished.getParent()).removeView(finished);
+                };
+                if (android.animation.ValueAnimator.areAnimatorsEnabled()) finished.animate().alpha(0).setDuration(180).withEndAction(remove).start();
+                else remove.run();
+            } else if (attempt < 200) handler.postDelayed(() -> revealLedger(attempt + 1), 100);
+            else showStatus("账本界面未能打开，请重试。", true);
+        });
     }
 
     private final class AppearanceBridge {
@@ -504,7 +551,10 @@ public final class MainActivity extends Activity {
         }
         handler.removeCallbacksAndMessages(null);
         if (uploadCallback != null) uploadCallback.onReceiveValue(null);
-        if (web != null) { root.removeView(web); web.destroy(); }
+        if (web != null) {
+            if (web.getParent() instanceof ViewGroup) ((ViewGroup) web.getParent()).removeView(web);
+            web.destroy();
+        }
         io.shutdownNow();
         if(local!=null)local.destroy();
         super.onDestroy();

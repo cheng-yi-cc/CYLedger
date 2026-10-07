@@ -123,34 +123,6 @@ export interface OverviewWidgetLayoutBase {
     settings: Record<string, OverviewWidgetSettingValue>;
 }
 
-export interface DesktopOverviewWidgetDefinition extends OverviewWidgetDefinitionBase{
-    type: OverviewWidgetType;
-    name: string;
-    supportsSettings: OverviewWidgetSettingItem[];
-    defaultWidth: number;
-    defaultHeight: number;
-    minWidth: number;
-    minHeight: number;
-    maxWidth?: number;
-    maxHeight?: number;
-    defaultSettings: Record<string, OverviewWidgetSettingValue>;
-    dataRequirements: OverviewWidgetDataRequirement[];
-}
-
-export interface DesktopOverviewLayout extends OverviewLayoutBase {
-    widgets: DesktopOverviewWidgetLayout[];
-}
-
-export interface DesktopOverviewWidgetLayout extends OverviewWidgetLayoutBase {
-    id: string;
-    type: OverviewWidgetType;
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    settings: Record<string, OverviewWidgetSettingValue>;
-}
-
 export interface MobileOverviewWidgetDefinition extends OverviewWidgetDefinitionBase {
     type: OverviewWidgetType;
     name: string;

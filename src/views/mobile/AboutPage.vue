@@ -14,8 +14,8 @@
         <f7-list strong inset dividers>
             <f7-list-item :title="tt('Version')" :after="clientVersion" @click="showVersion"></f7-list-item>
             <f7-list-item :title="tt('Build Time')" :after="clientBuildTime" v-if="clientBuildTime"></f7-list-item>
-            <f7-list-item :title="tt('Official Website')" link="#" @click="openExternalUrl('https://github.com/mayswind/ezbookkeeping')"></f7-list-item>
-            <f7-list-item :title="tt('Report Issue')" link="#" @click="openExternalUrl('https://github.com/mayswind/ezbookkeeping/issues')"></f7-list-item>
+            <f7-list-item :title="tt('Official Website')" link="#" @click="openExternalUrl('https://github.com/cheng-yi-cc/OpenBill')"></f7-list-item>
+            <f7-list-item :title="tt('Report Issue')" link="#" @click="openExternalUrl('https://github.com/cheng-yi-cc/OpenBill/issues')"></f7-list-item>
             <f7-list-item :title="tt('Getting help')" link="#" popup-open=".document-popup"></f7-list-item>
             <f7-list-item :title="tt('License')" link="#" popup-open=".license-popup"></f7-list-item>
         </f7-list>

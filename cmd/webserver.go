@@ -177,23 +177,6 @@ func startWebServer(c *core.CliContext) error {
 		router.StaticFile("/mobile/"+workboxFileNames[i], filepath.Join(config.StaticRootPath, workboxFileNames[i]))
 	}
 
-	router.StaticFile("/desktop", filepath.Join(config.StaticRootPath, "desktop.html"))
-	router.Match([]string{http.MethodHead, http.MethodGet}, "/desktop#/*fragment", bindLocalFile(filepath.Join(config.StaticRootPath, "desktop.html"))) // add compatibility for browsers that send the full URL with the fragment to the server
-	router.Static("/desktop/js", filepath.Join(config.StaticRootPath, "js"))
-	router.Static("/desktop/css", filepath.Join(config.StaticRootPath, "css"))
-	router.Static("/desktop/img", filepath.Join(config.StaticRootPath, "img"))
-	router.Static("/desktop/fonts", filepath.Join(config.StaticRootPath, "fonts"))
-	router.StaticFile("/desktop/favicon.ico", filepath.Join(config.StaticRootPath, "favicon.ico"))
-	router.StaticFile("/desktop/favicon.png", filepath.Join(config.StaticRootPath, "favicon.png"))
-	router.StaticFile("/desktop/touchicon.png", filepath.Join(config.StaticRootPath, "touchicon.png"))
-	router.StaticFile("/desktop/manifest.json", filepath.Join(config.StaticRootPath, "manifest.json"))
-	router.StaticFile("/desktop/sw.js", filepath.Join(config.StaticRootPath, "sw.js"))
-	router.GET("/desktop/server_settings.js", bindCachedJs(api.ServerSettings.ServerSettingsJavascriptHandler, config, serverSettingsCacheStore))
-
-	for i := 0; i < len(workboxFileNames); i++ {
-		router.StaticFile("/desktop/"+workboxFileNames[i], filepath.Join(config.StaticRootPath, workboxFileNames[i]))
-	}
-
 	if config.AvatarProvider == core.USER_AVATAR_PROVIDER_INTERNAL {
 		avatarRoute := router.Group("/avatar")
 		avatarRoute.Use(bindMiddleware(middlewares.JWTAuthorizationByQueryString(config), config))

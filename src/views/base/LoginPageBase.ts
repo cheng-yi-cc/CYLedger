@@ -13,7 +13,7 @@ import { getOAuth2Provider, getOIDCCustomDisplayNames, getLoginPageTips } from '
 import { getClientDisplayVersion } from '@/lib/version.ts';
 import { setExpenseAndIncomeAmountColor } from '@/lib/ui/common.ts';
 
-export function useLoginPageBase(platform: 'mobile' | 'desktop') {
+export function useLoginPageBase(platform: 'mobile') {
     const { getServerMultiLanguageConfigContent, getLocalizedOAuth2LoginText, setLanguage } = useI18n();
 
     const rootStore = useRootStore();

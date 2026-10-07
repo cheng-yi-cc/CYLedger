@@ -3,8 +3,6 @@ import { resolve } from 'path';
 
 import { type UserConfig, type Plugin, defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue';
-import vuetify from 'vite-plugin-vuetify';
-import { VitePWA } from 'vite-plugin-pwa';
 import Checker from 'vite-plugin-checker';
 import { minify } from 'terser';
 import { execFileSync } from 'node:child_process';
@@ -136,11 +134,6 @@ export default defineConfig(() => {
                     }
                 }
             }),
-            vuetify({
-                styles: {
-                    configFile: 'styles/desktop/settings.scss'
-                }
-            }),
             injectFramework7CssFile({
                 htmlFileName: 'mobile.html',
                 placeHolders: [
@@ -159,68 +152,7 @@ export default defineConfig(() => {
             Checker({
                 vueTsc: true
             }),
-            VitePWA({
-                strategies: 'injectManifest',
-                srcDir: './',
-                filename: 'sw.ts',
-                injectRegister: false,
-                manifestFilename: 'manifest.json',
-                manifest: {
-                    name: 'CYLedger',
-                    short_name: 'CYLedger',
-                    description: '日常记账与投资资产管理',
-                    theme_color: '#12786f',
-                    background_color: '#F6F7F8',
-                    start_url: './',
-                    scope: './',
-                    display: 'standalone',
-                    related_applications: [],
-                    prefer_related_applications: false,
-                    icons: [
-                        {
-                            src: 'img/ezbookkeeping-192.png',
-                            sizes: '192x192',
-                            type: 'image/png'
-                        },
-                        {
-                            src: 'img/ezbookkeeping-512.png',
-                            sizes: '512x512',
-                            type: 'image/png'
-                        }
-                    ],
-                    share_target: {
-                        action: './__share__image__',
-                        method: 'POST',
-                        enctype: 'multipart/form-data',
-                        params: {
-                            files: [
-                                {
-                                    'name': 'image',
-                                    'accept': ['image/*']
-                                }
-                            ]
-                        }
-                    }
-                },
-                injectManifest: {
-                    globDirectory: 'dist/',
-                    globPatterns: ['**/*.{js,css,html,ico,png,jpg,jpeg,gif,tiff,bmp,ttf,woff,woff2,svg,eot}'],
-                    globIgnores: [
-                        'index.html',
-                        'mobile.html',
-                        'desktop.html',
-                        'robots.txt',
-                        'img/desktop/*',
-                        'fonts/*.eot',
-                        'fonts/*.ttf',
-                        'fonts/*.svg',
-                        'fonts/*.woff',
-                        'css/*.css',
-                        'js/*.js'
-                    ],
-                    maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB
-                }
-            })
+
         ],
         worker: {
             plugins: () => [
@@ -229,24 +161,13 @@ export default defineConfig(() => {
             rolldownOptions: {
                 output: {
                     chunkFileNames: 'js/[name]-[hash].js',
-                    entryFileNames: chunkInfo => {
-                        if (chunkInfo.name === 'editor.worker') {
-                            return 'js/sw.monaco-editor-[hash].js';
-                        } else if (chunkInfo.name === 'ts.worker') {
-                            return 'js/sw.monaco-editor-lang-ts-[hash].js';
-                        }
-
-                        return 'js/[name]-[hash].js';
-                    }
+                    entryFileNames: 'js/[name]-[hash].js'
                 }
             }
         },
         build: {
             target: [
-                'chrome119',
-                'edge119',
-                'firefox128',
-                'safari16.4'
+                'chrome119'
             ],
             minify: 'terser',
             outDir: BUILD_DIR,
@@ -256,7 +177,6 @@ export default defineConfig(() => {
             rolldownOptions: {
                 input: {
                     index: resolve(SRC_DIR, 'index.html'),
-                    desktop: resolve(SRC_DIR, 'desktop.html'),
                     mobile: resolve(SRC_DIR, 'mobile.html'),
                     'vendor-framework7-ltr': resolve(SRC_DIR, 'mobile-ltr.scss'),
                     'vendor-framework7-rtl': resolve(SRC_DIR, 'mobile-rtl.scss')
@@ -301,10 +221,6 @@ export default defineConfig(() => {
                     changeOrigin: true
                 },
                 '/mobile/server_settings.js': {
-                    target: process.env['CYLEDGER_DEV_BACKEND'] || 'http://127.0.0.1:8080/',
-                    changeOrigin: true
-                },
-                '/desktop/server_settings.js': {
                     target: process.env['CYLEDGER_DEV_BACKEND'] || 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 },

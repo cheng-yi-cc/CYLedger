@@ -16,7 +16,6 @@ import {
     DEFAULT_CATEGORICAL_CHART_DATA_RANGE,
     DEFAULT_TREND_CHART_DATA_RANGE,
     DEFAULT_ASSET_TRENDS_CHART_DATA_RANGE,
-    DEFAULT_RECONCILIATION_STATEMENT_DATE_RANGE_IN_DESKTOP,
     DEFAULT_RECONCILIATION_STATEMENT_DATE_RANGE_IN_MOBILE,
 } from './statistics.ts';
 import { DEFAULT_TRANSACTION_EXPLORER_DATE_RANGE } from './explorer.ts';
@@ -52,9 +51,7 @@ export interface ApplicationSettings extends BaseApplicationSetting {
     applicationLock: boolean;
     applicationLockWebAuthn: boolean;
     // Navigation Bar
-    showAddTransactionButtonInDesktopNavbar: boolean;
     // Overview Page
-    desktopOverviewPageLayout: string;
     mobileOverviewPageLayout: string;
     showAmountInHomePage: boolean;
     timezoneUsedForStatisticsInHomePage: number;
@@ -86,7 +83,6 @@ export interface ApplicationSettings extends BaseApplicationSetting {
     totalAmountExcludeAccountIds: Record<string, boolean>;
     hideCategoriesWithoutAccounts: boolean;
     defaultCreditCardAmountDisplayTypeInMobile: number;
-    reconciliationStatementButtonDefaultDateRangeTypeInDesktop: number;
     reconciliationStatementPageDefaultDateRangeTypeInMobile: number;
     // Exchange Rates Data Page
     currencySortByInExchangeRatesPage: number;
@@ -143,9 +139,7 @@ export const ALL_ALLOWED_CLOUD_SYNC_APP_SETTING_KEY_TYPES: Record<string, UserAp
     'autoUpdateExchangeRatesData': UserApplicationCloudSettingType.Boolean,
     'chartColors': UserApplicationCloudSettingType.String,
     // Navigation Bar
-    'showAddTransactionButtonInDesktopNavbar': UserApplicationCloudSettingType.Boolean,
     // Overview Page
-    'desktopOverviewPageLayout': UserApplicationCloudSettingType.String,
     'mobileOverviewPageLayout': UserApplicationCloudSettingType.String,
     'showAmountInHomePage': UserApplicationCloudSettingType.Boolean,
     'timezoneUsedForStatisticsInHomePage': UserApplicationCloudSettingType.Number,
@@ -177,7 +171,6 @@ export const ALL_ALLOWED_CLOUD_SYNC_APP_SETTING_KEY_TYPES: Record<string, UserAp
     'totalAmountExcludeAccountIds': UserApplicationCloudSettingType.StringBooleanMap,
     'hideCategoriesWithoutAccounts': UserApplicationCloudSettingType.Boolean,
     'defaultCreditCardAmountDisplayTypeInMobile': UserApplicationCloudSettingType.Number,
-    'reconciliationStatementButtonDefaultDateRangeTypeInDesktop': UserApplicationCloudSettingType.Number,
     'reconciliationStatementPageDefaultDateRangeTypeInMobile': UserApplicationCloudSettingType.Number,
     // Exchange Rates Data Page
     'currencySortByInExchangeRatesPage': UserApplicationCloudSettingType.Number,
@@ -221,9 +214,7 @@ export const DEFAULT_APPLICATION_SETTINGS: ApplicationSettings = {
     applicationLock: false,
     applicationLockWebAuthn: false,
     // Navigation Bar
-    showAddTransactionButtonInDesktopNavbar: true,
     // Overview Page
-    desktopOverviewPageLayout: '',
     mobileOverviewPageLayout: '',
     showAmountInHomePage: true,
     timezoneUsedForStatisticsInHomePage: TimezoneTypeForStatistics.Default.type,
@@ -255,7 +246,6 @@ export const DEFAULT_APPLICATION_SETTINGS: ApplicationSettings = {
     totalAmountExcludeAccountIds: {},
     hideCategoriesWithoutAccounts: false,
     defaultCreditCardAmountDisplayTypeInMobile: CreditCardAmountDisplayType.Default.type,
-    reconciliationStatementButtonDefaultDateRangeTypeInDesktop: DEFAULT_RECONCILIATION_STATEMENT_DATE_RANGE_IN_DESKTOP.type,
     reconciliationStatementPageDefaultDateRangeTypeInMobile: DEFAULT_RECONCILIATION_STATEMENT_DATE_RANGE_IN_MOBILE.type,
     // Exchange Rates Data Page
     currencySortByInExchangeRatesPage: CurrencySortingType.Default.type,

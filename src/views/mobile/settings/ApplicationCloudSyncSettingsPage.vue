@@ -41,7 +41,6 @@
                                       @change="updateSettingSelected(settingItem, $event.target.checked)">
                             <template #after>
                                 <f7-icon class="synchronized-settings-device-icon" f7="device_phone_portrait" v-if="settingItem.mobile"></f7-icon>
-                                <f7-icon class="synchronized-settings-device-icon" f7="device_desktop" v-if="settingItem.desktop"></f7-icon>
                             </template>
                         </f7-list-item>
                     </ul>

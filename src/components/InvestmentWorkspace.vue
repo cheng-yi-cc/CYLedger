@@ -1,7 +1,7 @@
 <template>
     <div class="cy-wealth">
         <header v-if="!editorOnly" class="cy-heading">
-            <div><p class="cy-eyebrow">CYLEDGER · 资产账本</p><h1>我的资产</h1><p class="cy-muted">日常账户与投资持仓，统一以人民币查看。</p></div>
+            <div><p class="cy-eyebrow">OPENBILL · 资产账本</p><h1>我的资产</h1><p class="cy-muted">日常账户与投资持仓，统一以人民币查看。</p></div>
             <button class="cy-button cy-primary" @click="openEvent()">＋ 记录投资</button>
         </header>
         <p v-if="error" class="cy-message cy-error" role="alert">{{ error }} <button @click="retryLoad">重试加载</button></p>
@@ -247,7 +247,7 @@ function saveQuote(): Promise<void> { return mutation(async () => { validDecimal
 function restoreAutomaticQuote(): Promise<void> { return mutation(() => investments.automaticQuote(quoteDraft.instrumentId), '已移除手动报价。支持的资产将使用自动行情；不支持的资产显示为暂未估值。'); }
 function voidEvent(): Promise<void> { return mutation(async () => { if (voidCandidate.value) { await investments.voidEvent(voidCandidate.value); invalidateDailyData(); } }, '投资流水已撤销，关联资金与持仓已重算。'); }
 function saveSettings(): Promise<void> { return mutation(async () => { if (!moment.tz.zone(settings.timeZone)) throw new Error('请输入有效时区，例如 Asia/Shanghai'); await investments.saveSettings({ ...settings }); }, '投资设置已保存。'); }
-async function downloadCSV(): Promise<void> { saving.value = true; error.value = ''; try { const csv = await investments.export(); const url = URL.createObjectURL(new Blob(['\uFEFF', csv.replace(/^\uFEFF/, '')], { type: 'text/csv;charset=utf-8;' })); const link = document.createElement('a'); link.href = url; link.download = `CYLedger-投资业务-${moment().format('YYYY-MM-DD')}.csv`; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); notice.value = '投资业务 CSV 已生成。'; } catch (cause) { error.value = investmentError(cause); } finally { saving.value = false; } }
+async function downloadCSV(): Promise<void> { saving.value = true; error.value = ''; try { const csv = await investments.export(); const url = URL.createObjectURL(new Blob(['\uFEFF', csv.replace(/^\uFEFF/, '')], { type: 'text/csv;charset=utf-8;' })); const link = document.createElement('a'); link.href = url; link.download = `OpenBill-投资业务-${moment().format('YYYY-MM-DD')}.csv`; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); notice.value = '投资业务 CSV 已生成。'; } catch (cause) { error.value = investmentError(cause); } finally { saving.value = false; } }
 function saveLocalDraft(): void {
     try {
         localStorage.setItem(localDraftKey, JSON.stringify({ event: { ...draft }, cost: costInput.value, time: eventTime.value, settlementMode: settlementMode.value, requestKey: idempotencyKey.value }));
@@ -272,7 +272,7 @@ function downloadPositions(): void {
     const rows: unknown[][] = [['投资账户', '资产ID', '资产名称', '代码', '数量', '剩余成本CNY', '成本已知', '平均成本CNY', '已实现净损益CNY', '市值CNY', '未实现盈亏CNY', '报价状态', '报价来源', '源报价时间', '估值汇率', '汇率日期']];
     for (const p of summary.value?.positions || []) rows.push([accountName(p.accountId), p.instrumentId, instrumentName(p.instrumentId), instrumentSymbol(p.instrumentId), p.quantity, p.cost, p.costKnown, p.averageCost, p.realizedPnl, p.marketValue, p.unrealizedPnl, quoteState(p), p.quote?.source, p.quote?.sourceTime ? date(p.quote.sourceTime) : '', p.quote?.fxRate, p.quote?.fxDate]);
     const url = URL.createObjectURL(new Blob(['\uFEFF', rows.map(row => row.map(safe).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8;' }));
-    const link = document.createElement('a'); link.href = url; link.download = `CYLedger-当前持仓-${moment().format('YYYY-MM-DD')}.csv`; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const link = document.createElement('a'); link.href = url; link.download = `OpenBill-当前持仓-${moment().format('YYYY-MM-DD')}.csv`; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 watch(() => draft.type, () => { preview.value = null; });
 let timer: ReturnType<typeof setInterval> | undefined;

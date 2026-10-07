@@ -5,7 +5,7 @@
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:colorAccent">#387F79</item>
-        <item name="android:windowBackground">#F7F4ED</item>
+        <item name="android:colorAccent">@color/openbill_ink</item>
+        <item name="android:windowBackground">@color/openbill_paper</item>
     </style>
 </resources>

@@ -53,10 +53,3 @@ export function getMobileVersionPath(): string {
         return getBasePath() + '/mobile.html#/';
     }
 }
-export function getDesktopVersionPath(): string {
-    if (isProduction()) {
-        return getBasePath() + '/desktop#/';
-    } else {
-        return getBasePath() + '/desktop.html#/';
-    }
-}

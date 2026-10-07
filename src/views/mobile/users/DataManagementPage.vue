@@ -9,7 +9,7 @@ async function load(){await ledger.load(0,moment().add(100,'year').unix());try{b
 function exportCsv(){exportLedgerEntries(filtered.value,scope.timeZone);}function exportXlsx(){exportLedgerWorkbook(ledgerEntryRows(filtered.value,scope.timeZone));}
 async function run(action:()=>Promise<void>){busy.value=true;error.value='';try{await action();}catch(e){error.value=investmentError(e);}finally{busy.value=false;progress.value='';}}
 function pictures(){return run(()=>exportLedgerPictures(filtered.value,scope.timeZone,value=>progress.value=value));}
-function investment(){return run(async()=>downloadLedgerFile(await investments.export(),`CYLedger-投资-${moment().format('YYYYMMDD-HHmmss')}.csv`,'text/csv;charset=utf-8'));}
+function investment(){return run(async()=>downloadLedgerFile(await investments.export(),`OpenBill-投资-${moment().format('YYYYMMDD-HHmmss')}.csv`,'text/csv;charset=utf-8'));}
 function assets(){exportLedgerWorkbook([['账户','币种','余额','类型','计入总资产'],...accounts.allPlainAccounts.filter(a=>!a.subAccounts?.length).map(a=>[a.name,a.currency,new LedgerDecimal(a.balance).div(100).toFixed(2),a.assetProfile.kind||'',a.assetProfile.excludeFromTotal?'否':'是'])],'资产账户');}
 function template(){exportLedgerWorkbook([['日期','类型','分类','子分类','账户','币种','金额','账户2','账户2币种','账户2金额','标签','备注'],['2026-01-01 12:00:00','支出','餐饮','早餐','现金','CNY','12.50','','','','','示例，请替换为自己的数据']],'导入模板');}
 function undo(batch:Batch){f7.dialog.confirm(`撤回「${batch.name}」尚存在的全部账单，并恢复对应余额。后续修改过的导入账单也包含在内。`,'撤回导入',()=>run(async()=>{await axios.post('v1/ledger/imports/undo',{id:batch.id});await accounts.loadAllAccounts({force:true});await load();}));}

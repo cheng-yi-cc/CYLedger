@@ -43,11 +43,6 @@
             ></f7-list-input>
 
             <f7-list-item class="login-page-utilities">
-                <template #title>
-                    <small>
-                        <f7-link :class="{ 'disabled': loggingInByPassword || loggingInByOAuth2 }" @click="switchToDesktopVersion">{{ tt('Switch to Desktop Version') }}</f7-link>
-                    </small>
-                </template>
                 <template #after>
                     <small>
                         <f7-link :class="{ 'disabled': !isUserForgetPasswordEnabled() || loggingInByPassword || loggingInByOAuth2 }" @click="forgetPasswordEmail = ''; showForgetPasswordSheet = true">{{ tt('Forget Password?') }}</f7-link>
@@ -203,7 +198,7 @@ import {
     isInternalAuthEnabled,
     isOAuth2Enabled
 } from '@/lib/server_settings.ts';
-import { getDesktopVersionPath } from '@/lib/version.ts';
+
 import { useI18nUIComponents, showLoading, hideLoading, isModalShowing } from '@/lib/ui/mobile.ts';
 
 const props = defineProps<{
@@ -211,7 +206,7 @@ const props = defineProps<{
 }>();
 
 const { tt } = useI18n();
-const { showAlert, showConfirm, showToast, openExternalUrl } = useI18nUIComponents();
+const { showAlert, showToast, openExternalUrl } = useI18nUIComponents();
 
 const rootStore = useRootStore();
 
@@ -252,12 +247,6 @@ const twoFAVerifyTypeSwitchName = computed<string>(() => {
         return 'Use Backup Code';
     }
 });
-
-function switchToDesktopVersion(): void {
-    showConfirm('Are you sure you want to switch to desktop version?', () => {
-        window.location.replace(getDesktopVersionPath());
-    });
-}
 
 function login(): void {
     const router = props.f7router;

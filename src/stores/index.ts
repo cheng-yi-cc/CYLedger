@@ -84,11 +84,11 @@ export const useRootStore = defineStore('root', () => {
         currentNotification.value = content;
     }
 
-    function generateOAuth2LoginUrl(platform: 'mobile' | 'desktop', clientSessionId: string): string {
+    function generateOAuth2LoginUrl(platform: 'mobile', clientSessionId: string): string {
         return services.generateOAuth2LoginUrl(platform, clientSessionId);
     }
 
-    function generateOAuth2LinkUrl(platform: 'mobile' | 'desktop', clientSessionId: string): string {
+    function generateOAuth2LinkUrl(platform: 'mobile', clientSessionId: string): string {
         return services.generateOAuth2LinkUrl(platform, clientSessionId);
     }
 

@@ -1,4 +1,4 @@
-// CYLedger's Android host uses the same Go services and SQLite driver as desktop.
+// OpenBill embeds its Go services and SQLite database in Android.
 package main
 
 /*
@@ -44,16 +44,16 @@ func CYLedgerStart(directory *C.char, port C.int) *C.char {
 			// Market configuration must never prevent access to the offline ledger.
 			fmt.Fprintln(os.Stderr, "行情中转配置无效，使用默认网络；账本仍可离线使用。")
 		}
-		core.Version = "CYLedger-Android-0.2.0"
+		core.Version = "OpenBill-Android-0.3.0"
 		app := &cli.Command{
-			Name:     "CYLedger",
+			Name:     "OpenBill",
 			Commands: []*cli.Command{cmd.WebServer},
 			Flags: []cli.Flag{
 				&cli.StringFlag{Name: "conf-path"},
 				&cli.BoolFlag{Name: "no-boot-log"},
 			},
 		}
-		result = app.Run(context.Background(), []string{"CYLedger", "--conf-path", configPath, "--no-boot-log", "server", "run"})
+		result = app.Run(context.Background(), []string{"OpenBill", "--conf-path", configPath, "--no-boot-log", "server", "run"})
 	})
 	if result != nil {
 		// No financial data, configuration values or credentials leave the backend.
