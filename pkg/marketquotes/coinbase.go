@@ -66,7 +66,6 @@ func (s *Service) coinbaseLoop(ctx context.Context) {
 				continue
 			}
 		}
-		s.refreshREST(ctx)
 		started := time.Now()
 		_ = s.stream(ctx)
 		s.mu.Lock()
@@ -75,6 +74,7 @@ func (s *Service) coinbaseLoop(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
+		s.refreshREST(ctx)
 		if time.Since(started) > 30*time.Second {
 			delay = s.config.ReconnectMin
 		}
@@ -129,9 +129,14 @@ func (s *Service) refreshREST(ctx context.Context) {
 		}
 	}
 	s.mu.Unlock()
-	// Only five fixed public candidates exist, so sequential requests bound
-	// concurrency and upstream usage. Each response carries the actual trade time.
-	for product, id := range products {
+	// Bounded workers keep a slow product from delaying the other four.
+	keys := make([]string, 0, len(products))
+	for product := range products {
+		keys = append(keys, product)
+	}
+	runBounded(ctx, len(keys), 3, func(index int) {
+		product := keys[index]
+		id := products[product]
 		if ctx.Err() != nil {
 			return
 		}
@@ -144,15 +149,15 @@ func (s *Service) refreshREST(ctx context.Context) {
 		}
 		address := s.config.CoinbaseRESTURL + "/products/" + url.PathEscape(product) + "/ticker?limit=1"
 		if err := s.getJSON(ctx, address, nil, &response); err != nil || len(response.Trades) == 0 {
-			continue
+			return
 		}
 		trade := response.Trades[0]
 		sourceTime, err := time.Parse(time.RFC3339Nano, trade.Time)
 		if err != nil || trade.ProductID != product {
-			continue
+			return
 		}
 		s.putQuote(Quote{InstrumentID: id, Price: trade.Price, Currency: "USD", Source: SourceCoinbaseREST, ReceivedAt: s.config.Now().Unix(), State: StateDelayed}, sourceTime)
-	}
+	})
 }
 
 type coinbaseMessage struct {
@@ -188,7 +193,7 @@ func (s *Service) stream(ctx context.Context) error {
 	}
 	config.Dialer = &net.Dialer{Timeout: s.config.ReadTimeout}
 	config.Header.Set("User-Agent", "CYLedger/0.1 public-reference-prices")
-	conn, err := config.DialContext(ctx)
+	conn, err := s.dialMarketStream(ctx, config)
 	if err != nil {
 		return err
 	}

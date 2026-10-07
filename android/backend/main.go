@@ -13,12 +13,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	_ "time/tzdata"
 	"unsafe"
 
 	"github.com/mayswind/ezbookkeeping/cmd"
 	"github.com/mayswind/ezbookkeeping/pkg/core"
+	"github.com/mayswind/ezbookkeeping/pkg/marketquotes"
 	"github.com/urfave/cli/v3"
 	"gopkg.in/ini.v1"
 )
@@ -38,6 +40,10 @@ func CYLedgerStart(directory *C.char, port C.int) *C.char {
 		os.Setenv("EBK_WORK_DIR", root)
 		// Android's current trust store is supplied by the platform TrustManager.
 		os.Setenv("SSL_CERT_FILE", filepath.Join(root, "ca-certificates.pem"))
+		if err := loadMarketNetwork(root); err != nil {
+			// Market configuration must never prevent access to the offline ledger.
+			fmt.Fprintln(os.Stderr, "行情中转配置无效，使用默认网络；账本仍可离线使用。")
+		}
 		core.Version = "CYLedger-Android-0.2.0"
 		app := &cli.Command{
 			Name:     "CYLedger",
@@ -54,6 +60,11 @@ func CYLedgerStart(directory *C.char, port C.int) *C.char {
 		return C.CString("手机账本服务启动失败，请保留应用数据并重新打开。")
 	}
 	return nil
+}
+
+//export CYLedgerDirectNetwork
+func CYLedgerDirectNetwork(handle C.ulonglong, servers *C.char) {
+	marketquotes.SetDirectNetwork(uint64(handle), strings.Fields(C.GoString(servers)))
 }
 
 //export CYLedgerFree

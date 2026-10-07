@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -61,6 +62,9 @@ type FXRate struct {
 // query public instrument identifiers. API keys remain in the backend process.
 type Config struct {
 	HTTPClient         *http.Client
+	DomesticHTTPClient *http.Client
+	Network            NetworkConfig
+	SearchTimeout      time.Duration
 	CoinbaseRESTURL    string
 	CoinbaseWSURL      string
 	CoinGeckoURL       string
@@ -111,6 +115,9 @@ type cachedQuote struct {
 type Service struct {
 	config               Config
 	fundHTTPClient       *http.Client
+	searchFlights        singleflight.Group
+	searchSlots          [3]chan struct{}
+	referenceWake        map[string]chan struct{}
 	once                 sync.Once
 	mu                   sync.RWMutex
 	quotes               map[string]cachedQuote
@@ -134,29 +141,23 @@ type Service struct {
 }
 
 // Default is one cache and one public subscription shared by the application.
-var Default = New(Config{CoinGeckoAPIKey: os.Getenv("CYLEDGER_COINGECKO_DEMO_API_KEY")})
+var Default = New(Config{CoinGeckoAPIKey: os.Getenv("CYLEDGER_COINGECKO_DEMO_API_KEY"), Network: NetworkConfig{RelayURL: os.Getenv("CYLEDGER_MARKET_RELAY_URL"), RelayToken: os.Getenv("CYLEDGER_MARKET_RELAY_TOKEN")}})
 
 func New(config Config) *Service {
-	var fundHTTPClient *http.Client
-	if config.HTTPClient == nil {
-		config.HTTPClient = &http.Client{Timeout: 12 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) > 0 && req.URL.Host != via[0].URL.Host {
-				return http.ErrUseLastResponse
-			}
-			if len(via) >= 5 {
-				return errors.New("too many market data redirects")
-			}
-			return nil
-		}}
-		transport := http.DefaultTransport.(*http.Transport).Clone()
-		transport.DialContext = fundDNSDial(transport.DialContext, fundResolver.lookup)
-		// Some VPN paths take over ten seconds to complete the fund provider's
-		// TLS handshake. Keep a single total request budget and normal TLS checks.
-		transport.TLSHandshakeTimeout = 15 * time.Second
-		fundClient := *config.HTTPClient
-		fundClient.Transport = transport
-		fundClient.Timeout = 20 * time.Second
-		fundHTTPClient = &fundClient
+	// Tests may inject one client for every source; production has independent pools.
+	injected := config.HTTPClient != nil
+	if !injected {
+		config.HTTPClient = newMarketHTTPClient(false)
+	}
+	if config.DomesticHTTPClient == nil {
+		if injected {
+			config.DomesticHTTPClient = config.HTTPClient
+		} else {
+			config.DomesticHTTPClient = newMarketHTTPClient(true)
+		}
+	}
+	if config.SearchTimeout <= 0 {
+		config.SearchTimeout = 4 * time.Second
 	}
 	if config.CoinbaseRESTURL == "" {
 		config.CoinbaseRESTURL = "https://api.coinbase.com/api/v3/brokerage/market"
@@ -204,7 +205,14 @@ func New(config Config) *Service {
 	}
 	config.CoinbaseRESTURL = strings.TrimRight(config.CoinbaseRESTURL, "/")
 	configureReferenceSources(&config)
-	return &Service{config: config, fundHTTPClient: fundHTTPClient, quotes: make(map[string]cachedQuote), products: make(map[string]string), references: make(map[string]Binding), lastReferenceAttempt: make(map[string]time.Time), searchCache: make(map[string]searchEntry), monetarySearchCache: make(map[string]searchEntry)}
+	service := &Service{config: config, fundHTTPClient: config.DomesticHTTPClient, quotes: make(map[string]cachedQuote), products: make(map[string]string), references: make(map[string]Binding), lastReferenceAttempt: make(map[string]time.Time), searchCache: make(map[string]searchEntry), monetarySearchCache: make(map[string]searchEntry), referenceWake: make(map[string]chan struct{})}
+	for i := range service.searchSlots {
+		service.searchSlots[i] = make(chan struct{}, 4)
+	}
+	for _, provider := range []string{"tencent", "eastmoney", "coinbase"} {
+		service.referenceWake[provider] = make(chan struct{}, 1)
+	}
+	return service
 }
 
 // Start starts background refreshes once and returns immediately. Cancelling ctx
@@ -215,7 +223,9 @@ func (s *Service) Start(ctx context.Context) {
 		go s.restLoop(ctx)
 		go s.coinGeckoLoop(ctx)
 		go s.fxLoop(ctx)
-		go s.referenceLoop(ctx)
+		for _, provider := range []string{"tencent", "eastmoney", "coinbase"} {
+			go s.referenceProviderLoop(ctx, provider)
+		}
 		go s.hkdFXLoop(ctx)
 	})
 }
@@ -417,11 +427,7 @@ func (s *Service) getJSON(ctx context.Context, address string, headers map[strin
 	for name, value := range headers {
 		req.Header.Set(name, value)
 	}
-	client := s.config.HTTPClient
-	if isFundDNSHost(req.URL.Hostname()) && s.fundHTTPClient != nil {
-		client = s.fundHTTPClient
-	}
-	response, err := client.Do(req)
+	response, err := s.doPublicRequest(req)
 	if err != nil {
 		return err
 	}

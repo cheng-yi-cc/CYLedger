@@ -1,5 +1,12 @@
 [
     {
+        "name": "Go supplementary synchronization primitives (singleflight)",
+        "copyright": "Copyright 2009 The Go Authors.",
+        "url": "https://golang.org/x/sync",
+        "license": "BSD 3-Clause \"New\" or \"Revised\" License",
+        "licenseUrl": "https://github.com/golang/sync/blob/v0.22.0/LICENSE"
+    },
+    {
         "name": "ezBookkeeping (upstream foundation)",
         "copyright": "Copyright (c) 2020-2026 MaysWind (i@mayswind.net)",
         "url": "https://github.com/mayswind/ezbookkeeping",

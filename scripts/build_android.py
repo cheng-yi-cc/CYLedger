@@ -9,6 +9,8 @@ import secrets
 import shutil
 import subprocess
 import zipfile
+import ipaddress
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -25,6 +27,33 @@ def latest(directory, pattern):
     return max(candidates, key=lambda path: tuple(int(v) for v in path.name.replace("android-", "").split(".") if v.isdigit()))
 
 
+def market_network_bytes(path):
+    config = json.loads(path.read_text(encoding="utf-8")) if path else {}
+    if not isinstance(config, dict) or set(config) - {"relayUrl", "relayToken"}:
+        raise ValueError("Market network configuration must contain only relayUrl/relayToken")
+    address, token = config.get("relayUrl", ""), config.get("relayToken", "")
+    if not isinstance(address, str) or not isinstance(token, str):
+        raise ValueError("Market relay settings must be strings")
+    if address:
+        url = urlsplit(address)
+        try:
+            loopback = ipaddress.ip_address(url.hostname).is_loopback
+        except ValueError:
+            loopback = False
+        if not url.hostname or url.username or url.password or url.path not in ("", "/") or url.query or url.fragment:
+            raise ValueError("Use an HTTPS relay origin without path, query or credentials")
+        if url.scheme != "https" and not (url.scheme == "http" and loopback):
+            raise ValueError("HTTPS is required except for loopback tests")
+        if not 24 <= len(token) <= 256 or any(c.isspace() for c in token):
+            raise ValueError("Relay token must contain 24-256 non-whitespace characters")
+    elif token:
+        raise ValueError("Relay token requires a relay URL")
+    data = json.dumps(config, ensure_ascii=False).encode("utf-8")
+    if len(data) > 4096:
+        raise ValueError("Market network configuration is too large")
+    return data
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--qa", action="store_true", help="Separate app/data, with WebView debugging")
@@ -32,7 +61,9 @@ def main():
     parser.add_argument("--skip-backend", action="store_true", help="Reuse already built native libraries")
     parser.add_argument("--sdk", type=Path, default=Path(os.environ.get("ANDROID_HOME", str(Path.home() / "AppData/Local/Android/Sdk"))))
     parser.add_argument("--ndk", type=Path, default=Path("D:/tools/cyledger/android-sdk/ndk/28.2.13676358"))
+    parser.add_argument("--market-network", type=Path, help="Private JSON with relayUrl/relayToken; do not commit it")
     args = parser.parse_args()
+    market_network = market_network_bytes(args.market_network)
     tools = latest(args.sdk / "build-tools", "*")
     platform = latest(args.sdk / "platforms", "android-*") / "android.jar"
     go = shutil.which("go") or "D:/tools/cyledger/go/bin/go.exe"
@@ -66,7 +97,9 @@ def main():
              "-Wl,-soname,libcyledger_jni.so", "-I", native,
              ROOT / "android/native/jni.c", "-L", native, "-lcyledger_backend",
              "-o", native / "libcyledger_jni.so"])
+    (assets / "market-network.json").write_bytes(market_network)
     digest = hashlib.sha256()
+    digest.update(market_network)
     with zipfile.ZipFile(assets / "frontend.zip", "w", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted((ROOT / "dist").rglob("*")):
             if path.is_file() and path.relative_to(ROOT / "dist").parts[0] != "android":
