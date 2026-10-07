@@ -18,6 +18,9 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - name: Verify and apply reviewed patch
@@ -33,12 +36,15 @@ jobs:
           subprocess.run(['git', 'apply', '--check', str(target)], check=True)
           subprocess.run(['git', 'apply', str(target)], check=True)
           PY
+          git rm pkg/marketquotes/fund_dns.go pkg/marketquotes/fund_dns_test.go
           git diff --check
           git diff --stat
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+      - name: Resolve checksum for already-pinned singleflight dependency
+        run: go mod download golang.org/x/sync
       - name: Go race regression and relay build
         env:
           GOFLAGS: -mod=readonly
@@ -66,14 +72,17 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git rm .github/market-routing/00 .github/market-routing/01 .github/market-routing/02 .github/market-routing/03
-          git add android pkg scripts docs deploy tools
+          git add android pkg scripts docs deploy tools go.sum
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'refactor: isolate domestic and overseas market routes with bounded concurrent refresh'
           git push origin HEAD:refs/heads/fix/market-data-routing
+          git archive --format=tar.gz -o /tmp/cyledger-validated-source.tar.gz HEAD
       - name: Export test evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: market-routing-test-evidence
-          path: /tmp/market-tests.jsonl
+          path: |
+            /tmp/market-tests.jsonl
+            /tmp/cyledger-validated-source.tar.gz
           if-no-files-found: ignore
           retention-days: 7
