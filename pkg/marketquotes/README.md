@@ -84,7 +84,7 @@ go test ./pkg/marketquotes -run TestLiveReferenceSearchAndQuotes -count=1 -v
 
 按两币身份/分钟缓存最多 512 组公开结果，失败只缓存一分钟；请求只包含币种和时间，不包含账户、持仓或用户身份。成功入账保存所用价格与汇率依据，后续供应商变化不改历史事实。本接口无需账户密钥，但受部署网络、供应商限流和历史覆盖范围约束。
 
-普通测试使用本地服务，核对时间、交易对、十进制格式、汇率截止日期及缺失拒绝。2026-10-06 联网样本核验 USDT→BTC、USDC→ETH、USDT→SOL 的历史分钟及 2026-10-02 ECB 汇率成功。可显式运行 `CYLEDGER_LIVE_MARKET_TEST=1` 对应的 `TestLiveCryptoDCAHistory`；本机验证仅在测试进程沿用已有系统代理，未改变全局代理。手机是否可达仍须在实际网络下验证。
+普通测试使用本地服务，核对时间、交易对、十进制格式、汇率截止日期及缺失拒绝。2026-10-06 联网样本核验 USDT→BTC、USDC→ETH、USDT→SOL 的历史分钟及 2026-10-02 ECB 汇率成功。可显式运行 `CYLEDGER_LIVE_MARKET_TEST=1` 对应的 `TestLiveCryptoDCAHistory`；本机验证仅在测试进程沿用已有系统代理，未改变全局代理。2026-10-07 Android 16 真机通过原有 VPN，取得当日 12:04 Asia/Shanghai 的 USDT/BTC/ETH 分钟价及 2026-10-06 ECB 汇率，两笔补记成本经独立十进制复算一致。实际可达性仍依赖设备网络与供应商服务。
 
 ## 基金历史单位净值
 
