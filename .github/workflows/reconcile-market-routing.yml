@@ -1,0 +1,67 @@
+name: Reconcile and validate market routing
+on:
+  push:
+    branches: [fix/market-data-routing]
+    paths: ['.github/reconcile-network.py', '.github/workflows/reconcile-market-routing.yml']
+permissions:
+  contents: read
+jobs:
+  reconcile:
+    if: github.repository == 'cheng-yi-cc/CYLedger' && github.ref == 'refs/heads/fix/market-data-routing'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOFLAGS: -mod=readonly
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Integrate reviewed main changes without changing main
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git merge --no-commit --no-ff c59580cce0a58b54623b85e43924db953c2fbedd || test -f .git/MERGE_HEAD
+          python3 .github/reconcile-network.py
+      - name: Market, relay and accounting boundary regression
+        run: |
+          go test -race -count=1 -timeout=5m -json ./pkg/marketquotes ./pkg/marketrelay ./pkg/investments ./android/backend | tee /tmp/market-integrated-tests.jsonl
+          go build -o /tmp/cyledger-market-relay ./tools/market-relay
+          python3 scripts/test_market_network_config.py
+      - name: Android Java and native compilation
+        run: |
+          platform=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
+          test -n "$platform"
+          mkdir -p /tmp/market-java /tmp/market-native
+          javac -source 8 -target 8 -encoding UTF-8 -classpath "$platform" -d /tmp/market-java $(find android/app/src/main/java -name '*.java')
+          ndk=$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          compiler="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          test -x "$compiler"
+          GOOS=android GOARCH=arm64 CGO_ENABLED=1 CC="$compiler" go build -trimpath -buildmode=c-shared -o /tmp/market-native/libcyledger_backend.so ./android/backend
+          "$compiler" -shared -fPIC -O2 -Wl,-z,max-page-size=16384 -I /tmp/market-native android/native/jni.c -L /tmp/market-native -lcyledger_backend -o /tmp/market-native/libcyledger_jni.so
+      - name: Commit tested merge on feature branch only
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git rm .github/reconcile-network.py
+          git diff --cached --check
+          git commit -m 'merge: preserve latest income features and route historical market data through relay'
+          git push origin HEAD:refs/heads/fix/market-data-routing
+          git archive --format=tar.gz -o /tmp/cyledger-integrated-source.tar.gz HEAD
+      - name: Export exact source and regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-integrated-evidence
+          path: |
+            /tmp/market-integrated-tests.jsonl
+            /tmp/cyledger-integrated-source.tar.gz
+          if-no-files-found: ignore
+          retention-days: 7
