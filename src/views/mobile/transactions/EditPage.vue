@@ -1,20 +1,20 @@
 <template>
-    <f7-page :class="{ 'cy-mobile-surface cy-transaction-entry': canUseQuickEntry }" @page:afterin="onPageAfterIn" @page:beforeout="onPageBeforeOut">
+    <f7-page :class="{ 'cy-mobile-surface cy-transaction-entry': canUseQuickEntry, 'cy-mobile-surface cy-bill-detail-page': mode === TransactionEditPageMode.View }" @page:afterin="onPageAfterIn" @page:beforeout="onPageBeforeOut">
         <f7-navbar v-if="canUseQuickEntry" class="cy-quick-navbar">
             <f7-nav-left><f7-link back icon-f7="chevron_left" :aria-label="tt('Back')" /></f7-nav-left>
             <f7-nav-title><nav class="cy-entry-types" aria-label="记账类型"><button v-for="item in entryTypes" :key="item.value" :aria-pressed="activeEntryType === item.value" :disabled="loading || submitting" @click="selectEntryType(item.value)">{{ item.label }}</button></nav></f7-nav-title>
             <f7-nav-right><BookPicker compact v-model="transaction.bookId" :disabled="loading || submitting" /></f7-nav-right>
         </f7-navbar>
         <f7-navbar v-else>
-            <f7-nav-left :class="{ 'disabled': loading }" :back-link="tt('Back')"></f7-nav-left>
-            <f7-nav-title :title="tt(title)"></f7-nav-title>
+            <f7-nav-left v-if="mode === TransactionEditPageMode.View"><f7-link back icon-f7="chevron_left" aria-label="返回" /></f7-nav-left><f7-nav-left v-else :class="{ 'disabled': loading }" :back-link="tt('Back')"></f7-nav-left>
+            <f7-nav-title :title="mode === TransactionEditPageMode.View ? '账单详情' : tt(title)"></f7-nav-title>
             <f7-nav-right :class="{ 'navbar-compact-icons': true, 'disabled': loading }" v-if="mode !== TransactionEditPageMode.View || transaction.type !== TransactionType.ModifyBalance">
-                <f7-link icon-f7="ellipsis" :aria-label="tt('More')" @click="showMoreActionSheet = true"></f7-link>
+                <f7-link :icon-f7="mode === TransactionEditPageMode.View ? 'ellipsis_vertical' : 'ellipsis'" :aria-label="tt('More')" @click="showMoreActionSheet = true"></f7-link>
                 <f7-link icon-f7="checkmark_alt" :class="{ 'disabled': inputIsEmpty || submitting || recognizing }" :aria-label="tt('Save')" @click="save(AfterSaveAction.GoBack)" v-if="mode !== TransactionEditPageMode.View"></f7-link>
             </f7-nav-right>
         </f7-navbar>
 
-        <f7-block v-if="!canUseQuickEntry" :class="{ 'subnav-segmented-bar': true, 'disabled': loading }">
+        <f7-block v-if="!canUseQuickEntry && mode !== TransactionEditPageMode.View" :class="{ 'subnav-segmented-bar': true, 'disabled': loading }">
             <f7-segmented strong round :class="{ 'readonly': pageTypeAndMode?.type === TransactionEditPageType.Transaction && mode !== TransactionEditPageMode.Add && mode !== TransactionEditPageMode.Edit }">
                 <f7-button round :text="tt('Expense')" :active="transaction.type === TransactionType.Expense"
                            :disabled="pageTypeAndMode?.type === TransactionEditPageType.Transaction && mode !== TransactionEditPageMode.Add && mode !== TransactionEditPageMode.Edit && transaction.type !== TransactionType.Expense"
@@ -106,7 +106,7 @@
             <button class="cy-entry-chip" @click="showExtendedFields = false"><f7-icon f7="keyboard" />返回分类与键盘</button>
             <BookPicker v-model="transaction.bookId" />
         </div>
-        <f7-list form strong inset dividers class="margin-vertical-half" v-if="!loading && !useQuickEntry">
+        <f7-list form strong inset dividers class="margin-vertical-half" v-if="showLegacyForm">
             <f7-list-item v-if="canRecordDiscount" title="优惠金额" :after="transaction.discountAmount || '0.00'" link="#" @click="mode !== TransactionEditPageMode.View && openDiscount()" />
             <f7-list-item v-if="pageTypeAndMode?.type === TransactionEditPageType.Transaction && transaction.type === TransactionType.Expense" title="报销账户" :after="allAccountsMap[transaction.reimbursementAccountId]?.name||'不报销'" link="#" @click="mode!==TransactionEditPageMode.View&&(showReimbursementSheet=true)" />
             <f7-list-item v-if="pageTypeAndMode?.type === TransactionEditPageType.Transaction && [TransactionType.Expense,TransactionType.Income].includes(transaction.type)" title="计入收支与预算"><template #after><f7-toggle :disabled="mode===TransactionEditPageMode.View||!!transaction.reimbursementReceiptId||transaction.reimbursementAccountId!=='0'" :checked="!transaction.excludeFromStatistics&&transaction.reimbursementAccountId==='0'" @toggle:change="transaction.excludeFromStatistics=!$event" /></template></f7-list-item>
@@ -479,6 +479,12 @@
             ></f7-list-input>
         </f7-list>
 
+        <TransactionReadDetail v-if="!loading && mode === TransactionEditPageMode.View" :transaction="transaction" :source="allAccountsMap[transaction.sourceAccountId]" :destination="allAccountsMap[transaction.destinationAccountId]" :category="detailCategory" :tags="transaction.tagIds.map(id=>allTagsMap[id]?.name||'已删除标签')" :book-name="booksStore.allBooks.find(b=>b.id===transaction.bookId)?.name" :reimbursement-name="allAccountsMap[transaction.reimbursementAccountId]?.name" :time-zone="ledgerScope.timeZone" :picture-url="getTransactionPictureUrl" @picture="viewOrRemovePicture" />
+        <f7-toolbar v-if="!loading && mode === TransactionEditPageMode.View && transaction.type !== TransactionType.ModifyBalance" class="bill-actions" bottom>
+            <f7-link v-if="!transaction.investmentEventId" @click="duplicate(false,false)">再记一笔</f7-link>
+            <f7-link v-if="transaction.editable || transaction.investmentEventId" class="bill-edit" @click="editDetail">编辑</f7-link>
+        </f7-toolbar>
+
         <f7-actions close-by-outside-click close-on-escape :opened="showGeoLocationActionSheet" @actions:closed="showGeoLocationActionSheet = false">
             <f7-actions-group>
                 <f7-actions-button v-if="mode !== TransactionEditPageMode.View" @click="updateGeoLocation(true)">{{ tt('Update Geographic Location') }}</f7-actions-button>
@@ -508,11 +514,11 @@
                 <f7-actions-button @click="showTransactionPictures = true">{{ tt('Add Picture') }}</f7-actions-button>
             </f7-actions-group>
             <f7-actions-group v-if="pageTypeAndMode?.type === TransactionEditPageType.Transaction && mode === TransactionEditPageMode.View && transaction.type !== TransactionType.ModifyBalance">
-                <f7-actions-button @click="f7router.navigate(`/transaction/edit?id=${transaction.id}&type=${transaction.type}`, { reloadCurrent: true })">编辑</f7-actions-button>
-                <f7-actions-button @click="duplicate(false, false)">{{ tt('Duplicate') }}</f7-actions-button>
-                <f7-actions-button @click="duplicate(true, false)">{{ tt('Duplicate (With Time)') }}</f7-actions-button>
-                <f7-actions-button @click="duplicate(false, true)" v-if="transaction.geoLocation">{{ tt('Duplicate (With Geographic Location)') }}</f7-actions-button>
-                <f7-actions-button @click="duplicate(true, true)" v-if="transaction.geoLocation">{{ tt('Duplicate (With Time and Geographic Location)') }}</f7-actions-button>
+                <f7-actions-button v-if="transaction.editable || transaction.investmentEventId" @click="editDetail">编辑</f7-actions-button>
+                <f7-actions-button v-if="!transaction.investmentEventId" @click="duplicate(false, false)">{{ tt('Duplicate') }}</f7-actions-button>
+                <f7-actions-button v-if="!transaction.investmentEventId" @click="duplicate(true, false)">{{ tt('Duplicate (With Time)') }}</f7-actions-button>
+                <f7-actions-button @click="duplicate(false, true)" v-if="transaction.geoLocation && !transaction.investmentEventId">{{ tt('Duplicate (With Geographic Location)') }}</f7-actions-button>
+                <f7-actions-button @click="duplicate(true, true)" v-if="transaction.geoLocation && !transaction.investmentEventId">{{ tt('Duplicate (With Time and Geographic Location)') }}</f7-actions-button>
             </f7-actions-group>
             <f7-actions-group>
                 <f7-actions-button bold close>{{ tt('Cancel') }}</f7-actions-button>
@@ -565,6 +571,7 @@ import { useLedgerScopeStore } from '@/stores/ledgerScope.ts';
 import { useLedgerExperienceStore } from '@/stores/ledgerExperience.ts';
 import services from '@/lib/services.ts';
 import { getCurrentUnixTime } from '@/lib/datetime.ts';
+import TransactionReadDetail from '@/components/mobile/TransactionReadDetail.vue';
 import QuickTransactionEntry from '@/components/mobile/QuickTransactionEntry.vue';
 import DebtEntryFields from '@/components/mobile/DebtEntryFields.vue';
 import moment from 'moment-timezone';
@@ -712,6 +719,7 @@ const {
     getTransactionPictureUrl
 } = useTransactionEditPageBase(pageTypeAndMode?.type || TransactionEditPageType.Transaction, pageTypeAndMode?.mode, query['type'] ? parseInt(query['type']) : undefined, true);
 
+const showLegacyForm=computed(()=>!loading.value && !useQuickEntry.value && mode.value!==TransactionEditPageMode.View);
 const isSupportClipboard = !!navigator.clipboard;
 
 const settingsStore = useSettingsStore();
@@ -728,6 +736,9 @@ function saveDiscount(){if(![discountDraft.value,discountActual.value,discountOr
 const reimbursementAccounts=computed(()=>Object.values(allAccountsMap.value).filter(a=>a.visible&&a.assetProfile.kind==='reimbursement'&&a.currency===sourceAccountCurrency.value));
 const booksStore = useBooksStore();
 const ledgerScope = useLedgerScopeStore();
+const detailCategory=computed(()=>Object.values(allCategories.value).flatMap(c=>c.flatMap(p=>[p,...(p.subCategories||[])])).find(c=>c.id===transaction.value.categoryId));
+function editDetail():void{const t=transaction.value;const path=t.investmentEventId?(t.wallet?`/crypto/entry?eventId=${t.investmentEventId}&action=revise`:`/investments/record?eventId=${t.investmentEventId}&action=revise`):`/transaction/edit?id=${t.id}&type=${t.type}`;props.f7router.navigate(path,{reloadCurrent:true});}
+
 const dateSelectedManually = ref(false);
 watch(transaction, () => { dateSelectedManually.value = false; });
 function updateTransactionTime(time: number): void {
@@ -1167,9 +1178,7 @@ function init(): void {
     }
 
     Promise.all(promises).then(async function (responses) {
-        if (mode.value !== TransactionEditPageMode.View) {
-            await booksStore.loadBooks();
-        }
+        await booksStore.loadBooks();
         if (query['id'] && !responses[4]) {
             if (pageTypeAndMode.type === TransactionEditPageType.Transaction) {
                 showToast('Unable to retrieve transaction');
@@ -1754,3 +1763,7 @@ init();
 }
 </style>
 <style scoped>.cy-discount-form{display:grid;gap:18px}.cy-discount-form label{display:grid;gap:10px}.cy-discount-form input{padding:14px;border:1px solid var(--cy-line);border-radius:8px;background:var(--cy-bg);color:var(--cy-ink);font-size:24px}.cy-discount-form p{font-size:13px;line-height:1.8;color:var(--cy-muted)}</style>
+
+<style>
+.cy-bill-detail-page .navbar .title{font-size:18px;font-weight:500;text-align:left;margin-left:12px;flex:1;position:static;transform:none!important}.cy-bill-detail-page .navbar .left,.cy-bill-detail-page .navbar .right{background:transparent!important;box-shadow:none!important;backdrop-filter:none!important;border-radius:0}.cy-bill-detail-page .navbar .left:before,.cy-bill-detail-page .navbar .right:before,.cy-bill-detail-page .navbar .left:after,.cy-bill-detail-page .navbar .right:after{display:none}.cy-bill-detail-page .navbar .icon{font-size:23px}.cy-bill-detail-page .navbar .navbar-inner{justify-content:flex-start}.cy-bill-detail-page .bill-actions{--f7-toolbar-bg-color:var(--cy-bg);--f7-toolbar-border-color:transparent;height:calc(66px + env(safe-area-inset-bottom));box-sizing:border-box;padding:0}.cy-bill-detail-page .bill-actions .toolbar-inner{gap:12px;padding:10px 16px max(10px,env(safe-area-inset-bottom))}.cy-bill-detail-page .bill-actions a{flex:1;height:42px;border-radius:8px;background:var(--cy-card);color:var(--cy-ink);font-size:15px}.cy-bill-detail-page .bill-actions .bill-edit{background:var(--cy-accent);color:#fff}
+</style>

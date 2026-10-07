@@ -66,6 +66,8 @@ func New(config Config) (*Relay, error) {
 }
 
 var productPath = regexp.MustCompile(`^/products/[A-Z0-9][A-Z0-9._-]{0,63}(/ticker)?$`)
+var candlePath = regexp.MustCompile(`^/products/[A-Z0-9][A-Z0-9._-]{0,63}/candles$`)
+var ohlcPath = regexp.MustCompile(`^/coins/[a-z0-9][a-z0-9._-]{0,63}/ohlc$`)
 var coinPath = regexp.MustCompile(`^/coins/[a-z0-9][a-z0-9._-]{0,63}$`)
 
 // ResolveTarget never uses a caller-supplied host, scheme, port, credentials or
@@ -87,6 +89,15 @@ func ResolveTarget(u *url.URL) (string, time.Duration, error) {
 		base = "https://api.coinbase.com/api/v3/brokerage/market" + strings.TrimPrefix(path, "/v1/coinbase")
 		allowed = "limit"
 		ttl = 5 * time.Second
+	case strings.HasPrefix(path, "/v1/coinbase/") && candlePath.MatchString(strings.TrimPrefix(path, "/v1/coinbase")):
+		base = "https://api.coinbase.com/api/v3/brokerage/market" + strings.TrimPrefix(path, "/v1/coinbase")
+		allowed = "start end granularity limit"
+	case strings.HasPrefix(path, "/v1/coinbase-exchange/") && candlePath.MatchString(strings.TrimPrefix(path, "/v1/coinbase-exchange")):
+		base = "https://api.exchange.coinbase.com" + strings.TrimPrefix(path, "/v1/coinbase-exchange")
+		allowed = "start end granularity"
+	case strings.HasPrefix(path, "/v1/coingecko/") && ohlcPath.MatchString(strings.TrimPrefix(path, "/v1/coingecko")):
+		base = "https://api.coingecko.com/api/v3" + strings.TrimPrefix(path, "/v1/coingecko")
+		allowed = "vs_currency days precision"
 	case path == "/v1/coingecko/simple/price":
 		base = "https://api.coingecko.com/api/v3/simple/price"
 		allowed = "ids vs_currencies include_last_updated_at include_24hr_change"
@@ -101,6 +112,7 @@ func ResolveTarget(u *url.URL) (string, time.Duration, error) {
 		ttl = time.Hour
 	case path == "/v1/fx/usd/cny" || path == "/v1/fx/hkd/cny":
 		base = "https://api.frankfurter.dev/v2/providers/ecb/rate/" + strings.TrimPrefix(path, "/v1/fx/")
+		allowed = "date"
 		ttl = time.Hour
 	default:
 		return "", 0, errors.New("unsupported public market endpoint")

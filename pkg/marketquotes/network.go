@@ -114,6 +114,7 @@ func (s *Service) doPublicRequest(request *http.Request) (*http.Response, error)
 	if s.config.Network.RelayURL != "" {
 		for _, route := range []struct{ endpoint, path string }{
 			{s.config.CoinbaseRESTURL, "/v1/coinbase"},
+			{s.config.CoinbaseExchangeURL, "/v1/coinbase-exchange"},
 			{s.config.CoinGeckoURL, "/v1/coingecko/simple/price"},
 			{s.config.CoinGeckoSearchURL, "/v1/coingecko/search"},
 			{s.config.CoinGeckoCoinURL, "/v1/coingecko/coins"},

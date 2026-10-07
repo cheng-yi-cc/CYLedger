@@ -34,18 +34,25 @@ func (s *Service) refreshReferences(ctx context.Context) {
 // A fund outage does not stop the crypto/security loops. Each source has four
 // workers at most, and attempts are gated before dispatch (including failures).
 func (s *Service) refreshReferenceProvider(ctx context.Context, provider string) {
+	s.mu.Lock()
+	now := s.config.Now()
 	interval := time.Minute
 	if provider == "eastmoney" {
 		interval = 30 * time.Minute
+		if now.Before(s.activeUntil) {
+			interval = 5 * time.Minute
+		}
 	}
-	s.mu.Lock()
-	now := s.config.Now()
 	bindings := make([]Binding, 0)
 	for key, b := range s.references {
 		if b.Provider != provider {
 			continue
 		}
-		if previous := s.lastReferenceAttempt[key]; !previous.IsZero() && now.Sub(previous) < interval {
+		budget := interval
+		if s.referenceFailed[key] {
+			budget = time.Minute
+		}
+		if previous := s.lastReferenceAttempt[key]; !previous.IsZero() && now.Sub(previous) < budget {
 			continue
 		}
 		s.lastReferenceAttempt[key] = now
@@ -88,12 +95,18 @@ func (s *Service) refreshReferenceProvider(ctx context.Context, provider string)
 		for _, b := range batch {
 			q, ok := quotes[b.Key()]
 			if ok && s.putReferenceQuote(q) {
+				s.mu.Lock()
+				if s.lastReferenceAttempt[b.Key()].Equal(now) {
+					delete(s.referenceFailed, b.Key())
+				}
+				s.mu.Unlock()
 				continue
 			}
 			// A failed fund request must not suppress recovery for another 30 minutes.
 			s.mu.Lock()
 			if s.lastReferenceAttempt[b.Key()].Equal(now) {
-				s.lastReferenceAttempt[b.Key()] = s.config.Now().Add(-interval + time.Minute)
+				s.lastReferenceAttempt[b.Key()] = s.config.Now()
+				s.referenceFailed[b.Key()] = true
 			}
 			s.mu.Unlock()
 		}
@@ -107,6 +120,7 @@ func (s *Service) refreshReferenceProvider(ctx context.Context, provider string)
 		for _, b := range batch {
 			if s.lastReferenceAttempt[b.Key()].Equal(now) {
 				delete(s.lastReferenceAttempt, b.Key())
+				delete(s.referenceFailed, b.Key())
 			}
 		}
 	}

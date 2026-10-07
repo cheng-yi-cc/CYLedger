@@ -8,14 +8,14 @@
     <section class="inv-card inv-title">
      <p class="inv-muted">持有金额（{{ currency==='USD'?'美元':'元' }}）</p><strong>{{ money(positionValue(row.position,currency,wealth)) }}</strong>
      <dl class="inv-metrics">
-      <div><dt>今日收益（元）</dt><dd :class="profitClass(dayProfit)">{{ money(dayProfit) }}</dd></div>
+      <div :title="row?.position.dailyReason"><dt>今日收益（元）</dt><dd :class="profitClass(dayProfit)">{{ money(dayProfit) }}</dd></div>
       <div><dt>持有收益（元）</dt><dd :class="profitClass(row.position.unrealizedPnl)">{{ money(row.position.unrealizedPnl) }}</dd></div>
       <div><dt><button class="inv-link" style="padding:0;font-size:inherit" @click="openProfit">累计收益（元）</button></dt><dd :class="profitClass(row.profit)">{{ money(row.profit) }}</dd></div>
       <div><dt>持仓成本价（元）</dt><dd>{{ decimal(row.position.averageCost) }}</dd></div>
       <div><dt>持有份额</dt><dd>{{ decimal(row.position.quantity,8) }}</dd></div>
       <div><dt>{{ row.asset?.type==='FUND'?'基金净值':'最新价' }}{{ row.position.quote?.currency&&row.position.quote.currency!=='CNY'?' · '+row.position.quote.currency:'' }}</dt><dd>{{ decimal(row.position.quote?.price,6) }}</dd></div>
      </dl>
-     <details class="inv-details" style="margin-top:16px;text-align:left"><summary>{{ row.asset?.symbol }} · {{ quoteStatus(row.position.quote) }} <span :class="profitClass(row.position.quote?.changePercent)">{{ quoteChange(row.position.quote) }}</span></summary><p>{{ row.position.quote?.source || '尚无报价' }} · {{ date(row.position.quote?.sourceTime) }}</p><p v-if="row.position.quote?.currency!=='CNY'">人民币汇率 {{ row.position.quote?.fxRate || '未知' }} · {{ row.position.quote?.fxDate || '日期未知' }}</p><p>今日收益需要前一日的实际估值记录；没有记录时显示“—”。{{ row.profile.profitOffset!=='0'?`累计收益包含盈亏偏差 ${row.profile.profitOffset} 元。`:'' }}</p><p v-if="row.profile.note">{{ row.profile.note }}</p></details>
+     <details class="inv-details" style="margin-top:16px;text-align:left"><summary>{{ row.asset?.symbol }} · {{ quoteStatus(row.position.quote) }} <span :class="profitClass(row.position.quote?.changePercent)">{{ quoteChange(row.position.quote) }}</span></summary><p>{{ row.position.quote?.source || '尚无报价' }} · {{ date(row.position.quote?.sourceTime) }}</p><p v-if="row.position.quote?.currency!=='CNY'">人民币汇率 {{ row.position.quote?.fxRate || '未知' }} · {{ row.position.quote?.fxDate || '日期未知' }}</p><p>今日收益按 {{ zone }} 零点边界前的已收盘价及当时可用的人民币参考汇率计算，并计入今日交易和手续费。{{ row.position.dailyReason || '' }}{{ row.profile.profitOffset!=='0'?`累计收益包含盈亏偏差 ${row.profile.profitOffset} 元。`:'' }}</p><p v-if="row.position.dailyReference">零点基准：{{ row.position.dailyReference.price }} {{ row.position.dailyReference.currency }} · {{ row.position.dailyReference.source }}；汇率 {{ row.position.dailyReference.fxRate }}（{{ row.position.dailyReference.fxDate }}）。</p><p v-if="row.profile.note">{{ row.profile.note }}</p></details>
     </section>
     <nav class="inv-trade-buttons"><f7-link :href="actionLink('BUY')"><f7-icon f7="plus_circle" />买入</f7-link><f7-link :href="actionLink('SELL')"><f7-icon f7="minus_circle" />卖出</f7-link></nav>
     <f7-link v-if="pending.length" class="inv-card inv-list-button" :href="scoped('/investments/plans',{tab:'orders'})"><span>{{ pending.length }} 笔待确认</span><f7-icon f7="chevron_right" /></f7-link>
@@ -58,15 +58,15 @@ import {LedgerDecimal,ledgerMoney} from '@/lib/ledger-display.ts';
 import {createValuationRefresh} from '@/lib/valuation-refresh.ts';
 import {walletCurrency,positionValue} from '@/lib/wallet-entry.ts';
 import {isCryptoAccount} from '@/lib/crypto-platforms.ts';
-import type {InvestmentEvent,InvestmentReport} from '@/models/investment.ts';
+import type {InvestmentEvent} from '@/models/investment.ts';
 const props=defineProps<{f7route:Router.Route;f7router:Router.Router}>(),accountId=props.f7route.query['accountId']||'',instrumentId=props.f7route.query['instrumentId']||'';
 const {wealth,rows,events,orders,loading,error,zone,load}=useInvestmentData();
 const row=computed(()=>rows.value.find(r=>r.position.accountId===accountId&&r.position.instrumentId===instrumentId)),currency=computed(()=>walletCurrency(row.value?.account));
-const showMenu=ref(false),showVoided=ref(false),selectedEvent=ref<InvestmentEvent>(),showProfit=ref(false),profitInput=ref(''),busy=ref(false),report=ref<InvestmentReport>();
+const showMenu=ref(false),showVoided=ref(false),selectedEvent=ref<InvestmentEvent>(),showProfit=ref(false),profitInput=ref(''),busy=ref(false);
 const scopedEvents=computed(()=>events.value.filter(e=>(e.instrumentId===instrumentId&&(e.accountId===accountId||e.toAccountId===accountId))||(e.settlementInstrumentId===instrumentId&&(e.settlementAccountId||e.accountId)===accountId)||(e.accountId===accountId&&e.additionalMovements?.some(m=>m.instrumentId===instrumentId))));
 const visibleEvents=computed(()=>scopedEvents.value.filter(e=>showVoided.value||!e.voided).sort((a,b)=>b.occurredAt-a.occurredAt));
 const pending=computed(()=>orders.value.filter(o=>o.status==='pending'&&o.accountId===accountId&&o.instrumentId===instrumentId));
-const dayProfit=computed(()=>{const yesterday=moment().tz(zone.value).subtract(1,'day').format('YYYY-MM-DD'),previous=report.value?.history.filter(p=>moment.unix(p.at).tz(zone.value).format('YYYY-MM-DD')===yesterday).at(-1),now=investmentSum([row.value?.position.unrealizedPnl,row.value?.position.realizedPnl]);return previous?.profit!=null&&now!=null?new LedgerDecimal(now).minus(previous.profit).toString():null;});
+const dayProfit=computed(()=>row.value?.position.dailyPnl??null);
 function scoped(path:string,extra:Record<string,string>={}):string{return path+'?'+new URLSearchParams({accountId,instrumentId,...extra});}
 const editLink=computed(()=>isCryptoAccount(row.value?.account?.kind)?'/crypto/add?'+new URLSearchParams({id:accountId,kind:row.value!.account!.kind}):scoped('/investments/add'));
 function actionLink(action:string,eventId=''):string{const event=events.value.find(e=>e.id===eventId);if(event?.wallet)return '/crypto/entry?'+new URLSearchParams({eventId,action});if(isCryptoAccount(row.value?.account?.kind)&&['BUY','SELL','TRANSFER'].includes(action))return scoped('/crypto/convert',{mode:({BUY:'cash',SELL:'redeem',TRANSFER:'transfer'} as Record<string,string>)[action]!});return scoped('/investments/record',{action,eventId});}
@@ -75,7 +75,7 @@ function decimal(v:string|null|undefined,places=4):string{return v==null?'—':n
 function date(at?:number):string{return at?moment.unix(at).tz(zone.value).format('YYYY-MM-DD HH:mm'):'时间未知';}
 function cashName(e:InvestmentEvent):string{const cash=wealth.value?.cashAccounts.find(a=>a.id===e.cashAccountId);return cash?`${e.type==='SELL'?'收款':'付款'}：${cash.name}`:'';}
 function eventAmount(e:InvestmentEvent):string{if(!['BUY','SELL'].includes(e.type))return e.quantity+' 份';const d=new LedgerDecimal(e.amount);return ledgerMoney((e.type==='BUY'?d.plus(e.fee):d.minus(e.fee)).toString(),false)+' '+(wealth.value?.cashAccounts.find(a=>a.id===e.cashAccountId)?.currency||'结算单位');}
-async function refresh():Promise<void>{await load();try{report.value=await investments.report(accountId,instrumentId);}catch{/* 详情仍可使用已取得的持仓；缺少历史收益保持未知。 */}}
+async function refresh():Promise<void>{await load();}
 const live=createValuationRefresh(summary=>{wealth.value=summary;});function activate():void{void refresh();live.start();}onUnmounted(live.stop);
 async function toggleHidden():Promise<void>{if(!row.value)return;try{await investments.saveProfile({...row.value.profile,hidden:!row.value.profile.hidden});showMenu.value=false;await load();}catch(e){error.value=investmentError(e);}}
 function openProfit():void{profitInput.value=row.value?.profit||'';showProfit.value=true;}

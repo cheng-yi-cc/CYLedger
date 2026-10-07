@@ -61,31 +61,32 @@ type FXRate struct {
 // Config permits isolated local fake servers in tests. Production defaults only
 // query public instrument identifiers. API keys remain in the backend process.
 type Config struct {
-	HTTPClient         *http.Client
-	DomesticHTTPClient *http.Client
-	Network            NetworkConfig
-	SearchTimeout      time.Duration
-	CoinbaseRESTURL    string
-	CoinbaseWSURL      string
-	CoinGeckoURL       string
-	CoinGeckoAPIKey    string
-	FXURL              string
-	RESTInterval       time.Duration
-	CoinGeckoInterval  time.Duration
-	FXInterval         time.Duration
-	FXRetryInterval    time.Duration
-	ReadTimeout        time.Duration
-	ReconnectMin       time.Duration
-	ReconnectMax       time.Duration
-	StaleAfter         time.Duration
-	Now                func() time.Time
-	TencentURL         string
-	TencentSearchURL   string
-	FundSearchURL      string
-	FundNAVURL         string
-	CoinGeckoSearchURL string
-	CoinGeckoCoinURL   string
-	HKDFXURL           string
+	HTTPClient          *http.Client
+	DomesticHTTPClient  *http.Client
+	Network             NetworkConfig
+	SearchTimeout       time.Duration
+	CoinbaseRESTURL     string
+	CoinbaseExchangeURL string
+	CoinbaseWSURL       string
+	CoinGeckoURL        string
+	CoinGeckoAPIKey     string
+	FXURL               string
+	RESTInterval        time.Duration
+	CoinGeckoInterval   time.Duration
+	FXInterval          time.Duration
+	FXRetryInterval     time.Duration
+	ReadTimeout         time.Duration
+	ReconnectMin        time.Duration
+	ReconnectMax        time.Duration
+	StaleAfter          time.Duration
+	Now                 func() time.Time
+	TencentURL          string
+	TencentSearchURL    string
+	FundSearchURL       string
+	FundNAVURL          string
+	CoinGeckoSearchURL  string
+	CoinGeckoCoinURL    string
+	HKDFXURL            string
 }
 
 type instrument struct {
@@ -129,8 +130,10 @@ type Service struct {
 	heartbeatAt          time.Time
 	lastRESTAttempt      time.Time
 	lastGeckoAttempt     time.Time
+	activeUntil          time.Time
 	references           map[string]Binding
 	lastReferenceAttempt map[string]time.Time
+	referenceFailed      map[string]bool
 	searchCache          map[string]searchEntry
 	searchMu             sync.Mutex
 	monetarySearchMu     sync.Mutex
@@ -138,6 +141,8 @@ type Service struct {
 	conversionMu         sync.Mutex
 	hkdFX                FXRate
 	hkdFXRestored        bool
+	dayMu                sync.Mutex
+	days                 map[string]*dayEntry
 }
 
 // Default is one cache and one public subscription shared by the application.
@@ -161,6 +166,9 @@ func New(config Config) *Service {
 	}
 	if config.CoinbaseRESTURL == "" {
 		config.CoinbaseRESTURL = "https://api.coinbase.com/api/v3/brokerage/market"
+	}
+	if config.CoinbaseExchangeURL == "" {
+		config.CoinbaseExchangeURL = "https://api.exchange.coinbase.com"
 	}
 	if config.CoinbaseWSURL == "" {
 		config.CoinbaseWSURL = "wss://advanced-trade-ws.coinbase.com"
@@ -204,8 +212,9 @@ func New(config Config) *Service {
 		config.Now = time.Now
 	}
 	config.CoinbaseRESTURL = strings.TrimRight(config.CoinbaseRESTURL, "/")
+	config.CoinbaseExchangeURL = strings.TrimRight(config.CoinbaseExchangeURL, "/")
 	configureReferenceSources(&config)
-	service := &Service{config: config, fundHTTPClient: config.DomesticHTTPClient, quotes: make(map[string]cachedQuote), products: make(map[string]string), references: make(map[string]Binding), lastReferenceAttempt: make(map[string]time.Time), searchCache: make(map[string]searchEntry), monetarySearchCache: make(map[string]searchEntry), referenceWake: make(map[string]chan struct{})}
+	service := &Service{config: config, fundHTTPClient: config.DomesticHTTPClient, quotes: make(map[string]cachedQuote), products: make(map[string]string), references: make(map[string]Binding), lastReferenceAttempt: make(map[string]time.Time), referenceFailed: make(map[string]bool), searchCache: make(map[string]searchEntry), monetarySearchCache: make(map[string]searchEntry), referenceWake: make(map[string]chan struct{}), days: make(map[string]*dayEntry)}
 	for i := range service.searchSlots {
 		service.searchSlots[i] = make(chan struct{}, 4)
 	}
@@ -213,6 +222,13 @@ func New(config Config) *Service {
 		service.referenceWake[provider] = make(chan struct{}, 1)
 	}
 	return service
+}
+
+// MarkActive preserves the foreground lease used by income and valuation reads.
+func (s *Service) MarkActive() {
+	s.mu.Lock()
+	s.activeUntil = s.config.Now().Add(90 * time.Second)
+	s.mu.Unlock()
 }
 
 // Start starts background refreshes once and returns immediately. Cancelling ctx

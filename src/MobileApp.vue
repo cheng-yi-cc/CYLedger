@@ -182,7 +182,7 @@ onUnmounted(() => {
 });
 onMounted(() => {
     syncNativeSettings();
-    applyAppearance();appearanceTimer=setInterval(()=>{applyAppearance();void syncInvestmentPlansOnOpen();},60000);
+    applyAppearance();appearanceTimer=setInterval(()=>{applyAppearance();void syncInvestmentPlansOnOpen();void syncMonetaryIncomeOnOpen();},60000);
     document.addEventListener('visibilitychange', resumeMonetaryIncome);
     window.addEventListener('online', resumeMonetaryIncome);
     setAppFontSize(settingsStore.appSettings.fontSize);
