@@ -27,11 +27,15 @@ type InvestmentValuationQuote struct {
 }
 type ValuedPosition struct {
 	investments.Position
-	MarketValue   *string                          `json:"marketValue"`
-	UnrealizedPNL *string                          `json:"unrealizedPnl"`
-	Quote         *InvestmentValuationQuote        `json:"quote"`
-	TotalValue    *string                          `json:"totalValue"`
-	Profile       *models.InvestmentHoldingProfile `json:"profile,omitempty"`
+	DailyPNL       *string                          `json:"dailyPnl"`
+	DayStart       int64                            `json:"dayStart,omitempty"`
+	DailyReason    string                           `json:"dailyReason,omitempty"`
+	DailyReference *marketquotes.DayQuote           `json:"dailyReference,omitempty"`
+	MarketValue    *string                          `json:"marketValue"`
+	UnrealizedPNL  *string                          `json:"unrealizedPnl"`
+	Quote          *InvestmentValuationQuote        `json:"quote"`
+	TotalValue     *string                          `json:"totalValue"`
+	Profile        *models.InvestmentHoldingProfile `json:"profile,omitempty"`
 }
 type WealthCashAccount struct {
 	ExcludedFromTotal bool                 `json:"excludedFromTotal"`
@@ -368,6 +372,9 @@ func (s *InvestmentService) valuationFX(c core.Context, uid int64) []marketquote
 }
 
 func (s *InvestmentService) Summary(c core.Context, uid int64, save bool) (*WealthSummary, error) {
+	if c != nil {
+		marketquotes.Default.MarkActive()
+	}
 	fxs := s.valuationFX(c, uid)
 	defer s.lock(uid)()
 	var out *WealthSummary
@@ -390,6 +397,11 @@ func (s *InvestmentService) Summary(c core.Context, uid int64, save bool) (*Weal
 		}
 		fx := fxs
 		out = buildWealth(result, cash, quotes, fx)
+		if c != nil {
+			if err = enrichDailyWealth(sess, uid, events, quotes, fx, out, time.Now()); err != nil {
+				return err
+			}
+		}
 		profiles := []models.InvestmentHoldingProfile{}
 		if err = sess.Where("uid=?", uid).Find(&profiles); err != nil {
 			return err
@@ -567,11 +579,13 @@ func (s *InvestmentService) StartMarketCache() {
 		_ = s.UserDataDB(0).NewSession(nil).Where("uid=?", 0).Find(&rows)
 		for _, r := range rows {
 			var saved struct {
-				Quotes []marketquotes.Quote  `json:"quotes"`
-				FX     []marketquotes.FXRate `json:"fx"`
+				Quotes []marketquotes.Quote    `json:"quotes"`
+				FX     []marketquotes.FXRate   `json:"fx"`
+				Days   []marketquotes.DayQuote `json:"days"`
 			}
 			if json.Unmarshal([]byte(r.Payload), &saved) == nil {
 				marketquotes.Default.Restore(saved.Quotes, saved.FX)
+				marketquotes.Default.RestoreDayQuotes(saved.Days)
 			}
 		}
 		marketquotes.Default.Start(context.Background())
@@ -581,9 +595,10 @@ func (s *InvestmentService) StartMarketCache() {
 			counter := 0
 			for range ticker.C {
 				payload, _ := json.Marshal(struct {
-					Quotes []marketquotes.Quote  `json:"quotes"`
-					FX     []marketquotes.FXRate `json:"fx"`
-				}{marketquotes.Default.Quotes(), marketquotes.Default.FX()})
+					Quotes []marketquotes.Quote    `json:"quotes"`
+					FX     []marketquotes.FXRate   `json:"fx"`
+					Days   []marketquotes.DayQuote `json:"days"`
+				}{marketquotes.Default.Quotes(), marketquotes.Default.FX(), marketquotes.Default.DayQuotes()})
 				_ = s.UserDataDB(0).DoTransaction(nil, func(sess *xorm.Session) error {
 					row := &models.InvestmentQuote{Id: "shared-market-cache", Uid: 0, InstrumentId: "shared", Payload: string(payload)}
 					has, e := sess.ID(row.Id).Exist(&models.InvestmentQuote{})

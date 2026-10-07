@@ -78,6 +78,7 @@ import { ledgerMonthRange, ledgerAccountingMonth } from '@/lib/ledger-preference
 import { useSettingsStore } from '@/stores/setting.ts';
 import { calendarEvents, type CalendarEvent } from '@/lib/calendar-events.ts';
 import { investmentError } from '@/lib/investments.ts';
+import { monetaryIncomeRevision } from '@/lib/monetary-income.ts';
 import { getChineseYearMonthDayInfo, getChineseCalendarAlternateDisplayDate } from '@/lib/calendar/chinese_calendar.ts';
 import { DEFAULT_CONTENT } from '@/locales/calendar/chinese/index.ts';
 const props = defineProps<{ f7route: Router.Route; f7router: Router.Router }>();
@@ -108,6 +109,7 @@ const showBooks = ref(false), active = ref(false);
 function date(value: string, format = 'YYYY-MM'): moment.Moment { return moment.tz(value,format,true,scope.timeZone); }
 watch(() => books.selectedBookIds.join(','), () => { if (active.value) void refresh(); });
 watch(() => [scope.timeZone, currentDay.value], () => { if (active.value) void refresh(); });
+watch(monetaryIncomeRevision, () => { if (active.value) void refresh(); });
 const addLink = computed(() => isCalendar.value ? `/transaction/add?time=${date(selectedDay.value,'YYYY-MM-DD').hour(12).unix()}&noTransactionDraft=true` : '/transaction/add');
 const totals = computed(() => ledgerTotals(isCalendar.value ? entries.value : homeEntries.value));
 const visibleEntries = computed(() => isCalendar.value ? displayEntries.value.filter(item => item.day === selectedDay.value) : experience.preferences.range === 'all' ? displayEntries.value : displayEntries.value.filter(item => item.time >= homeRange.value.start.unix() && item.time <= homeRange.value.end.unix()));

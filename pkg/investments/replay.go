@@ -226,6 +226,21 @@ func parse(e Event, field, raw string, allowEmpty bool) (decimal.Decimal, error)
 // historical position may become negative. No partial result is returned on an
 // error, so callers cannot accidentally persist a partially replayed portfolio.
 func Replay(events []Event) (*Result, error) {
+	return replayEvents(events, 0, nil)
+}
+
+// ReplayDay rebases existing holdings to the day's opening reference values,
+// then reuses the same event engine for buys, sales, transfers, and wallet flows.
+// A transfer carries its daily cost, so moving an old gain between accounts
+// cannot create a new daily gain. Historical acquisition costs stay untouched.
+func ReplayDay(events []Event, at int64, prices map[string]string) (*Result, error) {
+	if at <= 0 {
+		return nil, fmt.Errorf("invalid day boundary")
+	}
+	return replayEvents(events, at, prices)
+}
+
+func replayEvents(events []Event, dayStart int64, openingPrices map[string]string) (*Result, error) {
 	ordered := append([]Event(nil), events...)
 	sort.SliceStable(ordered, func(i, j int) bool {
 		if ordered[i].OccurredAt == ordered[j].OccurredAt {
@@ -234,10 +249,41 @@ func Replay(events []Event) (*Result, error) {
 		return ordered[i].OccurredAt < ordered[j].OccurredAt
 	})
 	r := replay{positions: make(map[positionKey]*position), realized: zero(), result: Result{Positions: []Position{}, Effects: []EventEffect{}}}
+	rebased := dayStart == 0
+	rebase := func() {
+		r.realized = zero()
+		r.result.Effects = nil
+		for key, p := range r.positions {
+			p.realized = zero()
+			if p.quantity.IsZero() {
+				p.cost = zero()
+				continue
+			}
+			text := openingPrices[key.instrumentID]
+			if len(text) == 0 || len(text) > 128 {
+				p.cost = value{}
+				continue
+			}
+			price, err := decimal.NewFromString(text)
+			if err != nil || !price.IsPositive() || price.Exponent() < -72 || price.Exponent() > 36 {
+				p.cost = value{}
+				continue
+			}
+			p.cost = known(p.quantity.Mul(price))
+		}
+		rebased = true
+	}
 	seen := make(map[string]bool)
 	for _, e := range ordered {
 		if e.Voided {
 			continue
+		}
+		if !rebased && e.OccurredAt >= dayStart {
+			rebase()
+		}
+		if dayStart > 0 && e.OccurredAt >= dayStart && (e.Type == Opening || e.Type == Adjust) {
+			// An opening/cost correction is not an investment return.
+			e.Cost = nil
 		}
 		if strings.TrimSpace(e.ID) == "" {
 			return nil, errorAt(e, "id", "is required")
@@ -249,6 +295,9 @@ func Replay(events []Event) (*Result, error) {
 		if err := r.apply(e); err != nil {
 			return nil, err
 		}
+	}
+	if !rebased {
+		rebase()
 	}
 	keys := make([]positionKey, 0, len(r.positions))
 	for key := range r.positions {

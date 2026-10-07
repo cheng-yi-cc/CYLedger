@@ -60,28 +60,29 @@ type FXRate struct {
 // Config permits isolated local fake servers in tests. Production defaults only
 // query public instrument identifiers. API keys remain in the backend process.
 type Config struct {
-	HTTPClient         *http.Client
-	CoinbaseRESTURL    string
-	CoinbaseWSURL      string
-	CoinGeckoURL       string
-	CoinGeckoAPIKey    string
-	FXURL              string
-	RESTInterval       time.Duration
-	CoinGeckoInterval  time.Duration
-	FXInterval         time.Duration
-	FXRetryInterval    time.Duration
-	ReadTimeout        time.Duration
-	ReconnectMin       time.Duration
-	ReconnectMax       time.Duration
-	StaleAfter         time.Duration
-	Now                func() time.Time
-	TencentURL         string
-	TencentSearchURL   string
-	FundSearchURL      string
-	FundNAVURL         string
-	CoinGeckoSearchURL string
-	CoinGeckoCoinURL   string
-	HKDFXURL           string
+	HTTPClient          *http.Client
+	CoinbaseRESTURL     string
+	CoinbaseExchangeURL string
+	CoinbaseWSURL       string
+	CoinGeckoURL        string
+	CoinGeckoAPIKey     string
+	FXURL               string
+	RESTInterval        time.Duration
+	CoinGeckoInterval   time.Duration
+	FXInterval          time.Duration
+	FXRetryInterval     time.Duration
+	ReadTimeout         time.Duration
+	ReconnectMin        time.Duration
+	ReconnectMax        time.Duration
+	StaleAfter          time.Duration
+	Now                 func() time.Time
+	TencentURL          string
+	TencentSearchURL    string
+	FundSearchURL       string
+	FundNAVURL          string
+	CoinGeckoSearchURL  string
+	CoinGeckoCoinURL    string
+	HKDFXURL            string
 }
 
 type instrument struct {
@@ -122,6 +123,7 @@ type Service struct {
 	heartbeatAt          time.Time
 	lastRESTAttempt      time.Time
 	lastGeckoAttempt     time.Time
+	activeUntil          time.Time
 	references           map[string]Binding
 	lastReferenceAttempt map[string]time.Time
 	searchCache          map[string]searchEntry
@@ -131,6 +133,8 @@ type Service struct {
 	conversionMu         sync.Mutex
 	hkdFX                FXRate
 	hkdFXRestored        bool
+	dayMu                sync.Mutex
+	days                 map[string]*dayEntry
 }
 
 // Default is one cache and one public subscription shared by the application.
@@ -154,12 +158,15 @@ func New(config Config) *Service {
 		// TLS handshake. Keep a single total request budget and normal TLS checks.
 		transport.TLSHandshakeTimeout = 15 * time.Second
 		fundClient := *config.HTTPClient
-		fundClient.Transport = transport
+		fundClient.Transport = &fundTransport{primary: transport, fallback: http.DefaultTransport.(*http.Transport).Clone(), delay: 750 * time.Millisecond}
 		fundClient.Timeout = 20 * time.Second
 		fundHTTPClient = &fundClient
 	}
 	if config.CoinbaseRESTURL == "" {
 		config.CoinbaseRESTURL = "https://api.coinbase.com/api/v3/brokerage/market"
+	}
+	if config.CoinbaseExchangeURL == "" {
+		config.CoinbaseExchangeURL = "https://api.exchange.coinbase.com"
 	}
 	if config.CoinbaseWSURL == "" {
 		config.CoinbaseWSURL = "wss://advanced-trade-ws.coinbase.com"
@@ -203,8 +210,17 @@ func New(config Config) *Service {
 		config.Now = time.Now
 	}
 	config.CoinbaseRESTURL = strings.TrimRight(config.CoinbaseRESTURL, "/")
+	config.CoinbaseExchangeURL = strings.TrimRight(config.CoinbaseExchangeURL, "/")
 	configureReferenceSources(&config)
-	return &Service{config: config, fundHTTPClient: fundHTTPClient, quotes: make(map[string]cachedQuote), products: make(map[string]string), references: make(map[string]Binding), lastReferenceAttempt: make(map[string]time.Time), searchCache: make(map[string]searchEntry), monetarySearchCache: make(map[string]searchEntry)}
+	return &Service{config: config, fundHTTPClient: fundHTTPClient, quotes: make(map[string]cachedQuote), products: make(map[string]string), references: make(map[string]Binding), lastReferenceAttempt: make(map[string]time.Time), searchCache: make(map[string]searchEntry), monetarySearchCache: make(map[string]searchEntry), days: make(map[string]*dayEntry)}
+}
+
+// Foreground reads lease faster public fallback updates without changing prices.
+// Idle servers retain the conservative background polling budget.
+func (s *Service) MarkActive() {
+	s.mu.Lock()
+	s.activeUntil = s.config.Now().Add(90 * time.Second)
+	s.mu.Unlock()
 }
 
 // Start starts background refreshes once and returns immediately. Cancelling ctx

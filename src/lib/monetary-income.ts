@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { ref } from 'vue';
 import '@/lib/services.ts';
 import type { ApiResponse } from '@/core/api.ts';
 import { useTransactionsStore } from '@/stores/transaction.ts';
@@ -13,6 +14,7 @@ export type MonetaryInput = Pick<MonetaryBinding, 'accountId' | 'code' | 'startD
 export type MonetaryDraft = Omit<MonetaryInput,'accountId'> & { fund:MonetaryFund };
 export interface MonetarySync { created: number; bindings: MonetaryBinding[] }
 const publicFundTimeout = 25000;
+export const monetaryIncomeRevision = ref(0);
 
 async function request<T>(method: 'get' | 'post', path: string, data?: unknown, timeout?: number): Promise<T> {
     const response = await axios.request<ApiResponse<T> & { errorMessage?: string }>({ method, url: `v1/monetary-income/${path}`, data, ...(timeout ? { timeout } : {}) });
@@ -27,7 +29,10 @@ export const monetaryIncome = {
     pause: (accountId: string) => request<boolean>('post', 'pause', { accountId }),
     async sync(accountId = '', force = false): Promise<MonetarySync> {
         const result = await request<MonetarySync>('post', 'sync', { accountId, force }, publicFundTimeout);
-        if (result.created > 0) useTransactionsStore().updateStoreInvalidState({ transactionList: true, accountList: true, overview: true, statistics: true, explorer: true, reconciliationStatement: true });
+        if (result.created > 0) {
+            useTransactionsStore().updateStoreInvalidState({ transactionList: true, accountList: true, overview: true, statistics: true, explorer: true, reconciliationStatement: true });
+            monetaryIncomeRevision.value++;
+        }
         return result;
     }
 };

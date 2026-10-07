@@ -11,9 +11,8 @@ import (
 func (s *Service) coinGeckoLoop(ctx context.Context) {
 	for ctx.Err() == nil {
 		s.refreshCoinGecko(ctx)
-		// Check for newly unavailable primary quotes without spending another
-		// upstream request before the shared fifteen-minute budget allows it.
-		if !waitContext(ctx, 30*time.Second) {
+		// The shared attempt gate also covers failed and rate-limited requests.
+		if !waitContext(ctx, 5*time.Second) {
 			return
 		}
 	}
@@ -43,9 +42,11 @@ func (s *Service) refreshCoinGecko(ctx context.Context) {
 		return
 	}
 	now := s.config.Now()
-	// Count attempts as budget usage, including HTTP failures and 429s. Neither
-	// reconnection nor a client refreshing its page bypasses this shared gate.
-	if !s.lastGeckoAttempt.IsZero() && now.Sub(s.lastGeckoAttempt) < s.config.CoinGeckoInterval {
+	interval := s.config.CoinGeckoInterval
+	if now.Before(s.activeUntil) {
+		interval = time.Minute
+	}
+	if !s.lastGeckoAttempt.IsZero() && now.Sub(s.lastGeckoAttempt) < interval {
 		s.mu.Unlock()
 		return
 	}
