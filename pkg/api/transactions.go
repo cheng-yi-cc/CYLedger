@@ -1158,6 +1158,10 @@ func (a *TransactionsApi) TransactionGetHandler(c *core.WebContext) (any, *errs.
 	transactionEditable := transaction.IsEditable(user, clientTimezone, accountMap[transaction.AccountId], accountMap[transaction.RelatedAccountId])
 	transactionTagIds := allTransactionTagIds[transaction.TransactionId]
 	transactionResp := transaction.ToTransactionInfoResponse(transactionTagIds, transactionEditable)
+	transactionResp.MonetaryIncome, err = services.MonetaryIncome.TransactionDetail(c, uid, transaction.TransactionId)
+	if err != nil {
+		return nil, errs.Or(err, errs.ErrOperationFailed)
+	}
 	if transaction.InvestmentEventId != "" {
 		wallets, err := services.Investments.WalletTransactionDetails(c, uid, []string{transaction.InvestmentEventId})
 		if err != nil {

@@ -1,5 +1,5 @@
-import {monetaryIncome,type MonetaryBinding} from '@/lib/monetary-income.ts';
-import {computed,ref} from 'vue';
+import {monetaryIncome,monetaryIncomeRevision,type MonetaryBinding} from '@/lib/monetary-income.ts';
+import {computed,ref,watch} from 'vue';
 import {investments,investmentError} from '@/lib/investments.ts';
 import {LedgerDecimal} from '@/lib/ledger-display.ts';
 import {useBooksStore} from '@/stores/books.ts';
@@ -18,6 +18,7 @@ export interface HoldingRow{key:string;position:InvestmentPosition;profile:Holdi
 export function useInvestmentData(){
     const wealth=ref<WealthSummary>(),assets=ref<Instrument[]>([]),accounts=ref<InvestmentAccount[]>([]),profiles=ref<HoldingProfile[]>([]),events=ref<InvestmentEvent[]>([]),monetary=ref<MonetaryBinding[]>([]),orders=ref<InvestmentOrder[]>([]),loading=ref(false),error=ref(''),zone=ref('Asia/Shanghai'),books=useBooksStore();
     async function load():Promise<void>{if(loading.value)return;loading.value=true;error.value='';try{const [w,a,ac,p,e,o,s,m]=await Promise.all([investments.summary(),investments.instruments(),investments.accounts(),investments.profiles(),investments.events(),investments.orders(),investments.settings(),monetaryIncome.list(),books.loadBooks()]);monetary.value=m;wealth.value=w;assets.value=a;accounts.value=ac;profiles.value=p;events.value=e;orders.value=o;zone.value=s.timeZone||zone.value;}catch(cause){error.value=investmentError(cause);}finally{loading.value=false;}}
+    watch(monetaryIncomeRevision,()=>{if(!document.hidden)void load();});
     const rows=computed<HoldingRow[]>(()=>{
         const positions=[...(wealth.value?.positions||[])];
         for(const p of profiles.value)if(!positions.some(v=>v.accountId===p.accountId&&v.instrumentId===p.instrumentId))positions.push({accountId:p.accountId,instrumentId:p.instrumentId,quantity:'0',cost:'0',costKnown:true,averageCost:null,realizedPnl:'0',marketValue:'0',unrealizedPnl:'0'});

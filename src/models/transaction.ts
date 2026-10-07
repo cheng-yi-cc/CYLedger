@@ -13,6 +13,10 @@ import { TransactionTag, type TransactionTagInfoResponse } from './transaction_t
 import { TransactionPicture, type TransactionPictureInfoBasicResponse } from './transaction_picture_info.ts';
 
 export class Transaction implements TransactionInfoResponse {
+    public createdAt?: number;
+    public scheduledCreated?: boolean;
+    public monetaryIncome?: TransactionInfoResponse['monetaryIncome'];
+    public wallet?: TransactionInfoResponse['wallet'];
     public id: string;
     public bookId: string = '';
     public investmentEventId?: string;
@@ -371,6 +375,7 @@ export class Transaction implements TransactionInfoResponse {
         );
 
         transaction.bookId = transactionResponse.bookId || '';
+        transaction.createdAt=transactionResponse.createdAt; transaction.scheduledCreated=transactionResponse.scheduledCreated; transaction.monetaryIncome=transactionResponse.monetaryIncome; transaction.wallet=transactionResponse.wallet;
         transaction.debtDueDate=transactionResponse.debtDueDate||'';transaction.locationName=transactionResponse.locationName||'';
         transaction.discountAmount = transactionResponse.discountAmount || '0';
         transaction.transferFeeAmount = transactionResponse.transferFeeAmount || '0';
@@ -750,6 +755,9 @@ export interface TransactionReconciliationStatementRequest {
 export type TransactionGeoLocationResponse = Coordinate;
 
 export interface TransactionInfoResponse {
+    readonly createdAt?: number;
+    readonly scheduledCreated?: boolean;
+    readonly monetaryIncome?: { code:string; date:string; principal:string; perTenThousand:string; amount:string };
     readonly wallet?: { accountId: string; accountName: string; currency: string; amount: string; exchangeRate: string; fxDate: string };
     readonly debtDueDate?: string;
     readonly locationName?: string;

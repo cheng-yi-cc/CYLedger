@@ -441,6 +441,9 @@ type TransactionGeoLocationResponse struct {
 
 // TransactionInfoResponse represents a view-object of transaction
 type TransactionInfoResponse struct {
+	CreatedAt              int64                                    `json:"createdAt"`
+	ScheduledCreated       bool                                     `json:"scheduledCreated"`
+	MonetaryIncome         *MonetaryIncomeDay                       `json:"monetaryIncome,omitempty"`
 	Wallet                 *WalletTransactionInfo                   `json:"wallet,omitempty"`
 	TransferFeeAmount      string                                   `json:"transferFeeAmount"`
 	TransferFeeCategoryId  int64                                    `json:"transferFeeCategoryId,string"`
@@ -700,6 +703,7 @@ func (t *Transaction) ToTransactionInfoResponse(tagIds []int64, editable bool) *
 	}
 
 	return &TransactionInfoResponse{
+		CreatedAt: t.CreatedUnixTime, ScheduledCreated: t.ScheduledCreated,
 		BookId:            t.BookId,
 		TransferFeeAmount: t.TransferFeeAmount, TransferFeeCategoryId: t.TransferFeeCategoryId, TransferFeeParentId: t.TransferFeeParentId,
 		DebtDueDate: t.DebtDueDate, LocationName: t.LocationName,

@@ -25,6 +25,8 @@ export interface InvestmentQuote {
     changePercent?: string | null; changePeriod?: '24h' | 'session' | 'nav';
 }
 export interface InvestmentPosition {
+    dailyPnl?: string | null; dayStart?: number; dailyReason?: string;
+    dailyReference?: {source:string;price:string;currency:string;at:number;sourceTime:number;period:number;fxRate:string;fxDate:string};
     accountId: string; instrumentId: string; quantity: string; cost: string | null;
     costKnown: boolean; averageCost: string | null; realizedPnl: string | null;
     marketValue?: string | null; unrealizedPnl?: string | null; quote?: InvestmentQuote;

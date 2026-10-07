@@ -28,6 +28,44 @@ func monetaryFixture(t *testing.T) (*investmentDBFixture, *models.MonetaryIncome
 	return f, b
 }
 
+func TestMonetaryRetryAfterPublicationWithinMinuteAndReturnsNewTotal(t *testing.T) {
+	f, b := monetaryFixture(t)
+	var published atomic.Bool
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if !published.Load() {
+			http.Error(w, "not ready", 503)
+			return
+		}
+		fmt.Fprint(w, `{"ErrCode":0,"Data":{"FundType":"005","LSJZList":[{"FSRQ":"2026-09-29","DWJZ":"1"}]}}`)
+	}))
+	defer srv.Close()
+	marketquotes.Default = marketquotes.New(marketquotes.Config{FundNAVURL: srv.URL})
+	now, _ := time.Parse(time.RFC3339, "2026-09-30T09:00:00+08:00")
+	result, err := MonetaryIncome.syncAt(nil, f.uid, b.AccountId, false, now)
+	require.NoError(t, err)
+	require.Zero(t, result.Created)
+	published.Store(true)
+	_, err = MonetaryIncome.syncAt(nil, f.uid, b.AccountId, false, now.Add(30*time.Second))
+	require.NoError(t, err)
+	require.Equal(t, int32(1), calls.Load())
+	result, err = MonetaryIncome.syncAt(nil, f.uid, b.AccountId, false, now.Add(time.Minute))
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Created)
+	require.Equal(t, "2", result.Bindings[0].TotalIncome)
+	_, err = MonetaryIncome.syncAt(nil, f.uid, b.AccountId, false, now.Add(2*time.Minute))
+	require.NoError(t, err)
+	require.Equal(t, int32(2), calls.Load())
+	require.Equal(t, int64(1), f.count(&models.MonetaryIncomeDay{}))
+	detail, err := MonetaryIncome.TransactionDetail(nil, f.uid, result.Bindings[0].LastTransactionId)
+	require.NoError(t, err)
+	require.Equal(t, "2026-09-29", detail.Date)
+	other, err := MonetaryIncome.TransactionDetail(nil, f.uid+1, result.Bindings[0].LastTransactionId)
+	require.NoError(t, err)
+	require.Nil(t, other)
+}
+
 func TestMonetarySQLiteAtomicIncomeBalanceIdempotenceAndDeletion(t *testing.T) {
 	f, b := monetaryFixture(t)
 	n, err := MonetaryIncome.settleDay(nil, f.uid, b.Id, b.NextDate, "1")

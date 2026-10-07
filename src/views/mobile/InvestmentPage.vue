@@ -43,9 +43,10 @@
     </f7-page>
 </template>
 <script setup lang="ts">
-import { computed, ref, onUnmounted } from 'vue';
+import { computed, ref, onUnmounted, watch } from 'vue';
 import { walletCurrency, walletValue } from '@/lib/wallet-entry.ts';
-import {monetaryIncome,type MonetaryBinding} from '@/lib/monetary-income.ts';
+import {monetaryIncome,monetaryIncomeRevision,type MonetaryBinding} from '@/lib/monetary-income.ts';
+import {createValuationRefresh} from '@/lib/valuation-refresh.ts';
 import { investments, investmentError } from '@/lib/investments.ts';
 import { LedgerDecimal, ledgerMoney, keepUpToDate } from '@/lib/mobile-ledger.ts';
 import { isCryptoAccount, platformIcon } from '@/lib/crypto-platforms.ts';
@@ -153,8 +154,10 @@ async function refresh(done?: () => void): Promise<void> {
     catch (cause) { if (version === requestNumber) error.value = investmentError(cause); }
     finally { if (version === requestNumber) loading.value = false; if (typeof done === 'function') done(); }
 }
-function deactivate(): void { clearInterval(timer); cancelAccountHold(); if (!deleting.value) showAccountActions.value = false; }
-function activate(): void { deactivate(); void refresh(); timer = setInterval(() => { if (!document.hidden && !loading.value && !showAdd.value && !showAccountActions.value && !deleting.value) void refresh(); },15000); }
+const live=createValuationRefresh(wealth=>{summary.value=wealth;});
+watch(monetaryIncomeRevision,()=>{if(timer&&!document.hidden)void refresh();});
+function deactivate(): void { live.stop(); clearInterval(timer); timer=undefined; cancelAccountHold(); if (!deleting.value) showAccountActions.value = false; }
+function activate(): void { deactivate(); void refresh(); live.start(); timer = setInterval(() => { if (!document.hidden && !loading.value && !showAdd.value && !showAccountActions.value && !deleting.value) void refresh(); },15000); }
 onUnmounted(deactivate);
 </script>
 <style scoped>

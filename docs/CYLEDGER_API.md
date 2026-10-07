@@ -175,6 +175,10 @@
 - 投资修订、分期更新、资产偏好及预算/总结/统计偏好使用返回的版本/修订号。冲突后重新读取与预览，不盲目覆盖。
 - `GET /wealth/summary` 可能保存估值快照；`POST */sync` 可能写入到期费用/收益，不能当作无副作用的健康检查。健康检查使用 `/healthz.json`。
 
+`GET /wealth/summary` 的持仓附带 `dailyPnl`（人民币十进制字符串或 `null`）、`dayStart`（会计时区当日零点的 Unix 秒）及 `dailyReason`（未知原因）。取得公开历史基准时附 `dailyReference:{source,price,currency,at,sourceTime,period,fxRate,fxDate}`，其中周期以秒计，价格和汇率为十进制字符串。该值以零点边界前的公开收盘价和历史汇率比较，并通过同一成本引擎回放当天交易；跨账户转移不制造收益，费用计入当日。历史基准查询异步完成，后续读取取得结果；不得将 `null` 当零，也不能用供应商的 24 小时涨跌代替。页面读取保持每 5 秒一次，前台活跃时共享 CoinGecko 请求预算为每分钟最多一批。
+
+单笔 `transactions/get.json` 返回实际 `createdAt`（Unix 秒）、`scheduledCreated`，已关联货币基金日结记录时附 `monetaryIncome`（收益日期、基金代码、万份收益、计息本金等原始记录）。查询按当前用户和账单 ID 校验归属；详情的账单日期和实际记录时间分别展示，不以零点账单日期冒充真实到账时间。
+
 
 ## 查询与最小示例
 
@@ -209,7 +213,7 @@ Invoke-RestMethod "$ledgerBase/monetary-income/search?q=000198" -Headers $ledger
 }
 ```
 
-必须先搜索、核对实际基金并由用户明确绑定。仅人民币可用资金账户允许绑定。`bookId`、`categoryId` 可省略；首次使用有效默认值，后续收益继承前一条记录。暂停/解绑使用 `POST /monetary-income/pause` 的 `accountId`，保留历史流水与逐日防重。同步接收 `accountId` 和可选 `force`，缺数据时等待，不能绕过防重。
+必须先搜索、核对实际基金并由用户明确绑定。仅人民币可用资金账户允许绑定。`bookId`、`categoryId` 可省略；首次使用有效默认值，后续收益继承前一条记录。暂停/解绑使用 `POST /monetary-income/pause` 的 `accountId`，保留历史流水与逐日防重。同步接收 `accountId` 和可选 `force`，缺数据时等待；未强制同步的同一账户尝试间隔为 60 秒，已结算到昨日的账户跳过。成功返回最新收益合计，客户端据此刷新相关页面；强制同步不能绕过防重。
 
 `GET /monetary-income/search` 无法访问公开数据源时返回 HTTP 502、`errorCode=224004` 和中文重试提示。限定基金域名优先使用应用内 HTTPS 解析；经数据源确认的货币基金身份缓存 10 分钟，可用于紧随其后的绑定核验，过期后必须重新查询。具体边界见[行情模块](../pkg/marketquotes/README.md)。
 

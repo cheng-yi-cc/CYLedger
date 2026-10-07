@@ -233,12 +233,13 @@ func (s *Service) Search(ctx context.Context, query, market string) ([]Candidate
 		return nil, errors.New("市场无效")
 	}
 	key := market + ":" + strings.ToLower(query)
-	// Coalesce duplicate searches and bound public-provider pressure globally.
+	// 缓存锁只保护内存，不让一次慢查询阻塞其他市场和新输入。
 	s.searchMu.Lock()
-	defer s.searchMu.Unlock()
 	if cached, ok := s.searchCache[key]; ok && s.config.Now().Sub(cached.at) < 10*time.Minute {
+		s.searchMu.Unlock()
 		return append([]Candidate{}, cached.items...), nil
 	}
+	s.searchMu.Unlock()
 	var items []Candidate
 	var failures []error
 	if market == "" || market == "CRYPTO" {
@@ -268,6 +269,8 @@ func (s *Service) Search(ctx context.Context, query, market string) ([]Candidate
 	if len(items) > 50 {
 		items = items[:50]
 	}
+	s.searchMu.Lock()
+	defer s.searchMu.Unlock()
 	if len(s.searchCache) >= 200 {
 		s.searchCache = make(map[string]searchEntry)
 	}
@@ -580,6 +583,9 @@ func (s *Service) refreshReferences(ctx context.Context) {
 		interval := time.Minute
 		if b.Provider == "eastmoney" {
 			interval = 30 * time.Minute
+			if now.Before(s.activeUntil) {
+				interval = 5 * time.Minute
+			}
 		}
 		if previous := s.lastReferenceAttempt[k]; !previous.IsZero() && now.Sub(previous) < interval {
 			continue

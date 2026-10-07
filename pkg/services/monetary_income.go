@@ -27,6 +27,17 @@ var ErrMonetaryBinding = errs.NewNormalError(24, 1, 400, "请检查人民币资�
 var ErrMonetaryHistory = errs.NewNormalError(24, 2, 409, "已有收益记录，不能改写基金和起始日期；可暂停自动收益")
 var ErrMonetaryMove = errs.NewNormalError(24, 3, 409, "账户存在自动收益记录，请保留原账户，通过转账迁移余额")
 
+func (s *MonetaryIncomeService) TransactionDetail(c core.Context, uid, transactionID int64) (*models.MonetaryIncomeDay, error) {
+	item := new(models.MonetaryIncomeDay)
+	sess := s.UserDataDB(uid).NewSession(c)
+	defer sess.Close()
+	found, err := sess.Where("uid=? AND transaction_id=?", uid, transactionID).Get(item)
+	if err != nil || !found {
+		return nil, err
+	}
+	return item, nil
+}
+
 func (s *MonetaryIncomeService) lock(uid int64) func() {
 	m := &s.locks[uint64(uid)%64]
 	m.Lock()
@@ -212,7 +223,9 @@ func (s *MonetaryIncomeService) syncAt(c core.Context, uid, accountID int64, for
 	yesterday := now.In(zone).AddDate(0, 0, -1).Format("2006-01-02")
 	for i := range result.Bindings {
 		b := &result.Bindings[i]
-		if !b.Enabled || (accountID > 0 && b.AccountId != accountID) || (!force && now.Unix()-b.LastAttempt < 3600) {
+		// 已结算的日期不再联网；待公布和失败的日期一分钟后即可重试。
+		// 原来统一等待一小时，会把早于公布时间的一次查询变成额外延迟。
+		if !b.Enabled || (accountID > 0 && b.AccountId != accountID) || b.NextDate > yesterday || (!force && now.Unix()-b.LastAttempt < 60) {
 			continue
 		}
 		b.LastAttempt = now.Unix()
@@ -260,6 +273,13 @@ func (s *MonetaryIncomeService) syncAt(c core.Context, uid, accountID int64, for
 		}
 		b.Status = status
 		_, err = s.UserDataDB(uid).NewSession(c).ID(b.Id).Where("uid=?", uid).Cols("last_attempt", "status").Update(b)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if result.Created > 0 {
+		// 返回本次结算后的收益合计，避免界面继续显示同步前的数值。
+		result.Bindings, err = s.List(c, uid)
 		if err != nil {
 			return nil, err
 		}
