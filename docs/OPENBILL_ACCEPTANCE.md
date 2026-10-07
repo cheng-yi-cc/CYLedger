@@ -16,6 +16,7 @@
 |---|---|
 | 前端 | Vue 类型检查、生产构建通过；手机首页布局既有 4 项测试、日历跨月/系统时区变化/显式时区优先 3 项测试通过；构建中没有 desktop.html 或 desktop 资源 |
 | Go / SQLite | `go test ./cmd ./android/backend ./pkg/localbackup` 通过；cmd 为编译检查 |
+| 远端前端检查 | 提交 `5a8e5a45` 的 Vue 类型检查、全量 Vitest、生产构建及仅 Android 资源检查通过；[CI 记录](https://github.com/cheng-yi-cc/OpenBill/actions/runs/37639788746) |
 | 远端行情检查 | GitHub Actions 的行情竞态回归、Java 编译及 Android ARM64 / JNI 编译通过 |
 | Android 构建 | ARM64 共享库、JNI、Java、资源、D8、APK v2/v3 签名及 16 KiB 对齐检查通过 |
 | 真机启动 | 型号 23113RKC6C、Android 16；测试版冷启动动画进入首页，关闭系统动画后仍能进入，原系统设置已还原 |
