@@ -43,6 +43,14 @@
 
 `holdings/setup` 省略 `purchase` 时沿用 `OPENING`；提供 `purchase:{amount,fee,cashAccountId,exchangeRate}` 时写入 `BUY`，`quantity` 必须大于零，`amount` 是不含手续费的成交金额，实际扣款为 `amount+fee`，币种取资金账户，汇率为结算币种对人民币的历史汇率。账户、产品、规则、投资事件和现金结算共同提交，失败全部回滚，重试沿用同一防重键。`cost` 不覆盖实际买入成本。
 
+手动新建基金并完成首笔已成交买入的示例（`POST /investments/holdings/setup`，`Idempotency-Key: holding-buy-example-0001`；替换账本、资金账户和实际成交时间）：
+
+```json
+{"accountName":"证券账户","profile":{"accountId":"","instrumentId":"","name":"手动基金","group":"基金","note":"","profitOffset":"0","hidden":false,"excludeFromTotal":false,"excludeProfit":false,"bookIds":[],"version":0},"instrument":{"name":"手动基金","symbol":"123456","type":"FUND"},"quantity":"900","cost":null,"price":"1.2","bookId":"book-id","occurredAt":1791162000,"purchase":{"amount":"990","fee":"10","cashAccountId":"cash-id","exchangeRate":"1"}}
+```
+
+该示例从人民币资金账户扣除 1000 元；已有持仓则省略 `purchase` 并填写已知人民币总成本或 `null`，不扣资金。参考价只影响估值。数量或成本校准使用 `/holdings/update`，同时传回原始 `expectedQuantity/expectedCost`，冲突时先重读。
+
 `report` 的 `assetScope=1` 按当前持仓的生效账本与账户禁用账本交集过滤，并排除“不计入总资产”持仓；隐藏不排除。筛选同时应用于事件效果、快照历史和年化。省略 `assetScope` 保留旧调用行为；`bookIds` 为空表示全部账本。
 
 日期为 `YYYY-MM-DD`、时间 `HH:mm`、会计时区为有效 IANA 名称。指令为基金 `BUY/SELL`，须有人民币资金账户；`amount/fee` 最多两位小数，`quantity/price/feePercent` 使用受限十进制字符串。待确认不影响资金和持仓；15:00起顺延至下一公开净值日期。入账事件附 `fund:{tradeDate,confirmDate,price,priceDate,source,orderId}`，后续可沿用事件修订/撤销接口。已处理或取消的指令不能再次入账。
@@ -227,7 +235,7 @@ Invoke-RestMethod "$ledgerBase/monetary-income/search?q=000198" -Headers $ledger
 
 必须先搜索、核对实际基金并由用户明确绑定。仅人民币可用资金账户允许绑定。`bookId`、`categoryId` 可省略；首次使用有效默认值，后续收益继承前一条记录。暂停/解绑使用 `POST /monetary-income/pause` 的 `accountId`，保留历史流水与逐日防重。同步接收 `accountId` 和可选 `force`，缺数据时等待；未强制同步的同一账户尝试间隔为 60 秒，已结算到昨日的账户跳过。成功返回最新收益合计，客户端据此刷新相关页面；强制同步不能绕过防重。
 
-`GET /monetary-income/search` 无法访问公开数据源时返回 HTTP 502、`errorCode=224004` 和中文重试提示。限定基金域名优先使用应用内 HTTPS 解析；经数据源确认的货币基金身份缓存 10 分钟，可用于紧随其后的绑定核验，过期后必须重新查询。具体边界见[行情模块](../pkg/marketquotes/README.md)。
+`GET /monetary-income/search` 无法访问公开数据源时返回 HTTP 502、`errorCode=224004` 和中文重试提示。基金请求使用国内连接池，Android 尝试使用非 VPN 网络及同网 DNS，受系统旁路策略限制；经数据源确认的货币基金身份缓存 10 分钟，可用于紧随其后的绑定核验，过期后必须重新查询。具体边界见[行情模块](../pkg/marketquotes/README.md)。
 
 
 ## 资产写入字段

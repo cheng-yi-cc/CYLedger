@@ -1,167 +1,37 @@
 <template>
-    <f7-page class="cy-mobile-surface" @page:afterin="onPageAfterIn">
-        <f7-navbar>
-            <f7-nav-left :class="{ 'disabled': loading }" :back-link="tt('Back')"></f7-nav-left>
-            <f7-nav-title :title="tt(title)"></f7-nav-title>
-            <f7-nav-right :class="{ 'disabled': loading }">
-                <f7-link icon-f7="checkmark_alt" :class="{ 'disabled': inputIsEmpty || submitting }" :aria-label="tt('Save')" @click="save"></f7-link>
-            </f7-nav-right>
+    <f7-page class="cy-mobile-surface cy-asset-surface" @page:afterin="onPageAfterIn">
+        <f7-navbar :title="editCategoryId ? '编辑分类' : '新增分类'" back-link="返回">
+            <f7-nav-right><f7-link icon-f7="checkmark_alt" aria-label="保存分类" :class="{ disabled: loading || inputIsEmpty || submitting }" @click="save" /></f7-nav-right>
         </f7-navbar>
-
-        <f7-list strong inset dividers class="margin-top-half skeleton-text" v-if="loading">
-            <f7-list-input label="Category Name" placeholder="Your category name"></f7-list-input>
-            <f7-list-item class="list-item-with-header-and-title" header="Primary Category" title="Primary Category"></f7-list-item>
-            <f7-list-item class="list-item-with-header-and-title list-item-with-multi-item">
-                <template #default>
-                    <div class="grid grid-cols-2">
-                        <div class="list-item-subitem no-chevron">
-                            <a class="item-link" href="#">
-                                <div class="item-content">
-                                    <div class="item-inner">
-                                        <div class="item-header">
-                                            <span>Category Icon</span>
-                                        </div>
-                                        <div class="item-title">
-                                            <div class="list-item-custom-title no-padding">
-                                                <f7-icon f7="app_fill"></f7-icon>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </a>
-                        </div>
-                        <div class="list-item-subitem no-chevron">
-                            <a class="item-link" href="#">
-                                <div class="item-content">
-                                    <div class="item-inner">
-                                        <div class="item-header">
-                                            <span>Category Color</span>
-                                        </div>
-                                        <div class="item-title">
-                                            <div class="list-item-custom-title no-padding">
-                                                <f7-icon f7="app_fill"></f7-icon>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </a>
-                        </div>
-                    </div>
-                </template>
-            </f7-list-item>
-            <f7-list-item class="list-item-toggle" header="Visible" after="True"></f7-list-item>
-            <f7-list-input label="Description" type="textarea" placeholder="Your category description (optional)"></f7-list-input>
-        </f7-list>
-
-        <f7-list form strong inset dividers class="margin-top-half" v-else-if="!loading">
-            <f7-list-input
-                type="text"
-                clear-button
-                :label="tt('Category Name')"
-                :placeholder="tt('Your category name')"
-                v-model:value="category.name"
-            ></f7-list-input>
-
-            <f7-list-item
-                link="#" no-chevron
-                class="list-item-with-header-and-title"
-                :header="tt('Primary Category')"
-                :title="getPrimaryCategoryName(category.parentId)"
-                @click="showPrimaryCategorySheet = true"
-                v-if="editCategoryId && category.parentId && category.parentId !== '0'"
-            >
-                <list-item-selection-sheet value-type="item"
-                                           key-field="id" value-field="id" title-field="name"
-                                           icon-field="icon" icon-type="category" color-field="color"
-                                           :items="allAvailableCategories"
-                                           v-model:show="showPrimaryCategorySheet"
-                                           v-model="category.parentId">
-                </list-item-selection-sheet>
-            </f7-list-item>
-
-            <f7-list-item class="list-item-with-header-and-title list-item-with-multi-item">
-                <template #default>
-                    <div class="grid grid-cols-2">
-                        <div class="list-item-subitem no-chevron">
-                            <a class="item-link" href="#" @click="showIconSelectionSheet = true">
-                                <div class="item-content">
-                                    <div class="item-inner">
-                                        <div class="item-header">
-                                            <span>{{ tt('Category Icon') }}</span>
-                                        </div>
-                                        <div class="item-title">
-                                            <div class="list-item-custom-title no-padding">
-                                                <ItemIcon :icon-type="getCategoryIconType(category.iconType)" :icon-id="category.icon" :color="category.color"></ItemIcon>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </a>
-
-                            <icon-selection-sheet :all-system-icon-infos="ALL_CATEGORY_ICONS"
-                                                  :color="category.color"
-                                                  v-model:show="showIconSelectionSheet"
-                                                  v-model:icon-type="category.iconType"
-                                                  v-model="category.icon"
-                            ></icon-selection-sheet>
-                        </div>
-                        <div class="list-item-subitem no-chevron">
-                            <a class="item-link" href="#" @click="showColorSelectionSheet = true">
-                                <div class="item-content">
-                                    <div class="item-inner">
-                                        <div class="item-header">
-                                            <span>{{ tt('Category Color') }}</span>
-                                        </div>
-                                        <div class="item-title">
-                                            <div class="list-item-custom-title no-padding">
-                                                <ItemIcon icon-type="fixed-f7" icon-id="app_fill" :color="category.color"></ItemIcon>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </a>
-
-                            <color-selection-sheet :all-system-color-infos="ALL_CATEGORY_COLORS"
-                                                   v-model:show="showColorSelectionSheet"
-                                                   v-model="category.color"
-                            ></color-selection-sheet>
-                        </div>
-                    </div>
-                </template>
-            </f7-list-item>
-
-            <f7-list-item :title="tt('Visible')" v-if="editCategoryId">
-                <template #after>
-                    <f7-toggle :checked="category.visible" @toggle:change="category.visible = $event"></f7-toggle>
-                </template>
-            </f7-list-item>
-
-            <f7-list-item title="可见账本" class="cy-category-scope-item">
-                <template #footer>
-                    <label class="cy-category-scope-option"><input type="checkbox" :checked="!category.bookIds.length" @change="setGlobalScope(($event.target as HTMLInputElement).checked)" />所有账本通用</label>
-                    <div class="cy-category-scope-options"><label v-for="book in booksStore.allBooks" :key="book.id" class="cy-category-scope-option"><input type="checkbox" :checked="category.bookIds.includes(book.id)" @change="toggleBook(book.id, ($event.target as HTMLInputElement).checked)" />{{ book.name }}{{ book.archived ? '（已归档）' : '' }}</label></div>
-                    <p>只影响记账时的分类选择，已记录账单和历史统计保留。二级分类还需在一级分类的可见范围内。</p>
-                    <p v-if="scopeError" role="alert">{{ scopeError }}</p>
-                </template>
-            </f7-list-item>
-
-            <f7-list-input
-                type="textarea"
-                style="height: auto"
-                :label="tt('Description')"
-                :placeholder="tt('Your category description (optional)')"
-                v-textarea-auto-size
-                v-model:value="category.comment"
-            ></f7-list-input>
-        </f7-list>
+        <main class="management-body">
+            <p v-if="loading" class="cy-empty">正在加载分类…</p>
+            <form v-else class="management-form" @submit.prevent="save">
+                <label class="management-field"><span>分类名称</span><input v-model="category.name" :disabled="submitting" maxlength="64" placeholder="填写分类名称" aria-label="分类名称" /></label>
+                <button type="button" class="category-field-button" :disabled="submitting" @click="showIconSelectionSheet = true"><span>分类图标</span><ItemIcon :icon-type="getCategoryIconType(category.iconType)" :icon-id="category.icon" :color="category.color" /><f7-icon f7="chevron_right" /></button>
+                <button type="button" class="category-field-button" :disabled="submitting" @click="showColorSelectionSheet = true"><span>图标颜色</span><ItemIcon icon-type="fixed-f7" icon-id="circle_fill" :color="category.color" /><f7-icon f7="chevron_right" /></button>
+                <button v-if="category.parentId && category.parentId !== '0'" type="button" class="category-field-button" :disabled="submitting || !editCategoryId" @click="showPrimaryCategorySheet = true"><span>一级分类</span><small>{{ getPrimaryCategoryName(category.parentId) }}</small><f7-icon v-if="editCategoryId" f7="chevron_right" /></button>
+                <div v-if="editCategoryId" class="category-field-button"><span>显示分类</span><f7-toggle :disabled="submitting" :checked="category.visible" @toggle:change="category.visible = $event" /></div>
+                <button type="button" class="category-field-button" :disabled="submitting" @click="showBookSelection = true"><span>生效账本</span><small>{{ !category.bookIds.length ? '全部账本' : category.bookIds.length === 1 ? booksStore.allBooks.find(book => book.id === category.bookIds[0])?.name || '已选 1 个账本' : `已选 ${category.bookIds.length} 个账本` }}</small><f7-icon f7="chevron_right" /></button>
+                <label class="category-note"><span>备注</span><textarea v-model="category.comment" :disabled="submitting" rows="3" maxlength="255" placeholder="填写备注（选填）" aria-label="分类备注" /></label>
+            </form>
+        </main>
+        <icon-selection-sheet :all-system-icon-infos="ALL_CATEGORY_ICONS" :color="category.color" v-model:show="showIconSelectionSheet" v-model:icon-type="category.iconType" v-model="category.icon" />
+        <color-selection-sheet :all-system-color-infos="ALL_CATEGORY_COLORS" v-model:show="showColorSelectionSheet" v-model="category.color" />
+        <list-item-selection-sheet value-type="item" key-field="id" value-field="id" title-field="name" icon-field="icon" icon-type="category" color-field="color" :items="allAvailableCategories" v-model:show="showPrimaryCategorySheet" v-model="category.parentId" />
+        <StatisticsSheet v-model:open="showBookSelection" title="生效账本">
+            <template #action><button @click="showBookSelection = false">确定</button></template>
+            <p class="management-caption">控制记账时可以选择此分类的账本。二级分类同时遵循一级分类的可见范围。</p>
+            <label class="category-book"><input type="checkbox" :checked="!category.bookIds.length" @change="setGlobalScope(($event.target as HTMLInputElement).checked)" />全部账本</label>
+            <label v-for="book in booksStore.allBooks" :key="book.id" class="category-book"><input type="checkbox" :checked="category.bookIds.includes(book.id)" @change="toggleBook(book.id, ($event.target as HTMLInputElement).checked)" />{{ book.name }}{{ book.archived ? '（已归档）' : '' }}</label>
+            <p v-if="scopeError" class="cy-message" role="alert">{{ scopeError }}</p>
+        </StatisticsSheet>
     </f7-page>
 </template>
-
 <script setup lang="ts">
 import { ref } from 'vue';
+import StatisticsSheet from '@/components/mobile/StatisticsSheet.vue';
 import type { Router } from 'framework7/types';
 
-import { useI18n } from '@/locales/helpers.ts';
 import { useI18nUIComponents, showLoading, hideLoading } from '@/lib/ui/mobile.ts';
 import { useCategoryEditPageBase } from '@/views/base/categories/CategoryEditPageBase.ts';
 
@@ -184,7 +54,6 @@ const props = defineProps<{
 
 const query = props.f7route.query;
 
-const { tt } = useI18n();
 const { showAlert, showToast, routeBackOnError } = useI18nUIComponents();
 const {
     editCategoryId,
@@ -193,7 +62,6 @@ const {
     submitting,
     category,
     allAvailableCategories,
-    title,
     inputEmptyProblemMessage,
     inputIsEmpty
 } = useCategoryEditPageBase(query['type'] ? parseInt(query['type']) as CategoryType : undefined, query['parentId']);
@@ -209,6 +77,7 @@ void booksStore.loadBooks().catch(() => { scopeError.value = '账本列表加载
 
 const loadingError = ref<unknown | null>(null);
 const showPrimaryCategorySheet = ref<boolean>(false);
+const showBookSelection = ref(false);
 const showIconSelectionSheet = ref<boolean>(false);
 const showColorSelectionSheet = ref<boolean>(false);
 
@@ -265,6 +134,8 @@ function init(): void {
 }
 
 function save(): void {
+    if (submitting.value || loading.value) return;
+    category.value.name = category.value.name.trim();
     const router = props.f7router;
     const problemMessage = inputEmptyProblemMessage.value;
 
@@ -307,7 +178,10 @@ function onPageAfterIn(): void {
 
 init();
 </script>
-
+<style scoped src="@/styles/mobile/management.css"></style>
 <style scoped>
-.cy-category-scope-option{display:flex;align-items:center;gap:8px;padding:9px 0;font-size:13px;color:var(--cy-ink)}.cy-category-scope-option input{width:17px;height:17px;accent-color:var(--cy-accent)}.cy-category-scope-options{display:flex;flex-wrap:wrap;column-gap:18px}.cy-category-scope-item p{font-size:11px;line-height:1.7;color:var(--cy-muted);margin:7px 0}.cy-category-scope-item p[role=alert]{color:var(--cy-expense)}
+.category-field-button{display:flex;align-items:center;gap:12px;min-height:64px;width:100%;padding:12px 0;background:none;border:0;border-bottom:1px solid var(--cy-line);font-size:15px;text-align:left}
+.category-field-button>span{flex:1}.category-field-button small{font-size:13px;color:var(--cy-muted);max-width:55%;text-align:right;overflow-wrap:anywhere}.category-field-button :deep(.icon){font-size:25px}.category-field-button>.icon:last-child{font-size:12px;color:var(--cy-muted)}
+.category-note{display:block;padding:20px 0 8px;font-size:15px}.category-note textarea{box-sizing:border-box;display:block;resize:vertical;width:100%;border:0;background:none;color:var(--cy-ink);font:inherit;line-height:1.8;margin-top:12px;padding:0}.category-note textarea::placeholder{color:var(--cy-muted);font-size:14px}
+.category-book{display:flex;align-items:center;gap:12px;min-height:54px;border-bottom:1px solid var(--cy-line);font-size:15px}.category-book input{width:18px;height:18px;accent-color:var(--cy-accent)}
 </style>

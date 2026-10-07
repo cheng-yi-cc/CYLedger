@@ -8,6 +8,8 @@
 - 加密每日定投仅由显式启用的交易所计划触发，买入和逐日完成记录在原投资事务内提交。历史币价与汇率缺失时待处理，余额不足直接暂停；恢复不补买暂停期间，修订或撤销保留日期防重身份，不向交易所下单。
 - 新接口所有数量、金额、价格和汇率均为十进制字符串。输入先限制格式和长度，再交给十进制库；禁止浮点参与成本运算。
 - 未知成本、缺失报价或历史汇率保持未知，不能当成零。普通估值行情不能生成收入或修改持仓数量；用户显式绑定的货币基金自动收益由 `pkg/services/monetary_income.go` 独立逐日结算，万份收益不得当作净值。
+- 手机资产列表与统计复用 `investment-scope.ts` 的账本/账户范围；搜索和隐藏只影响可见性，不改变汇总。缺报价的空字符串也保持未知，不传入十进制解析。
+- Framework7 页面根节点不要用异步变化的 `class` 切换业务样式，避免覆盖路由状态；可改用独立 `data-*` 属性。
 - 系统结算账户必须在旧接口、批量操作、账户合并、普通列表和资产汇总中受保护。
 - 钱包收支复用投资事件，在同一事务更新实际币种持仓及一笔人民币统计账单；系统账单不重复计入资产，原币展示来自原事件，禁止普通账单接口单独改删。账户单位切换不得重写历史币种，普通资金账户须由 `account_currency.go` 复核可改条件。
 - 稳定币每枚约 1 美元只能用于可修改的收付数量预填，不能作为行情或历史汇率；手动价格保留原币，历史快照重建沿用原有价格与汇率。
@@ -33,7 +35,7 @@
 - 每次交付项目修改都告诉用户本地预览方法；最终报告区分已实现、已验证、未实现和依赖外部配置的部分。
 - Android 构建用 `python scripts/build_android.py`，测试版加 `--qa`；`.runtime/android-signing/` 是覆盖升级所需的持久材料，清理时必须保留。手机与电脑数据库独立。
 - 手机备份只保存允许的显示偏好，不保存会话令牌和设备解锁凭据；恢复须先校验、备份当前账本并停止后端，再替换目录。愿望记录不能当作真实资金流水。
-- Compose 参数为 `CYLEDGER_BIND`、`CYLEDGER_PORT`、`CYLEDGER_ROOT_URL`、`CYLEDGER_VOLUME`、`TZ`；可选行情密钥为 `CYLEDGER_COINGECKO_DEMO_API_KEY`，Android SDK 用 `ANDROID_HOME` 或 `--sdk`。不得提交真实密钥或修改全局代理来适配一次构建。
+- Compose 参数为 `CYLEDGER_BIND`、`CYLEDGER_PORT`、`CYLEDGER_ROOT_URL`、`CYLEDGER_VOLUME`、`TZ`；可选行情密钥为 `CYLEDGER_COINGECKO_DEMO_API_KEY`，电脑行情中转用 `CYLEDGER_MARKET_RELAY_URL`、`CYLEDGER_MARKET_RELAY_TOKEN`，Android 中转配置用 `--market-network`。Android SDK 用 `ANDROID_HOME` 或 `--sdk`。不得提交真实密钥或修改全局代理来适配一次构建。
 
 ## 深入文档
 
@@ -42,6 +44,7 @@
 | `README.CYLEDGER.md` | 使用与开发入口 |
 | `docs/CYLEDGER_ARCHITECTURE.md`、`docs/CYLEDGER_API.md` | 数据模型、事务、路由和请求契约 |
 | `docs/CYLEDGER_OPERATIONS.md`、`android/README.md` | 部署、恢复、签名和真机升级 |
+| `docs/CYLEDGER_MARKET_NETWORK.md` | 国内与海外连接边界、可选行情中转配置 |
 | `docs/CYLEDGER_ACCEPTANCE.md` | 当前交付与已验证范围，替换过期记录而非追加流水账 |
 
 ## 上游归属
