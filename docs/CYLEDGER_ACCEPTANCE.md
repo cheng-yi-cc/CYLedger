@@ -15,15 +15,17 @@
 
 ## 正式产物与升级
 
-- 正式 APK：当前工作树 `dist/android/CYLedger-Android-arm64.apk`，67,749,627 字节，版本 `0.2.0` / `versionCode=3`，ARM64，最低 Android 8。
+- 正式 APK：主目录 `dist/android/CYLedger-Android-arm64.apk`，67,749,627 字节，版本 `0.2.0` / `versionCode=3`，ARM64，最低 Android 8。
 - SHA-256：`5d3a5cbd42e8a9e924ad40a166dd7e836ddb1e5b2710bac2ab03f9c9dc263b77`。
 - 已对手机 `com.cyledger.android` 执行同签名 `adb install --no-incremental -r`，安装成功，实际安装 APK 摘要一致，正式后端健康检查返回 200。未卸载或清空正式账本。
 - QA 与正式包中的 142 项前端文件、原生库及其他共享资源内容一致；ZIP 容器时间戳不作为内容差异。正式包未开启调试，签名和 16 KB 对齐检查通过。
-- 本轮源码与产物位于 `C:\Users\45057\.codex\worktrees\202e\CY Finance Manager` 的 `codex/crypto-dca` 分支，已整合 `main` 至 `c59580cc`。主目录仍是此前理财交付版本，尚未包含本轮定投合并；手机已运行上述整合 APK。运行账本、配置、历史备份和 `.runtime/android-signing/` 为持久材料，不属于过程文件。
+- 源码与最终产物统一在主目录 `D:\My Project\CY Finance Manager`：`dist/` 含 142 项网页资源与正式 APK，已逐文件核对摘要；`.runtime/cyledger.exe` 已由整合源码重新编译。手机运行上述整合 APK。运行账本、配置、历史备份和 `.runtime/android-signing/` 为持久材料，不属于过程文件。
 
 ## 收尾状态
 
-本轮尚未要求合并、推送或清理，定投源码保留在当前分支。QA 应用、虚构数据与验收过程文件保留；本轮临时 ADB 转发已移除。此前理财更新已合入主分支，其 `80a4` 工作树归档限制由原任务记录，本轮不处理其他任务的工作树。正式账本、历史备份和签名材料保留。
+定投代码及配套文档已合入并推送至 `main`，`codex/crypto-dca` 分支已删除。QA 应用已卸载；测试数据、截图、脚本、构建缓存、重复产物与旧网页资源已移入回收站；临时浏览器、服务及 ADB 转发已关闭。正式账本、附件、配置、历史备份和签名材料保留。
+
+`202e` 工作树仍是本聊天的受保护主工作目录，应用明确拒绝归档；该目录保留源码和签名材料，处于与主分支一致的游离 HEAD。需要先在应用中解除其主工作目录身份，才能归档。其他聊天的 `80a4` 工作树不在本轮清理范围内。
 
 ## 已验证范围
 
@@ -42,7 +44,7 @@
 | 真机行情 | CoinGecko 连续取得新的源时间和价格，市值、今日及累计收益随之变化；数量和成本不因刷新改变 |
 | 真机零点收益 | 两个 BTC 账户数量 0.02 与 0.01、成本 10000 与 5000，合并为 0.03 和 15000；取得北京时间 2026-10-07 零点 CoinGecko 收盘价 85757.77628476892 USD，历史 USD/CNY 6.7046。验收取样时两账户今日收益合计 -357.67280891857627854 元，独立 Decimal 复算完全一致 |
 | 真机详情 | 收入、支出、转账内容及编辑跳转通过；12.34 元支出、1 元优惠、备注和地点进入编辑后完整保留。自动收益区分账单日期与实际记录时间，并显示原始计息依据；浅色/深色布局检查无横向溢出 |
-| 构建与升级 | 本轮 Android QA/正式构建、签名与 16 KB 对齐通过，142 项前端文件及 16 项原生库/资源内容一致；实际正式安装包摘要一致，`/healthz.json` 返回 200。Windows 构建为前一轮基线，本轮电脑预览需按下方命令重建 |
+| 构建与升级 | Android QA/正式构建、签名与 16 KB 对齐通过，142 项前端文件及 16 项原生库/资源内容一致；实际正式安装包摘要一致，`/healthz.json` 返回 200。整合源码的 Windows 构建与独立验收库健康检查通过，最终程序已复制并校验至主目录 |
 
 设备：`23113RKC6C`、Android 16、ARM64。涉及费用、转移、未知成本与同步防重的边界主要由十进制引擎及 SQLite 测试验证，不声称全部边界均在真机重做。
 
@@ -57,15 +59,15 @@
 
 ## 本地预览
 
-手机：**CYLedger → 资产 → 加密货币交易所账户 → 管理定投**。正式版已升级并打开该入口；模拟验收数据位于独立的 **CYLedger 测试** 应用。
+手机：**CYLedger → 资产 → 加密货币交易所账户 → 管理定投**。正式版已升级；模拟验收数据与测试版已清理，没有替用户创建真实定投计划。
 
-电脑需在本轮工作树重建启动，打开 [本地手机布局预览](http://localhost:18083/mobile)。电脑与手机账本独立：
+电脑在主目录启动，打开 [本地手机布局预览](http://localhost:18083/mobile)。电脑与手机账本独立：
 
 ```powershell
-cd "C:\Users\45057\.codex\worktrees\202e\CY Finance Manager"
-powershell -ExecutionPolicy Bypass -File .\scripts\Start-CYLedger.ps1 -Build -DirectNpm -Port 18083
+cd "D:\My Project\CY Finance Manager"
+powershell -ExecutionPolicy Bypass -File .\scripts\Start-CYLedger.ps1 -Port 18083
 ```
 
-首次创建电脑账户见 [运维说明](CYLEDGER_OPERATIONS.md)。上述 18083 服务本轮未启动；不依赖前一轮临时预览。8080 被本机其他应用占用，因此使用 18083。
+从源码重建加 `-Build -DirectNpm`。首次创建电脑账户见 [运维说明](CYLEDGER_OPERATIONS.md)。上述 18083 服务尚未启动；临时 18081 预览已关闭。8080 被本机其他应用占用，因此使用 18083。
 
 接口见 [API 指南](CYLEDGER_API.md)，数据模型与历史快照规则见 [架构](CYLEDGER_ARCHITECTURE.md)，Android 构建与签名见 [Android 说明](../android/README.md)。
