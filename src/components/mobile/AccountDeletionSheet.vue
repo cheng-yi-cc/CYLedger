@@ -12,6 +12,7 @@
                     <p v-if="preview.subAccountCount">同时删除 {{ preview.subAccountCount }} 个子账户。</p>
                     <p v-if="preview.dueCount || preview.depositCount">同时取消 {{ preview.dueCount }} 个到期事项与 {{ preview.depositCount }} 笔定存的后续收益和通知。</p>
                     <p v-if="preview.installmentCount">同时结束 {{preview.installmentCount}} 个分期计划，取消未入账服务费。</p>
+                    <p v-if="preview.cryptoDcaPlanCount">同时停止 {{ preview.cryptoDcaPlanCount }} 个加密货币定投计划；已入账记录随投资流水处理。</p>
                     <p v-if="preview.parentAccountName">这是最后一个子账户，空主账户“{{ preview.parentAccountName }}”也将删除。</p>
                     <p v-if="related" class="cy-muted">删除会撤销关联转账的两侧流水、重算投资持仓和成本；关联模板一并删除，自动收益停止。此操作无法从界面撤回。</p>
                     <p v-if="preview.affectedAccounts.length">以下账户的余额或持仓也会更新：{{ preview.affectedAccounts.join('、') }}。</p>
@@ -38,7 +39,7 @@ import { useLedgerScopeStore } from '@/stores/ledgerScope.ts';
 const props = defineProps<{ opened: boolean; target: { id:string; name:string; kind:'cash'|'portfolio'; href:string }; immediate?:boolean }>();
 const emit = defineEmits<{ 'update:opened':[value:boolean]; deleted:[]; busy:[value:boolean] }>();
 const confirming=ref(false), loading=ref(false), deleting=ref(false), error=ref(''), preview=ref<AccountDeletionPreview>();
-const related=computed(()=>!!preview.value && preview.value.transactionCount+preview.value.investmentCount+preview.value.templateCount+(preview.value.dueCount||0)+(preview.value.depositCount||0)+(preview.value.installmentCount||0)>0);
+const related=computed(()=>!!preview.value && preview.value.transactionCount+preview.value.investmentCount+preview.value.templateCount+(preview.value.dueCount||0)+(preview.value.depositCount||0)+(preview.value.installmentCount||0)+(preview.value.cryptoDcaPlanCount||0)>0);
 let request=0;
 function close():void { if(!deleting.value) emit('update:opened',false); }
 function closed():void { request++; close(); }

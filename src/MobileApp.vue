@@ -2,10 +2,13 @@
     <f7-app v-bind="f7params">
         <f7-view id="main-view" main url="/"></f7-view>
     </f7-app>
+	<CryptoDCAMonitor />
 </template>
 
 <script setup lang="ts">
 import '@/styles/mobile/cyledger.scss';
+import CryptoDCAMonitor from '@/components/CryptoDCAMonitor.vue';
+import { syncCryptoDCAOnOpen } from '@/lib/crypto-dca.ts';
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import moment from 'moment-timezone';
 
@@ -173,7 +176,7 @@ function onBackdropChanged(element: { push?: boolean, opened?: boolean }): void 
     setThemeColorMeta(environmentsStore.framework7DarkMode);
 }
 
-function resumeMonetaryIncome(): void { syncNativeSettings(); syncNativeAppearance();void syncMonetaryIncomeOnOpen();void syncAssetAutomationOnOpen(settingsStore.appSettings.timeZone).catch(()=>{}); }
+function resumeMonetaryIncome(): void { syncNativeSettings(); syncNativeAppearance();void syncMonetaryIncomeOnOpen();void syncCryptoDCAOnOpen();void syncAssetAutomationOnOpen(settingsStore.appSettings.timeZone).catch(()=>{}); }
 onUnmounted(() => {
     if (appearanceTimer) clearInterval(appearanceTimer);
     document.removeEventListener('visibilitychange', resumeMonetaryIncome);

@@ -13,6 +13,7 @@ import InvestmentPositionPage from '@/views/mobile/InvestmentPositionPage.vue';
 import InvestmentRecordPage from '@/views/mobile/InvestmentRecordPage.vue';
 import CryptoAccountPage from '@/views/mobile/CryptoAccountPage.vue';
 import CryptoAccountDetailPage from '@/views/mobile/CryptoAccountDetailPage.vue';
+import CryptoDCAPage from '@/views/mobile/CryptoDCAPage.vue';
 import WalletEntryPage from '@/views/mobile/WalletEntryPage.vue';
 import CryptoConvertPage from '@/views/mobile/CryptoConvertPage.vue';
 import InvestmentDetailPage from '@/views/mobile/InvestmentDetailPage.vue';
@@ -182,6 +183,7 @@ const routes: Router.RouteParameters[] = [
     { path: '/crypto/add', async: asyncResolve(CryptoAccountPage), beforeEnter: [checkLogin] },
     { path: '/crypto/entry', async: asyncResolve(WalletEntryPage), beforeEnter: [checkLogin] },
     { path: '/crypto/account', async: asyncResolve(CryptoAccountDetailPage), beforeEnter: [checkLogin] },
+    { path: '/crypto/dca', async: asyncResolve(CryptoDCAPage), beforeEnter: [checkLogin] },
     { path: '/crypto/convert', async: asyncResolve(CryptoConvertPage), beforeEnter: [checkLogin] },
     { path: '/investments/record', async: asyncResolve(InvestmentRecordPage), beforeEnter: [checkLogin] },
     { path: '/ledger/details', async: asyncResolve(LedgerDetailsPage), beforeEnter: [checkLogin] },

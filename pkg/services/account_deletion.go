@@ -22,18 +22,19 @@ type AccountDeletionInput struct {
 }
 
 type AccountDeletionPreview struct {
-	Name              string   `json:"name"`
-	TransactionCount  int      `json:"transactionCount"`
-	InvestmentCount   int      `json:"investmentCount"`
-	TemplateCount     int      `json:"templateCount"`
-	DueCount          int      `json:"dueCount"`
-	DepositCount      int      `json:"depositCount"`
-	InstallmentCount  int      `json:"installmentCount"`
-	SubAccountCount   int      `json:"subAccountCount"`
-	ParentAccountName string   `json:"parentAccountName"`
-	AffectedAccounts  []string `json:"affectedAccounts"`
-	BlockedReason     string   `json:"blockedReason"`
-	Token             string   `json:"token"`
+	Name               string   `json:"name"`
+	TransactionCount   int      `json:"transactionCount"`
+	InvestmentCount    int      `json:"investmentCount"`
+	TemplateCount      int      `json:"templateCount"`
+	DueCount           int      `json:"dueCount"`
+	DepositCount       int      `json:"depositCount"`
+	InstallmentCount   int      `json:"installmentCount"`
+	CryptoDCAPlanCount int      `json:"cryptoDcaPlanCount"`
+	SubAccountCount    int      `json:"subAccountCount"`
+	ParentAccountName  string   `json:"parentAccountName"`
+	AffectedAccounts   []string `json:"affectedAccounts"`
+	BlockedReason      string   `json:"blockedReason"`
+	Token              string   `json:"token"`
 }
 
 // DeleteAssetAccount previews and commits the same plan. Every balance, fact,
@@ -246,6 +247,17 @@ func (s *InvestmentService) DeleteAssetAccount(c core.Context, uid int64, input 
 			}
 		}
 		result.InstallmentCount = len(installmentItems)
+		var dcaPlans []models.CryptoDCAPlan
+		var dcaDays []models.CryptoDCADay
+		if input.Kind == "portfolio" {
+			if err := sess.Where("uid=? AND account_id=?", uid, input.ID).Asc("id").Find(&dcaPlans); err != nil {
+				return err
+			}
+			if err := sess.Where("uid=? AND account_id=? AND status=?", uid, input.ID, "pending").Asc("id").Find(&dcaDays); err != nil {
+				return err
+			}
+			result.CryptoDCAPlanCount = len(dcaPlans)
+		}
 
 		var portfolios []models.PortfolioAccount
 		if err := sess.Where("uid=?", uid).Asc("id").Find(&portfolios); err != nil {
@@ -264,7 +276,7 @@ func (s *InvestmentService) DeleteAssetAccount(c core.Context, uid int64, input 
 		}
 		// Fingerprint the complete investment history and current balances as well:
 		// another account's sale can change whether this deletion is valid.
-		raw, err := json.Marshal([]any{input.ID, input.Kind, cash, portfolio, portfolios, events, txs, templates, dueItems, depositItems, installmentItems})
+		raw, err := json.Marshal([]any{input.ID, input.Kind, cash, portfolio, portfolios, events, txs, templates, dueItems, depositItems, installmentItems, dcaPlans, dcaDays})
 		if err != nil {
 			return err
 		}
@@ -311,7 +323,7 @@ func (s *InvestmentService) DeleteAssetAccount(c core.Context, uid int64, input 
 		if result.BlockedReason != "" {
 			return investmentError(result.BlockedReason)
 		}
-		if !input.DeleteRelated && result.TransactionCount+result.InvestmentCount+result.TemplateCount+result.DueCount+result.DepositCount+result.InstallmentCount > 0 {
+		if !input.DeleteRelated && result.TransactionCount+result.InvestmentCount+result.TemplateCount+result.DueCount+result.DepositCount+result.InstallmentCount+result.CryptoDCAPlanCount > 0 {
 			return investmentError("账户还有关联交易或模板，请先处理或确认一并删除")
 		}
 		if err := s.voidAccountInvestments(sess, uid, events, voidIDs); err != nil {
@@ -361,6 +373,12 @@ func (s *InvestmentService) DeleteAssetAccount(c core.Context, uid int64, input 
 			}
 		}
 		if input.Kind == "portfolio" {
+			if _, err := sess.Where("uid=? AND account_id=?", uid, input.ID).Cols("enabled", "status").Incr("revision", 1).Update(&models.CryptoDCAPlan{Enabled: false, Status: "账户已删除，定投已停止"}); err != nil {
+				return err
+			}
+			if _, err := sess.Where("uid=? AND account_id=? AND status=?", uid, input.ID, "pending").Cols("status", "message").Update(&models.CryptoDCADay{Status: "skipped", Message: "账户已删除"}); err != nil {
+				return err
+			}
 			if _, err := sess.Where("uid=? AND id=?", uid, input.ID).Delete(&models.PortfolioAccount{}); err != nil {
 				return err
 			}

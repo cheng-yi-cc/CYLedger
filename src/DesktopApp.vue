@@ -2,6 +2,7 @@
     <v-app>
         <router-view />
     </v-app>
+	<CryptoDCAMonitor />
     <v-snackbar class="cursor-pointer" color="notification-background" location="top"
                 :multi-line="true" :timeout="-1" :close-on-content-click="true" v-model="showNotification">
         <v-tooltip activator="parent">{{ tt('Click to close') }}</v-tooltip>
@@ -16,6 +17,7 @@
 </template>
 
 <script setup lang="ts">
+import CryptoDCAMonitor from '@/components/CryptoDCAMonitor.vue';
 import { ref, computed, watch, onMounted } from 'vue';
 
 import { useTheme } from 'vuetify';

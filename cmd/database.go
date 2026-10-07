@@ -188,6 +188,7 @@ func updateAllDatabaseTablesStructure(c *core.CliContext) error {
 		new(models.Book), new(models.CalendarEvent), new(models.AssetPresentation), new(models.ReimbursementReceipt), new(models.AssetAdjustment), new(models.CreditInstallment), new(models.DebtMovement), new(models.FixedDeposit), new(models.MonetaryIncomeBinding), new(models.MonetaryIncomeDay), new(models.InvestmentSettings), new(models.PortfolioAccount), new(models.InvestmentInstrument),
 		new(models.InvestmentEventRecord), new(models.InvestmentEventRevision), new(models.InvestmentTransactionLink),
 		new(models.InvestmentIdempotency), new(models.InvestmentQuote), new(models.WealthSnapshot),
+		new(models.CryptoDCAPlan), new(models.CryptoDCADay),
 	)
 	if err != nil {
 		return err

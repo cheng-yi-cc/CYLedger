@@ -82,6 +82,8 @@ type Config struct {
 	CoinGeckoSearchURL string
 	CoinGeckoCoinURL   string
 	HKDFXURL           string
+	CryptoHistoryURL   string
+	HistoricalFXURL    string
 }
 
 type instrument struct {
@@ -131,6 +133,8 @@ type Service struct {
 	conversionMu         sync.Mutex
 	hkdFX                FXRate
 	hkdFXRestored        bool
+	historyMu            sync.Mutex
+	historyCache         map[string]cryptoHistoryEntry
 }
 
 // Default is one cache and one public subscription shared by the application.

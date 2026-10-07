@@ -63,6 +63,7 @@ func newInvestmentDBFixture(t *testing.T) *investmentDBFixture {
 		&models.Book{}, &models.CalendarEvent{}, &models.AssetPresentation{}, &models.FixedDeposit{}, &models.ReimbursementReceipt{}, &models.AssetAdjustment{}, &models.CreditInstallment{}, &models.DebtMovement{}, &models.MonetaryIncomeBinding{}, &models.MonetaryIncomeDay{}, &models.TransactionTemplate{}, &models.Account{}, &models.Transaction{}, &models.TransactionCategory{}, &models.TransactionTag{}, &models.TransactionTagIndex{}, &models.TransactionPictureInfo{},
 		&models.PortfolioAccount{}, &models.InvestmentInstrument{}, &models.InvestmentSettings{}, &models.InvestmentEventRecord{}, &models.InvestmentEventRevision{},
 		&models.InvestmentTransactionLink{}, &models.InvestmentIdempotency{}, &models.InvestmentQuote{}, &models.WealthSnapshot{},
+		&models.CryptoDCAPlan{}, &models.CryptoDCADay{},
 	))
 	f := &investmentDBFixture{t: t, s: s, engine: engine, uid: 101, bankID: 1001, at: time.Now().Add(-time.Hour).Unix()}
 	_, err := engine.Insert(&models.Account{AccountId: f.bankID, Uid: f.uid, Name: "fixture bank", Type: models.ACCOUNT_TYPE_SINGLE_ACCOUNT, Category: models.ACCOUNT_CATEGORY_CHECKING_ACCOUNT, Currency: "CNY", CreatedUnixTime: f.at - 120})

@@ -7,14 +7,15 @@
     <section class="cy-panel"><div class="brand"><img v-if="platformIcon(account.platform, account.kind)" :src="platformIcon(account.platform, account.kind)" alt="" /><div><strong>{{ account.name }}</strong><p>{{ platformName(account.platform) || (account.kind==='WALLET'?'加密钱包':'加密货币交易所') }}</p></div></div><p class="hint">当前参考市值（{{currency==='USD'?'美元':'人民币'}}）</p><strong class="total">{{ currencyMoney(total,currency) }}</strong><p v-if="currency==='USD'" class="hint">参考汇率 {{usdFX(summary)?.rate||'未知'}} CNY / USD · {{usdFX(summary)?.date||'暂无汇率'}}</p><p v-if="total===null && summary" class="hint">部分持仓暂无报价，总市值暂不可计算。</p><p v-if="rows.some(r=>!r.position?.costKnown && r.position)" class="hint">部分持仓成本未录入。</p></section>
     <nav class="wallet-actions"><f7-link :href="entryLink('EXPENSE')">记支出</f7-link><f7-link :href="entryLink('INCOME')">记收入</f7-link></nav>
     <nav class="actions"><f7-link :href="convertLink('cash')">人民币买币</f7-link><f7-link :href="convertLink('coin')">币币兑换</f7-link><f7-link :href="convertLink('transfer')">转移</f7-link><f7-link :href="convertLink('redeem')">卖币到账</f7-link></nav>
+    <section v-if="account.kind==='EXCHANGE'" class="cy-panel"><div class="section-head"><h2>每日定投</h2><f7-link :href="`/crypto/dca?accountId=${id}`">管理定投 →</f7-link></div><p class="hint">设置每日投入与时间，自动记录买入、成本与收益；余额不足时暂停。</p></section>
     <section class="cy-panel"><div class="section-head"><h2>持有币种</h2><f7-link :href="convertLink('opening')">添加已有持仓</f7-link></div><p v-if="!rows.length" class="hint">还没有持仓。可录入已有数量，或从其他账户转入。</p><f7-link v-for="row in rows" :key="row.coin.id" :href="positionLink(row.coin.id)" class="holding"><div><strong>{{ row.coin.symbol }}</strong><small>{{ row.coin.name }}</small></div><div><strong :title="row.position?.quantity || '0'">{{ displayQuantity(row.position?.quantity || '0') }}</strong><small>{{ currencyMoney(positionValue(row.position,currency,summary),currency) }}</small></div></f7-link></section>
-    <section class="cy-panel"><div class="section-head"><h2>交易记录</h2><span>{{ transactions.length }} 笔</span></div><p v-if="!transactions.length" class="hint">兑换与持仓记录会显示在这里。</p><article v-for="event in transactions" :key="event.id" class="event"><div><strong>{{ eventNames[event.type] }}<small v-if="event.voided"> · 已撤销</small></strong><span>{{ date(event.occurredAt) }}</span></div><p>{{ eventDescription(event) }}</p><p v-if="event.conversion" class="hint">行情换算 · {{ date(event.conversion.observedAt) }}<template v-if="event.conversion.toQuantity !== (event.type==='SELL'?event.amount:event.quantity)"> · 已校正到账数量</template></p><f7-link :href="event.wallet?`/crypto/entry?eventId=${event.id}`:positionLink(event.instrumentId, event.accountId)">查看记录</f7-link></article></section>
+    <section class="cy-panel"><div class="section-head"><h2>交易记录</h2><span>{{ transactions.length }} 笔</span></div><p v-if="!transactions.length" class="hint">兑换与持仓记录会显示在这里。</p><article v-for="event in transactions" :key="event.id" class="event"><div><strong>{{ event.dca ? '每日定投' : eventNames[event.type] }}<small v-if="event.voided"> · 已撤销</small></strong><span>{{ date(event.occurredAt) }}</span></div><p>{{ eventDescription(event) }}</p><p v-if="event.conversion" class="hint">行情换算 · {{ date(event.conversion.observedAt) }}<template v-if="event.conversion.toQuantity !== (event.type==='SELL'?event.amount:event.quantity)"> · 已校正到账数量</template></p><f7-link :href="event.wallet?`/crypto/entry?eventId=${event.id}`:positionLink(event.instrumentId, event.accountId)">查看记录</f7-link></article></section>
    </template>
   </main>
  </f7-page>
 </template>
 <script setup lang="ts">
-import { computed,ref,onUnmounted } from 'vue';
+import { computed,ref,onMounted,onUnmounted } from 'vue';
 import { walletCurrency, walletValue, positionValue, currencyMoney, usdFX } from '@/lib/wallet-entry.ts';
 import type { Router } from 'framework7/types';
 import moment from 'moment-timezone';
@@ -29,7 +30,8 @@ const account=ref<InvestmentAccount>(),coins=ref<Instrument[]>([]),summary=ref<W
 const id=computed(()=>props.f7route.query['id']||'');
 const valuationRefresh=createValuationRefresh(value=>{summary.value=value;});
 function activate():void{void load();valuationRefresh.start();}
-onUnmounted(valuationRefresh.stop);
+onMounted(()=>window.addEventListener('cy-dca-updated',load));
+onUnmounted(()=>{valuationRefresh.stop();window.removeEventListener('cy-dca-updated',load);});
 const rows=computed(()=>coins.value.filter(c=>(account.value?.instruments||[]).includes(c.id)||summary.value?.positions.some(p=>p.accountId===id.value&&p.instrumentId===c.id)).map(coin=>({coin,position:summary.value?.positions.find(p=>p.accountId===id.value&&p.instrumentId===coin.id)})));
 const currency=computed(()=>walletCurrency(account.value));
 const total=computed(()=>summary.value?walletValue(summary.value.positions.filter(p=>p.accountId===id.value),currency.value,summary.value):null);

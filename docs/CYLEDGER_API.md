@@ -53,6 +53,19 @@
 
 普通单币账户的 `GET /accounts/get.json` 返回 `currencyEditable`。只有零余额、无任何账单历史（含已删除）、无相关模板/收益绑定/定存或计价金额规则的账户可改币种；共享信用额度的关联账户也锁定。`POST /accounts/modify.json` 在事务内重新校验条件，有历史的账户继续使用原币种。
 
+## 加密货币每日定投
+
+以下接口只处理当前用户的 `EXCHANGE` 账户，不访问交易所私有 API，不生成普通生活收支。
+
+- `GET /investments/dca` 返回 `{plans,days,alerts,created}`。`days` 包含最多 100 条待处理和 100 条最近完成/跳过安排；`alerts` 按账户和支付币种合并未来三天需求，金额及数量均为十进制字符串。
+- `POST /investments/dca/save` 接收 `{id,revision,requestKey,accountId,instrumentId,paymentInstrumentId,amount,dailyTime,startDate,timeZone,bookId}`。新建 `id=""`，`requestKey` 长度 8–64、重试保持相同内容；更新须携带最新整数 `revision`。数量大于零、最多 18 位小数，时间 `HH:mm`，日期 `YYYY-MM-DD`，时区为有效 IANA 名称。每个用户最多 100 条计划。
+- `POST /investments/dca/enabled` 接收 `{id,revision,enabled}`。暂停停止待处理安排；恢复跳过暂停期间，从未来一次计划时间继续，已处理日期不重建。
+- `POST /investments/dca/sync` 接收 `{force:false}`，返回更新后的状态与本次新增笔数 `created`。同用户同步互斥；每次最多准备每计划 100 天、处理 30 条，联网总预算 20 秒。自动重试间隔至少 15 分钟，`force:true` 仍有 30 秒间隔；没有行情时保持待处理。
+
+买入身份固定为 `crypto:bitcoin`、`crypto:ethereum`、`crypto:solana`，支付身份固定为 `crypto:tether`、`crypto:usd-coin`。更新不允许更换账户或币种；调整从后续计划时间生效，旧待处理安排停止。新建允许历史开始日期，但不能使用后来入金倒填历史买入，也不能使后续已保存流水出现负持仓。余额不足会直接暂停且不生成投资事件。
+
+入账沿用 `BUY` 投资事件与同账户稳定币结算，`fee="0"`。响应的 `dca` 保存计划/日期、两种币的美元价格、价格时间/来源、人民币汇率及日期/来源；客户端不能伪造此字段创建定投。人工修订保留原始参考依据，作废保留逐日防重记录。账户删除预览增加 `cryptoDcaPlanCount`，预览令牌覆盖计划和待处理安排，确认删除后停止计划。
+
 ## 路由清单
 
 | 方法 | 路径（省略 `/api/v1`） |
@@ -95,6 +108,8 @@
 | POST | `/books/modify` |
 | POST | `/books/move` |
 | GET | `/investments/settings` |
+| GET | `/investments/dca` |
+| POST | `/investments/dca/save`、`/investments/dca/enabled`、`/investments/dca/sync` |
 | POST | `/investments/settings` |
 | GET | `/investments/accounts` |
 | POST | `/investments/accounts` |

@@ -37,6 +37,7 @@ Vue 网页 / Android WebView
 | `InvestmentSettings` / `PortfolioAccount` / `InvestmentInstrument` | 本位币/时区、投资账户及资产身份/公开行情绑定 |
 | `PortfolioAccount.Currency/PaymentInstruments` | 钱包/交易所显示与新增收支默认单位、至多两项默认收付币种；不保存第二份现金余额 |
 | `InvestmentEventRecord` / `InvestmentEventRevision` | 当前投资事件与历史修订，保留版本/作废状态 |
+| `CryptoDCAPlan` / `CryptoDCADay` | 显式每日定投规则、逐日固定条款与永久防重身份；不维护另一份持仓 |
 | `InvestmentTransactionLink` / `InvestmentIdempotency` | 事件与普通资金流水关系、重复请求结果 |
 | `InvestmentQuote` / `WealthSnapshot` | 公共行情持久缓存、私人手动价和历史估值快照 |
 
@@ -59,6 +60,8 @@ Android `LocalBridge` 只允许本机页面且解锁后发起操作。备份同�
 **钱包收支**：沿用投资事件的 `INCOME/EXPENSE` 和 `wallet` 元数据，保存原币金额、确认的人民币历史汇率、分类和一至两种实际币种数量。`wallet_entries.go` 验证归属与分类，`pkg/investments/wallet.go` 回放数量和成本，`InvestmentService.Mutate` 在同一事务写入事件、修订、关联及一笔人民币收支账单；预览执行后整体回滚。收入取得成本为原金额乘历史汇率；混合支出的处置价值按实际数量分配，释放移动加权成本，未知成本继续未知。人民币统计账单记在受保护的系统账户，不再次形成资产或现金扣款；原币展示从事件读取，修订/撤销同步反转账单、重放持仓并使快照失效。
 
 **货币单位与估值**：钱包可切换人民币/美元展示和新增收支默认值，历史事件币种不随之改变。普通资金账户没有独立的历史币种字段，只有零余额、无全部历史（包括已删除）、无计价规则或共享额度依赖时允许修改币种，由 `account_currency.go` 在保存事务中复核。私人手动价格保存原币，当前人民币估值使用缓存汇率；历史快照重建只用快照原有的价格与汇率。稳定币每枚约 1 美元仅用于可修改的收付数量预填，不进入行情缓存。
+
+**加密每日定投**：用户在交易所账户显式启用规则后，`crypto_dca.go` 按保存时区生成逐日安排；客户端前台及重新打开时触发同步，不依赖手机永久后台。历史行情在数据库事务外获取，两个币种均使用指定分钟公开美元开盘价，人民币成本使用此前已公布的 ECB 汇率。随后在 `investments.go` 原有事务内复核归属、计划修订和待处理状态，回放扣款时及后续稳定币余额，原子保存买入、修订、幂等、快照失效和逐日完成标记。缺数据保留待处理，余额不足直接暂停并跳过尚未买入的安排；恢复只从未来时间继续。人工撤销不删除日期身份；账户删除的预览令牌覆盖计划，删除时同步停止计划。累计投入来自有效投资事实，持仓成本和收益复用原回放与统一估值。
 
 **货币基金收益**：用户通过代码/名称搜索并明确开始日期；按会计时区、交易日和 15:00 截止回算 D 日本金，扣除有效定存，按 `本金 × 万份收益 ÷ 10000` 四舍五入到分，在 D+1 日入账。缺日停止等待；沿用上一笔收益的账本、分类、标签和收支统计属性。重绑、解绑和删除收益均保留防重身份，不复活已处理日期。
 
@@ -122,6 +125,8 @@ Android `LocalBridge` 只允许本机页面且解锁后发起操作。备份同�
 | POST | `/books/modify` |
 | POST | `/books/move` |
 | GET | `/investments/settings` |
+| GET | `/investments/dca` |
+| POST | `/investments/dca/save`、`/investments/dca/enabled`、`/investments/dca/sync` |
 | POST | `/investments/settings` |
 | GET | `/investments/accounts` |
 | POST | `/investments/accounts` |

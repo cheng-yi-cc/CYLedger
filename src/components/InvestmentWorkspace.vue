@@ -94,6 +94,7 @@
 
         <template v-if="!editorOnly && tab === 'accounts'"><section class="cy-panel"><div class="cy-section-heading"><h2>投资账户</h2><button class="cy-button cy-primary" @click="openEditor('account')">＋ 创建账户</button></div><p v-if="!accounts.length" class="cy-empty">用账户区分交易所、个人钱包或证券账户。</p><div v-for="account in accounts" :key="account.id" class="cy-cash-row"><strong>{{ account.name }}</strong><span class="cy-muted">{{ accountKinds[account.kind] || account.kind }}</span></div></section><section class="cy-panel"><div class="cy-section-heading"><h2>资产目录</h2><button class="cy-button" @click="openEditor('instrument')">＋ 创建资产</button></div><p class="cy-field-note">自动行情仅用于已验证映射的资产；其他资产可录入手动报价。</p><div v-for="instrument in instrumentsList" :key="instrument.id" class="cy-cash-row"><div><strong>{{ instrument.name }}</strong><p class="cy-muted">{{ instrument.symbol }} · {{ typeNames[instrument.type] }}</p></div><button class="cy-button" @click="openQuote(instrument.id)">手动报价</button></div></section></template>
 
+        <CryptoDCAWorkspace v-if="!editorOnly && tab === 'dca'" @changed="load" />
         <template v-if="!editorOnly && tab === 'settings'"><section class="cy-panel"><h2>投资设置</h2><form @submit.prevent="saveSettings"><div class="cy-fields"><label>本位币<input value="人民币 CNY" readonly /></label><label>会计时区<input v-model="settings.timeZone" required list="cy-timezones" placeholder="Asia/Shanghai" /><datalist id="cy-timezones"><option v-for="zone in timezones" :key="zone" :value="zone" /></datalist><span class="cy-field-note">日期按此时区记录与展示，初始值来自你的设备。</span></label></div><div class="cy-actions"><button class="cy-button cy-primary" :disabled="saving">保存设置</button></div></form></section><section class="cy-panel"><h2>数据管理</h2><p class="cy-muted">分别导出投资流水（含费用）与当前持仓。完整恢复请使用服务端备份工具。</p><div class="cy-actions"><button class="cy-button" :disabled="saving" @click="downloadCSV">导出投资流水 CSV</button><button class="cy-button" @click="downloadPositions">导出当前持仓 CSV</button><button class="cy-button" @click="emit('navigate', 'data')">日常流水导入与导出</button></div></section><section class="cy-panel"><h2>使用后的资产变化</h2><p class="cy-field-note">仅显示当时实际保存的估值。修订交易后失效的记录保留缺口，不用今天的持仓补造历史。</p><p v-if="!snapshots.length" class="cy-empty">尚无历史估值记录，开始使用后逐步积累。</p><div v-for="snapshot in recentSnapshots" :key="snapshot.id" class="cy-cash-row"><span>{{ date(snapshot.recordedAt) }}</span><div class="cy-align-end"><strong>{{ snapshot.invalidated ? '待重建 / 缺少历史价格' : money(snapshot.netAssets ?? snapshot.valuedAssets) }}</strong><small>{{ snapshot.invalidated ? '历史修订后失效' : snapshot.complete ? '完整估值' : '部分估值' }}</small></div></div></section></template>
     </div>
 </template>
@@ -103,6 +104,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, useTemplateR
 import Decimal from 'decimal.js';
 import BookPicker from '@/components/mobile/BookPicker.vue';
 import InstrumentSearch from '@/components/InstrumentSearch.vue';
+import CryptoDCAWorkspace from '@/components/CryptoDCAWorkspace.vue';
 import { useBooksStore } from '@/stores/books.ts';
 import { useLedgerScopeStore } from '@/stores/ledgerScope.ts';
 import moment from 'moment-timezone';
@@ -123,7 +125,7 @@ const dailyStatisticsStore = useStatisticsStore();
 const props = defineProps<{ editorOnly?: boolean; initialTab?: 'overview' | 'history' }>();
 const emit = defineEmits<{ navigate: [destination: 'accounts' | 'data']; changed: []; close: [] }>();
 const books = useBooksStore(), ledgerScope = useLedgerScopeStore();
-const tabs = [{ key: 'overview', name: '资产总览' }, { key: 'history', name: '投资流水' }, { key: 'accounts', name: '账户与资产' }, { key: 'settings', name: '设置与数据' }];
+const tabs = [{ key: 'overview', name: '资产总览' }, { key: 'history', name: '投资流水' }, { key: 'accounts', name: '账户与资产' }, { key: 'dca', name: '每日定投' }, { key: 'settings', name: '设置与数据' }];
 const tab = ref<string>(props.initialTab || 'overview');
 const groupBy = ref('account');
 const summary = ref<WealthSummary | null>(null);

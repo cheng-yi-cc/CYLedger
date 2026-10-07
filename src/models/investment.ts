@@ -1,6 +1,6 @@
 export interface InvestmentAccount { id: string; name: string; kind: string; platform?: string; instruments?: string[]; currency?: 'CNY' | 'USD'; paymentInstruments?: string[] }
 export interface AccountDeletionTarget { id: string; kind: 'cash' | 'portfolio' }
-export interface AccountDeletionPreview { name: string; transactionCount: number; investmentCount: number; templateCount: number; dueCount?:number; depositCount?:number; installmentCount?:number; subAccountCount: number; parentAccountName: string; affectedAccounts: string[]; blockedReason: string; token: string }
+export interface AccountDeletionPreview { name: string; transactionCount: number; investmentCount: number; templateCount: number; dueCount?:number; depositCount?:number; installmentCount?:number; cryptoDcaPlanCount?:number; subAccountCount: number; parentAccountName: string; affectedAccounts: string[]; blockedReason: string; token: string }
 export interface ConversionInput { fromInstrumentId: string; toInstrumentId: string; fromQuantity: string }
 export interface InvestmentConversion extends ConversionInput { toQuantity: string; fromPrice: string; toPrice: string; observedAt: number; expiresAt: number; fromQuote?: InvestmentQuote; toQuote?: InvestmentQuote }
 export interface InstrumentBinding { market: string; provider: string; providerId: string; currency: string }
@@ -16,6 +16,7 @@ export interface InvestmentEvent {
     exchangeRate: string; occurredAt: number; note: string; version: number; voided: boolean;
     conversion?: InvestmentConversion;
     wallet?: WalletEntry; additionalMovements?: AssetMovement[];
+    dca?: { planId:string; date:string; paymentPrice:string; targetPrice:string; priceTime:number; source:string; fxRate:string; fxDate:string; fxSource:string; receivedAt:number };
 }
 export interface InvestmentQuote {
     instrumentId?: string; price: string; currency: string; source: string; sourceTime: number;

@@ -35,6 +35,7 @@ type InvestmentEvent struct {
 	CashAccountID string                `json:"cashAccountId"`
 	BookID        string                `json:"bookId,omitempty"`
 	Conversion    *InvestmentConversion `json:"conversion,omitempty"`
+	DCA           *CryptoDCAInfo        `json:"dca,omitempty"`
 }
 type InvestmentPreview struct {
 	Event     InvestmentEvent           `json:"event"`
@@ -43,7 +44,8 @@ type InvestmentPreview struct {
 }
 type InvestmentService struct {
 	ServiceUsingDB
-	locks [64]sync.Mutex
+	locks        [64]sync.Mutex
+	dcaSyncLocks [64]sync.Mutex
 }
 
 var Investments = &InvestmentService{ServiceUsingDB: ServiceUsingDB{container: datastore.Container}}
@@ -328,10 +330,17 @@ func (s *InvestmentService) validateEvent(sess *xorm.Session, uid int64, e *Inve
 // Mutate atomically validates replay, settles cash, stores facts/audit and invalidates history.
 // SQLite's settings-row write is acquired before reading holdings; unique idempotency protects retries.
 func (s *InvestmentService) Mutate(c core.Context, uid int64, input InvestmentEvent, key, operation string, preview bool) (*InvestmentPreview, error) {
+	return s.mutate(c, uid, input, key, operation, preview, nil)
+}
+
+func (s *InvestmentService) mutate(c core.Context, uid int64, input InvestmentEvent, key, operation string, preview bool, dcaDay *models.CryptoDCADay) (*InvestmentPreview, error) {
 	if uid <= 0 {
 		return nil, errs.ErrUserIdInvalid
 	}
 	defer s.lock(uid)()
+	if operation == "create" && input.DCA != nil && dcaDay == nil {
+		return nil, investmentError("定投来源信息只能由已启用的计划生成")
+	}
 	if !preview && operation == "create" && (len(key) < 8 || len(key) > 128) {
 		return nil, investmentError("请求缺少有效的 Idempotency-Key")
 	}
@@ -378,6 +387,11 @@ func (s *InvestmentService) Mutate(c core.Context, uid int64, input InvestmentEv
 		if err != nil {
 			return err
 		}
+		if dcaDay != nil {
+			if err = validateCryptoDCAExecution(sess, uid, dcaDay, events); err != nil {
+				return err
+			}
+		}
 		index := -1
 		var old InvestmentEvent
 		if operation != "create" {
@@ -407,6 +421,7 @@ func (s *InvestmentService) Mutate(c core.Context, uid int64, input InvestmentEv
 				// A manual correction is not a new automatic market conversion.
 				// The original observation remains in the previous audit revision.
 				input.Conversion = nil
+				input.DCA = old.DCA
 			}
 			if input.Conversion != nil && operation == "create" {
 				quote := input.Conversion
@@ -493,6 +508,11 @@ func (s *InvestmentService) Mutate(c core.Context, uid int64, input InvestmentEv
 		}
 		if err = InvalidateWealthSnapshots(sess, uid, from); err != nil {
 			return err
+		}
+		if dcaDay != nil {
+			if err = completeCryptoDCADay(sess, uid, dcaDay, input.ID); err != nil {
+				return err
+			}
 		}
 		if operation == "create" {
 			serialized, _ := json.Marshal(response)
