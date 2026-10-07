@@ -223,7 +223,7 @@ Invoke-RestMethod "$ledgerBase/monetary-income/search?q=000198" -Headers $ledger
 
 必须先搜索、核对实际基金并由用户明确绑定。仅人民币可用资金账户允许绑定。`bookId`、`categoryId` 可省略；首次使用有效默认值，后续收益继承前一条记录。暂停/解绑使用 `POST /monetary-income/pause` 的 `accountId`，保留历史流水与逐日防重。同步接收 `accountId` 和可选 `force`，缺数据时等待；未强制同步的同一账户尝试间隔为 60 秒，已结算到昨日的账户跳过。成功返回最新收益合计，客户端据此刷新相关页面；强制同步不能绕过防重。
 
-`GET /monetary-income/search` 无法访问公开数据源时返回 HTTP 502、`errorCode=224004` 和中文重试提示。限定基金域名优先使用应用内 HTTPS 解析；经数据源确认的货币基金身份缓存 10 分钟，可用于紧随其后的绑定核验，过期后必须重新查询。具体边界见[行情模块](../pkg/marketquotes/README.md)。
+`GET /monetary-income/search` 无法访问公开数据源时返回 HTTP 502、`errorCode=224004` 和中文重试提示。基金请求使用国内连接池，Android 尝试使用非 VPN 网络及同网 DNS，受系统旁路策略限制；经数据源确认的货币基金身份缓存 10 分钟，可用于紧随其后的绑定核验，过期后必须重新查询。具体边界见[行情模块](../pkg/marketquotes/README.md)。
 
 
 ## 资产写入字段

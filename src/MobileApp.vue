@@ -65,7 +65,11 @@ let appearanceTimer: ReturnType<typeof setInterval> | undefined;
 function applyAppearance(): void {
     const p=ledgerExperience.preferences,clock=moment().format('HH:mm');
     const night=p.nightStart===p.nightEnd?false:p.nightStart<p.nightEnd?clock>=p.nightStart&&clock<p.nightEnd:clock>=p.nightStart||clock<p.nightEnd;
-    f7ready(app=>app.setDarkMode(p.nightSchedule?night:settingsStore.appSettings.theme==='auto'?'auto':settingsStore.appSettings.theme==='dark'));
+    f7ready(app => {
+        app.setDarkMode(p.nightSchedule ? night : settingsStore.appSettings.theme === 'auto' ? 'auto' : settingsStore.appSettings.theme === 'dark');
+        // Framework7 only emits darkModeChange for system theme changes.
+        environmentsStore.framework7DarkMode = app.darkMode;
+    });
     syncNativeAppearance();
 }
 watch(()=>[settingsStore.appSettings.theme,ledgerExperience.preferences.nightSchedule,ledgerExperience.preferences.nightStart,ledgerExperience.preferences.nightEnd],applyAppearance);

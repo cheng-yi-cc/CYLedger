@@ -1,725 +1,169 @@
 <template>
-    <f7-page class="cy-mobile-surface" :ptr="!sortable && !hasEditingTag" @ptr:refresh="reload" @page:afterin="onPageAfterIn">
-        <f7-navbar>
-            <f7-nav-left :class="{ 'disabled': loading }" :back-link="tt('Back')" v-if="!sortable"></f7-nav-left>
-            <f7-nav-left v-else-if="sortable">
-                <f7-link icon-f7="xmark" :class="{ 'disabled': displayOrderSaving }" :aria-label="tt('Cancel')" @click="cancelSort"></f7-link>
-            </f7-nav-left>
-            <f7-nav-title>
-                <f7-link popover-open=".tag-group-popover-menu" :class="{ 'disabled': loading || sortable || displayOrderModified || hasEditingTag }">
-                    <span style="color: var(--f7-text-color)">{{ displayTagGroupName }}</span>
-                    <f7-icon class="page-title-bar-icon" color="gray" style="opacity: 0.5" f7="chevron_down_circle_fill"></f7-icon>
-                </f7-link>
-            </f7-nav-title>
-            <f7-nav-right :class="{ 'navbar-compact-icons': true, 'disabled': loading }">
-                <f7-link icon-f7="ellipsis" :class="{ 'disabled': hasEditingTag || sortable }" :aria-label="tt('More')" @click="showMoreActionSheet = true"></f7-link>
-                <f7-link icon-f7="plus" :class="{ 'disabled': hasEditingTag }" :aria-label="tt('Add')" v-if="!sortable" @click="add"></f7-link>
-                <f7-link icon-f7="checkmark_alt" :class="{ 'disabled': displayOrderSaving || !displayOrderModified || hasEditingTag }" :aria-label="tt('Save')" @click="saveSortResult" v-else-if="sortable"></f7-link>
+    <f7-page class="cy-mobile-surface cy-asset-surface" @page:afterin="load">
+        <f7-navbar title="标签管理" back-link="返回">
+            <f7-nav-right>
+                <f7-link :class="{ disabled: busy || loading }" @click="create()">新增</f7-link>
+                <f7-link icon-f7="ellipsis_vertical" aria-label="标签管理更多操作" @click="menuOpen = true" />
             </f7-nav-right>
         </f7-navbar>
-
-        <section v-if="!loading" class="cy-tag-tools">
-            <nav class="cy-tag-groups" aria-label="标签分组"><button v-for="group in allTagGroupsWithDefault" :key="group.id" :aria-pressed="activeTagGroupId === group.id" :disabled="sortable || hasEditingTag" @click="searchText = ''; switchTagGroup(group.id)">{{ group.name }}</button><f7-link href="/tag/group/list">管理分组</f7-link></nav>
-            <label class="cy-management-search"><f7-icon f7="search" /><input v-model="searchText" :disabled="sortable || hasEditingTag" type="search" placeholder="查找标签" aria-label="查找标签" /></label>
-            <div class="cy-management-actions"><button :aria-pressed="showHidden" :disabled="sortable || hasEditingTag" @click="showHidden = !showHidden">{{ showHidden ? '收起隐藏标签' : '显示隐藏标签' }}</button><button :disabled="sortable || hasEditingTag || tags.length < 2" @click="setSortable()">调整顺序</button><f7-link href="/category/all">管理分类</f7-link></div>
-            <p class="cy-management-hint">{{ sortable ? '拖动右侧把手排序，完成后点右上角保存。' : '标签可跨分类使用。一笔账可以同时标记多人、项目或场景。' }}</p>
-            <p v-if="searchText && !filteredTagCount" class="cy-management-hint">没有找到匹配的标签。</p>
-        </section>
-
-        <f7-popover class="tag-group-popover-menu"
-                    @popover:open="scrollPopoverToSelectedItem">
-            <f7-list dividers>
-                <f7-list-item link="#" no-chevron popover-close
-                              :title="tagGroup.name"
-                              :class="{ 'list-item-selected': activeTagGroupId === tagGroup.id }"
-                              :key="tagGroup.id"
-                              v-for="tagGroup in allTagGroupsWithDefault"
-                              @click="switchTagGroup(tagGroup.id)">
-                    <template #after>
-                        <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="activeTagGroupId === tagGroup.id"></f7-icon>
-                    </template>
-                </f7-list-item>
-            </f7-list>
-        </f7-popover>
-
-        <f7-list strong inset dividers class="tag-item-list margin-top-half skeleton-text" v-if="loading">
-            <f7-list-item :key="itemIdx" v-for="itemIdx in [ 1, 2, 3 ]">
-                <template #media>
-                    <f7-icon class="transaction-tag-icon" f7="number"></f7-icon>
-                </template>
-                <template #title>
-                    <div class="display-flex">
-                        <div class="transaction-tag-list-item-content list-item-valign-middle padding-inline-start-half">Tag Name</div>
+        <main class="management-body">
+            <label v-if="searchOpen" class="management-search"><f7-icon f7="search" /><input v-model="query" type="search" placeholder="搜索标签" aria-label="搜索标签" /><button class="management-action" aria-label="关闭搜索" @click="query = ''; searchOpen = false"><f7-icon f7="xmark" /></button></label>
+            <label v-if="groups.length > 1" class="management-filter">标签分组<select v-model="groupId" aria-label="标签分组"><option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option></select></label>
+            <p v-if="showHidden" class="management-state"><f7-icon f7="eye_slash" size="14" />正在显示隐藏标签<button @click="showHidden = false">收起</button></p>
+            <p v-if="error" class="cy-message" role="alert">{{ error }}<button @click="load">重试</button></p>
+            <p v-if="loading" class="cy-empty">正在加载标签…</p>
+            <template v-else>
+                <section v-for="row in rows" :key="row.parent.id" class="management-card">
+                    <div class="management-head">
+                        <button class="management-main" :class="{ 'management-hidden': row.parent.hidden }" :aria-label="`编辑${row.parent.name}`" @click="edit(row.parent)">
+                            <i class="management-tag-dot" /><span class="management-name">{{ row.parent.name }}<small v-if="row.parent.hidden">已隐藏</small><small v-else-if="row.parent.groupId !== groupId">{{ groupName(row.parent.groupId) }}</small></span>
+                        </button>
+                        <button class="management-action" :disabled="busy" :aria-label="`为${row.parent.name}新增子标签`" @click="create(row.parent)"><f7-icon f7="plus" /></button>
+                        <button class="management-action" :aria-label="`${row.parent.name}的更多操作`" @click="selected = row.parent; actionsOpen = true"><f7-icon f7="text_alignleft" /></button>
                     </div>
-                </template>
-            </f7-list-item>
-        </f7-list>
-
-        <f7-list strong inset dividers class="tag-item-list margin-top-half" v-if="!loading && noAvailableTag && !newTag">
-            <f7-list-item :title="tt('No available tag')"></f7-list-item>
-        </f7-list>
-
-        <f7-list strong inset dividers sortable class="tag-item-list margin-top-half"
-                 :sortable-enabled="sortable" @sortable:sort="onSort"
-                 v-if="!loading">
-            <f7-list-item swipeout
-                          :class="{ 'actual-first-child': tag.id === firstShowingId, 'actual-last-child': tag.id === lastShowingId && !newTag, 'editing-list-item': editingTag.id === tag.id }"
-                          :id="getTagDomId(tag)"
-                          :key="tag.id"
-                          v-for="tag in tags"
-                          v-show="(showHidden || !tag.hidden) && matchesSearch(tag)"
-                          @taphold="setSortable()">
-                <template #media>
-                    <f7-icon class="transaction-tag-icon" f7="number">
-                        <f7-badge color="gray" class="right-bottom-icon" v-if="tag.hidden">
-                            <f7-icon f7="eye_slash_fill"></f7-icon>
-                        </f7-badge>
-                    </f7-icon>
-                </template>
-                <template #title>
-                    <div class="display-flex">
-                        <div class="transaction-tag-list-item-content list-item-valign-middle padding-inline-start-half"
-                             v-if="editingTag.id !== tag.id">
-                            {{ tagPath(tag) }}
-                        </div>
-                        <f7-input class="list-title-input padding-inline-start-half"
-                                  type="text"
-                                  :placeholder="tt('Tag Title')"
-                                  v-else-if="editingTag.id === tag.id"
-                                  v-model:value="editingTag.name"
-                                  @keyup.enter="save(editingTag)">
-                        </f7-input>
+                    <div v-if="row.children.length" class="tag-children">
+                        <button v-for="child in row.children" :key="child.id" :class="{ 'management-hidden': child.hidden }" :aria-label="`${child.name}的更多操作`" @click="selected = child; actionsOpen = true">{{ child.name }}<f7-icon v-if="child.hidden" f7="eye_slash" size="12" /></button>
                     </div>
-                </template>
-                <template #footer v-if="editingTag.id === tag.id"><label class="cy-tag-parent">上级标签<select v-model="editingTag.parentId" :disabled="hasChildren(tag.id)"><option value="0">无（一级标签）</option><option v-for="parent in parentTags.filter(item => item.id !== tag.id)" :key="parent.id" :value="parent.id">{{ parent.name }}</option></select><small v-if="hasChildren(tag.id)">有子标签时保留为一级标签</small></label></template>
-                <template #after>
-                    <button v-if="!sortable && !hasEditingTag" class="cy-tag-edit" :aria-label="`编辑${tag.name}`" @click="edit(tag)"><f7-icon f7="pencil" /></button>
-                    <button v-if="!sortable && !hasEditingTag" class="cy-tag-edit" :aria-label="`${tag.hidden ? '显示' : '隐藏'}${tag.name}`" @click="hide(tag, !tag.hidden)"><f7-icon :f7="tag.hidden ? 'eye_slash' : 'eye'" /></button>
-                    <f7-button raised fill icon-f7="checkmark_alt" color="blue"
-                               :class="{ 'no-padding': true, 'disabled': !isTagModified(tag) }"
-                               :aria-label="tt('Save')"
-                               v-if="editingTag.id === tag.id"
-                               @click="save(editingTag)">
-                    </f7-button>
-                    <f7-button raised fill icon-f7="xmark" color="gray"
-                               class="no-padding margin-inline-start-half"
-                               :aria-label="tt('Cancel')"
-                               v-if="editingTag.id === tag.id"
-                               @click="cancelSave(editingTag)">
-                    </f7-button>
-                </template>
-                <f7-swipeout-actions :left="textDirection === TextDirection.LTR"
-                                     :right="textDirection === TextDirection.RTL"
-                                     v-if="sortable && editingTag.id !== tag.id">
-                    <f7-swipeout-button class="padding-horizontal" overswipe close
-                                        :aria-label="tag.hidden ? tt('Show') : tt('Hide')"
-                                        :color="tag.hidden ? 'blue' : 'gray'"
-                                        @click="hide(tag, !tag.hidden)">
-                        <f7-icon :f7="tag.hidden ? 'eye' : 'eye_slash'"></f7-icon>
-                    </f7-swipeout-button>
-                </f7-swipeout-actions>
-                <f7-swipeout-actions :left="textDirection === TextDirection.RTL"
-                                     :right="textDirection === TextDirection.LTR"
-                                     v-if="!sortable && editingTag.id !== tag.id">
-                    <f7-swipeout-button color="primary" close :class="{ 'disabled': allTagGroupsWithDefault.length < 2 }" :text="tt('Move')" @click="moveTagToGroup(tag)"></f7-swipeout-button>
-                    <f7-swipeout-button color="orange" close :text="tt('Edit')" @click="edit(tag)"></f7-swipeout-button>
-                    <f7-swipeout-button color="red" class="padding-horizontal" :aria-label="tt('Delete')" @click="remove(tag, false)">
-                        <f7-icon f7="trash"></f7-icon>
-                    </f7-swipeout-button>
-                </f7-swipeout-actions>
-            </f7-list-item>
-
-            <f7-list-item ref="newTagItem" class="editing-list-item" v-if="newTag">
-                <template #footer><label class="cy-tag-parent">上级标签<select v-model="newTag.parentId"><option value="0">无（一级标签）</option><option v-for="parent in parentTags" :key="parent.id" :value="parent.id">{{ parent.name }}</option></select></label></template>
-                <template #media>
-                    <f7-icon class="transaction-tag-icon" f7="number"></f7-icon>
-                </template>
-                <template #title>
-                    <div class="display-flex">
-                        <f7-input class="list-title-input padding-inline-start-half"
-                                  type="text"
-                                  :placeholder="tt('Tag Title')"
-                                  v-model:value="newTag.name"
-                                  @keyup.enter="save(newTag)">
-                        </f7-input>
-                    </div>
-                </template>
-                <template #after>
-                    <f7-button raised fill icon-f7="checkmark_alt" color="blue"
-                               :class="{ 'no-padding': true, 'disabled': !isTagModified(newTag) }"
-                               :aria-label="tt('Save')"
-                               @click="save(newTag)">
-                    </f7-button>
-                    <f7-button raised fill icon-f7="xmark" color="gray"
-                               class="no-padding margin-inline-start-half"
-                               :aria-label="tt('Cancel')"
-                               @click="cancelSave(newTag)">
-                    </f7-button>
-                </template>
-            </f7-list-item>
-        </f7-list>
-
-        <f7-popup push :close-on-escape="false" :opened="showMoveTagPopup"
-                  @popup:closed="showMoveTagPopup = false">
+                </section>
+                <p v-if="!rows.length" class="cy-empty">{{ query ? '没有找到匹配的标签' : '还没有标签' }}<br /><f7-link v-if="!query" @click="create()">新增第一个标签</f7-link></p>
+            </template>
+        </main>
+        <f7-actions :opened="menuOpen" @actions:closed="menuOpen = false">
+            <f7-actions-group>
+                <f7-actions-button @click="searchOpen = true">搜索标签</f7-actions-button>
+                <f7-actions-button @click="showHidden = !showHidden">{{ showHidden ? '收起隐藏标签' : '显示隐藏标签' }}</f7-actions-button>
+                <f7-actions-button :class="{ disabled: groupTags.length < 2 }" @click="openOrder">调整标签顺序</f7-actions-button>
+                <f7-actions-button @click="f7router.navigate('/tag/group/list')">管理标签分组</f7-actions-button>
+            </f7-actions-group>
+            <f7-actions-group><f7-actions-button bold>取消</f7-actions-button></f7-actions-group>
+        </f7-actions>
+        <f7-actions :opened="actionsOpen" @actions:closed="actionsOpen = false">
+            <f7-actions-group>
+                <f7-actions-label>{{ selected?.name }}</f7-actions-label>
+                <f7-actions-button @click="selected && edit(selected)">编辑标签</f7-actions-button>
+                <f7-actions-button v-if="selected && isRoot(selected)" @click="create(selected)">新增子标签</f7-actions-button>
+                <f7-actions-button @click="viewBills">查看账单</f7-actions-button>
+                <f7-actions-button :class="{ disabled: busy }" @click="toggleHidden">{{ selected?.hidden ? '显示标签' : '隐藏标签' }}</f7-actions-button>
+                <f7-actions-button color="red" :class="{ disabled: busy }" @click="confirmDelete">删除标签</f7-actions-button>
+            </f7-actions-group>
+            <f7-actions-group><f7-actions-button bold>取消</f7-actions-button></f7-actions-group>
+        </f7-actions>
+        <f7-popup class="cy-mobile-surface cy-asset-surface" :opened="editorOpen" :close-by-backdrop-click="!busy" :close-on-escape="!busy" @popup:closed="editorOpen = false">
             <f7-page>
-                <f7-navbar>
-                    <f7-nav-left>
-                        <f7-link popup-close icon-f7="xmark" :aria-label="tt('Cancel')"></f7-link>
-                    </f7-nav-left>
-                    <f7-nav-title :title="tt('Move to...')"></f7-nav-title>
-                    <f7-nav-right>
-                        <f7-link icon-f7="checkmark_alt"
-                                 :class="{ 'disabled': !tagToMove || !moveToTagGroupId }"
-                                 :aria-label="tt('Move')"
-                                 @click="moveTagToGroup(tagToMove, moveToTagGroupId)"></f7-link>
-                    </f7-nav-right>
+                <f7-navbar :title="draft.id ? '编辑标签' : '新增标签'">
+                    <f7-nav-left><f7-link :class="{ disabled: busy }" @click="editorOpen = false">取消</f7-link></f7-nav-left>
+                    <f7-nav-right><f7-link icon-f7="checkmark_alt" aria-label="保存标签" :class="{ disabled: busy || !draft.name.trim() }" @click="save" /></f7-nav-right>
                 </f7-navbar>
-
-                <f7-list strong inset dividers class="margin-top" v-if="!loading && allTagGroupsWithDefault.length < 2">
-                    <f7-list-item :title="tt('No available tag group')"></f7-list-item>
-                </f7-list>
-
-                <f7-list strong inset dividers class="margin-vertical" v-if="allTagGroupsWithDefault.length >= 2">
-                    <template :key="tagGroup.id" v-for="tagGroup in allTagGroupsWithDefault">
-                        <f7-list-item checkbox
-                                      :title="tagGroup.name"
-                                      :value="tagGroup.id"
-                                      :checked="moveToTagGroupId === tagGroup.id"
-                                      :key="tagGroup.id"
-                                      @change="updateTagGroupSelected"
-                                      v-if="tagToMove?.groupId !== tagGroup.id"></f7-list-item>
-                    </template>
-                </f7-list>
+                <main class="management-body">
+                    <p v-if="editError" class="cy-message" role="alert">{{ editError }}</p>
+                    <form class="management-form" @submit.prevent="save">
+                        <label class="management-field"><span>标签名称</span><input v-model="draft.name" :disabled="busy" maxlength="64" placeholder="填写标签名称" aria-label="标签名称" /></label>
+                        <label class="management-field"><span>一级标签</span><select v-model="draft.parentId" :disabled="busy || hasChildren(draft.id)" aria-label="一级标签"><option value="0">无（设为一级标签）</option><option v-for="parent in parents.filter(item => item.id !== draft.id)" :key="parent.id" :value="parent.id">{{ parent.name }}{{ parent.hidden ? '（已隐藏）' : '' }}</option></select></label>
+                        <label v-if="groups.length > 1" class="management-field"><span>所属分组</span><select v-model="draft.groupId" :disabled="busy" aria-label="所属分组"><option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option></select></label>
+                    </form>
+                    <p v-if="hasChildren(draft.id)" class="management-caption">此标签已有子标签，保留为一级标签。</p>
+                </main>
             </f7-page>
         </f7-popup>
-
-        <f7-actions close-by-outside-click close-on-escape :opened="showMoreActionSheet" @actions:closed="showMoreActionSheet = false">
-            <f7-actions-group>
-                <f7-actions-button @click="addTagGroup">{{ tt('Add Tag Group') }}</f7-actions-button>
-                <f7-actions-button @click="renameTagGroup"
-                                   v-if="activeTagGroupId && activeTagGroupId !== DEFAULT_TAG_GROUP_ID">{{ tt('Rename Tag Group') }}</f7-actions-button>
-                <f7-actions-button color="red" :class="{ 'disabled': tags && tags.length > 0 }"
-                                   @click="removeTagGroup"
-                                   v-if="activeTagGroupId && activeTagGroupId !== DEFAULT_TAG_GROUP_ID">{{ tt('Delete Tag Group') }}</f7-actions-button>
-            </f7-actions-group>
-            <f7-actions-group v-if="allTagGroupsWithDefault.length >= 2">
-                <f7-actions-button @click="changeTagGroupDisplayOrder">{{ tt('Change Group Display Order') }}</f7-actions-button>
-            </f7-actions-group>
-            <f7-actions-group>
-                <f7-actions-button :class="{ 'disabled': !tags || tags.length < 2 }" @click="setSortable()">{{ tt('Sort') }}</f7-actions-button>
-                <f7-actions-button :class="{ 'disabled': !tags || tags.length < 2 }" @click="sortByName(false)">{{ tt('Sort by Name (A to Z)') }}</f7-actions-button>
-                <f7-actions-button :class="{ 'disabled': !tags || tags.length < 2 }" @click="sortByName(true)">{{ tt('Sort by Name (Z to A)') }}</f7-actions-button>
-                <f7-actions-button v-if="!showHidden" @click="showHidden = true">{{ tt('Show Hidden Transaction Tags') }}</f7-actions-button>
-                <f7-actions-button v-if="showHidden" @click="showHidden = false">{{ tt('Hide Hidden Transaction Tags') }}</f7-actions-button>
-            </f7-actions-group>
-            <f7-actions-group>
-                <f7-actions-button bold close>{{ tt('Cancel') }}</f7-actions-button>
-            </f7-actions-group>
-        </f7-actions>
-
-        <f7-actions close-by-outside-click close-on-escape :opened="showDeleteActionSheet" @actions:closed="showDeleteActionSheet = false">
-            <f7-actions-group>
-                <f7-actions-label>{{ tt('Are you sure you want to delete this tag?') }}</f7-actions-label>
-                <f7-actions-button color="red" @click="remove(tagToDelete, true)">{{ tt('Delete') }}</f7-actions-button>
-            </f7-actions-group>
-            <f7-actions-group>
-                <f7-actions-button bold close>{{ tt('Cancel') }}</f7-actions-button>
-            </f7-actions-group>
-        </f7-actions>
+        <ManagementOrderPopup v-model:open="orderOpen" :title="groups.length > 1 ? `${groupName(groupId)} · 排序` : '标签排序'" :items="orderItems" allow-name-sort :busy="busy" :error="orderError" @save="saveOrder" />
     </f7-page>
 </template>
-
 <script setup lang="ts">
-import { ref, computed, useTemplateRef, nextTick } from 'vue';
+import { computed, ref } from 'vue';
 import type { Router } from 'framework7/types';
-
-import { useI18n } from '@/locales/helpers.ts';
-import { type Framework7Dom, useI18nUIComponents, showLoading, hideLoading, onSwipeoutDeleted } from '@/lib/ui/mobile.ts';
-import { useTagListPageBase } from '@/views/base/tags/TagListPageBase.ts';
-
+import ManagementOrderPopup from '@/components/mobile/ManagementOrderPopup.vue';
 import { useTransactionTagsStore } from '@/stores/transactionTag.ts';
-
-import { TextDirection } from '@/core/text.ts';
-import { DEFAULT_TAG_GROUP_ID } from '@/consts/tag.ts';
-
-import { TransactionTagGroup } from '@/models/transaction_tag_group.ts';
 import { TransactionTag } from '@/models/transaction_tag.ts';
-
-import { scrollToSelectedItem } from '@/lib/ui/common.ts';
-import { getFirstShowingId, getLastShowingId } from '@/lib/tag.ts';
-
-const props = defineProps<{
-    f7router: Router.Router;
-}>();
-
-const { tt, getCurrentLanguageTextDirection } = useI18n();
-const { showAlert, showConfirm, showPrompt, showToast, routeBackOnError } = useI18nUIComponents();
-
-const {
-    activeTagGroupId,
-    newTag,
-    editingTag,
-    loading,
-    showHidden,
-    displayOrderModified,
-    allTagGroupsWithDefault,
-    tags,
-    noAvailableTag,
-    hasEditingTag,
-    isTagModified,
-    switchTagGroup,
-    createNewTag,
-    edit
-} = useTagListPageBase();
-
-const transactionTagsStore = useTransactionTagsStore();
-const parentTags = computed(() => Object.values(transactionTagsStore.allTransactionTagsMap).filter(tag => !tag.parentId || tag.parentId === '0'));
-function hasChildren(id: string): boolean { return Object.values(transactionTagsStore.allTransactionTagsMap).some(tag => tag.parentId === id); }
-function tagPath(tag: TransactionTag): string { const parent=transactionTagsStore.allTransactionTagsMap[tag.parentId];return parent ? `${parent.name} / ${tag.name}` : tag.name; }
-
-const newTagItem = useTemplateRef<{ $el: HTMLElement }>('newTagItem');
-
-const loadingError = ref<unknown | null>(null);
-const sortable = ref<boolean>(false);
-const searchText = ref('');
-const moveToTagGroupId = ref<string | undefined>(undefined);
-const tagToMove = ref<TransactionTag | null>(null);
-const tagToDelete = ref<TransactionTag | null>(null);
-const showMoveTagPopup = ref<boolean>(false);
-const showMoreActionSheet = ref<boolean>(false);
-const showDeleteActionSheet = ref<boolean>(false);
-const displayOrderSaving = ref<boolean>(false);
-
-const textDirection = computed<TextDirection>(() => getCurrentLanguageTextDirection());
-const firstShowingId = computed<string | null>(() => getFirstShowingId(tags.value, showHidden.value));
-const lastShowingId = computed<string | null>(() => getLastShowingId(tags.value, showHidden.value));
-const filteredTagCount = computed(() => tags.value.filter(tag => (showHidden.value || !tag.hidden) && matchesSearch(tag)).length);
-function matchesSearch(tag: TransactionTag): boolean {
-    return !searchText.value.trim() || tagPath(tag).toLocaleLowerCase().includes(searchText.value.trim().toLocaleLowerCase());
-}
-
-const displayTagGroupName = computed<string>(() => {
-    const tagGroup = transactionTagsStore.allTransactionTagGroupsMap[activeTagGroupId.value];
-    return tagGroup ? tagGroup.name : tt('Default Group');
+import { useI18nUIComponents } from '@/lib/ui/mobile.ts';
+import { useManagementFeedback } from '@/lib/use-management-feedback.ts';
+const { errorText } = useManagementFeedback();
+import services from '@/lib/services.ts';
+const { f7router } = defineProps<{ f7router: Router.Router }>();
+const store = useTransactionTagsStore();
+const { showConfirm, showToast } = useI18nUIComponents();
+const groupId = ref('0'), query = ref(''), searchOpen = ref(false), showHidden = ref(false);
+const loading = ref(true), busy = ref(false), error = ref(''), editError = ref(''), orderError = ref('');
+const menuOpen = ref(false), actionsOpen = ref(false), editorOpen = ref(false), orderOpen = ref(false);
+const selected = ref<TransactionTag>(), draft = ref(TransactionTag.createNewTag());
+const groups = computed(() => [{ id: '0', name: '默认分组' }, ...store.allTransactionTagGroups]);
+const groupTags = computed(() => store.allTransactionTagsByGroupMap[groupId.value] || []);
+const isRoot = (tag: TransactionTag) => !tag.parentId || tag.parentId === '0';
+const allTags = computed(() => Object.values(store.allTransactionTagsMap).sort((a, b) => a.displayOrder - b.displayOrder));
+const parents = computed(() => allTags.value.filter(isRoot));
+function groupName(id: string) { return groups.value.find(item => item.id === id)?.name || '默认分组'; }
+function hasChildren(id: string) { return !!id && allTags.value.some(tag => tag.parentId === id); }
+function matches(tag: TransactionTag) { return (showHidden.value || !tag.hidden) && tag.name.toLocaleLowerCase().includes(query.value.trim().toLocaleLowerCase()); }
+const rows = computed(() => {
+    const roots = new Map<string, TransactionTag>();
+    for (const tag of groupTags.value) {
+        const parent = !isRoot(tag) ? store.allTransactionTagsMap[tag.parentId] : tag;
+        if (parent) roots.set(parent.id, parent);
+    }
+    return [...roots.values()].sort((a, b) => a.displayOrder - b.displayOrder).map(parent => {
+        const parentMatches = parent.groupId === groupId.value && matches(parent);
+        const children = allTags.value.filter(tag => tag.parentId === parent.id &&
+            (tag.groupId === groupId.value || parent.groupId === groupId.value) &&
+            (showHidden.value || !tag.hidden) && (parentMatches || matches(tag)));
+        return { parent, children, visible: parentMatches || children.length > 0 };
+    }).filter(row => row.visible);
 });
-
-function getTagDomId(tag: TransactionTag): string {
-    return 'tag_' + tag.id;
+const orderItems = computed(() => groupTags.value.map(tag => ({ id: tag.id, hidden: tag.hidden, name: isRoot(tag) ? tag.name : `${store.allTransactionTagsMap[tag.parentId]?.name || '一级标签'} / ${tag.name}` })));
+async function load() {
+    if (busy.value) return;
+    error.value = '';
+    try { await store.loadAllTags({ force: false }); if (!groups.value.some(group => group.id === groupId.value)) groupId.value = '0'; }
+    catch (cause) { error.value = errorText(cause); }
+    finally { loading.value = false; }
 }
-
-function parseTagIdFromDomId(domId: string): string | null {
-    if (!domId || domId.indexOf('tag_') !== 0) {
-        return null;
-    }
-
-    return domId.substring(4); // tag_
+function create(parent?: TransactionTag) {
+    draft.value = TransactionTag.createNewTag('', parent?.groupId || groupId.value);
+    draft.value.parentId = parent?.id || '0';
+    editError.value = ''; editorOpen.value = true;
 }
-
-function init(): void {
-    loading.value = true;
-
-    transactionTagsStore.loadAllTags({
-        force: false
-    }).then(() => {
-        loading.value = false;
-    }).catch(error => {
-        if (error.processed) {
-            loading.value = false;
-        } else {
-            loadingError.value = error;
-            showToast(error.message || error);
-        }
-    });
+function edit(tag: TransactionTag) { draft.value = tag.clone(); editError.value = ''; editorOpen.value = true; }
+async function save() {
+    if (busy.value || !draft.value.name.trim()) return;
+    busy.value = true; editError.value = ''; draft.value.name = draft.value.name.trim();
+    try { await store.saveTag({ tag: draft.value }); groupId.value = draft.value.groupId; query.value = ''; editorOpen.value = false; }
+    catch (cause) { editError.value = errorText(cause); }
+    finally { busy.value = false; }
 }
-
-function reload(done?: () => void): void {
-    if (sortable.value || hasEditingTag.value) {
-        done?.();
-        return;
-    }
-
-    const force = !!done;
-
-    transactionTagsStore.loadAllTags({
-        force: force
-    }).then(() => {
-        done?.();
-
-        if (force) {
-            showToast('Tag list has been updated');
-        }
-    }).catch(error => {
-        done?.();
-
-        if (!error.processed) {
-            showToast(error.message || error);
-        }
-    });
+async function toggleHidden() {
+    const tag = selected.value; if (!tag || busy.value) return;
+    busy.value = true; error.value = '';
+    try { await store.hideTag({ tag, hidden: !tag.hidden }); }
+    catch (cause) { error.value = errorText(cause); }
+    finally { busy.value = false; }
 }
-
-function add(): void {
-    searchText.value = '';
-    createNewTag();
-
-    nextTick(() => {
-        const el = newTagItem.value?.$el as HTMLElement | undefined;
-
-        if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-    });
+function confirmDelete() {
+    const tag = selected.value; if (!tag || busy.value) return;
+    showConfirm(`确定删除「${tag.name}」？被账单使用或含子标签的标签不能直接删除，可选择隐藏。`, () => { void remove(tag); });
 }
-
-function save(tag: TransactionTag): void {
-    showLoading();
-
-    transactionTagsStore.saveTag({
-        tag: tag
-    }).then(() => {
-        hideLoading();
-
-        if (tag.id) {
-            editingTag.value.id = '';
-            editingTag.value.name = '';
-        } else {
-            newTag.value = null;
-        }
-    }).catch(error => {
-        hideLoading();
-
-        if (!error.processed) {
-            showToast(error.message || error);
-        }
-    });
+async function remove(tag: TransactionTag) {
+    if (busy.value) return; busy.value = true; error.value = '';
+    try { await store.deleteTag({ tag }); showToast('标签已删除'); }
+    catch (cause) { error.value = errorText(cause); }
+    finally { busy.value = false; }
 }
-
-function cancelSave(tag: TransactionTag): void {
-    if (tag.id) {
-        editingTag.value.id = '';
-        editingTag.value.name = '';
-    } else {
-        newTag.value = null;
-    }
+function viewBills() {
+    const tag = selected.value; if (!tag) return;
+    const ids = [tag.id, ...allTags.value.filter(child => child.parentId === tag.id).map(child => child.id)];
+    f7router.navigate('/transaction/list?' + new URLSearchParams({ tagIds: ids.join(',') }));
 }
-
-function hide(tag: TransactionTag, hidden: boolean): void {
-    showLoading();
-
-    transactionTagsStore.hideTag({
-        tag: tag,
-        hidden: hidden
-    }).then(() => {
-        hideLoading();
-    }).catch(error => {
-        hideLoading();
-
-        if (!error.processed) {
-            showToast(error.message || error);
-        }
-    });
+function openOrder() { if (groupTags.value.length < 2) return; orderError.value = ''; orderOpen.value = true; }
+async function saveOrder(ids: string[]) {
+    if (busy.value) return; busy.value = true; orderError.value = '';
+    try {
+        const response = await services.moveTransactionTag({ newDisplayOrders: ids.map((id, index) => ({ id, displayOrder: index + 1 })) });
+        if (!response.data.success || !response.data.result) throw new Error('标签顺序保存失败，请重试');
+        store.updateTransactionTagListInvalidState(true); await store.loadAllTags({ force: false }); orderOpen.value = false;
+    } catch (cause) { orderError.value = errorText(cause); }
+    finally { busy.value = false; }
 }
-
-function moveTagToGroup(tag: TransactionTag | null, targetTagGroupId?: string): void {
-    if (!tag) {
-        showAlert('An error occurred');
-        return;
-    }
-
-    if (!targetTagGroupId) {
-        moveToTagGroupId.value = undefined;
-        tagToMove.value = tag;
-        showMoveTagPopup.value = true;
-        return;
-    }
-
-    showMoveTagPopup.value = false;
-    tagToMove.value = null;
-    moveToTagGroupId.value = undefined;
-    showLoading();
-
-    const newTag = tag.clone();
-    newTag.groupId = targetTagGroupId;
-
-    transactionTagsStore.saveTag({
-        tag: newTag,
-        beforeResolve: (done) => {
-            onSwipeoutDeleted(getTagDomId(tag), done);
-        }
-    }).then(() => {
-        hideLoading();
-    }).catch(error => {
-        hideLoading();
-
-        if (!error.processed) {
-            showToast(error.message || error);
-        }
-    });
-}
-
-function updateTagGroupSelected(e: Event): void {
-    const target = e.target as HTMLInputElement;
-
-    if (target.checked) {
-        moveToTagGroupId.value = target.value;
-    } else {
-        moveToTagGroupId.value = undefined;
-    }
-}
-
-function remove(tag: TransactionTag | null, confirm: boolean): void {
-    if (!tag) {
-        showAlert('An error occurred');
-        return;
-    }
-
-    if (!confirm) {
-        tagToDelete.value = tag;
-        showDeleteActionSheet.value = true;
-        return;
-    }
-
-    showDeleteActionSheet.value = false;
-    tagToDelete.value = null;
-    showLoading();
-
-    transactionTagsStore.deleteTag({
-        tag: tag,
-        beforeResolve: (done) => {
-            onSwipeoutDeleted(getTagDomId(tag), done);
-        }
-    }).then(() => {
-        hideLoading();
-    }).catch(error => {
-        hideLoading();
-
-        if (!error.processed) {
-            showToast(error.message || error);
-        }
-    });
-}
-
-function sortByName(desc: boolean): void {
-    showHidden.value = true;
-    sortable.value = true;
-
-    const changed = transactionTagsStore.sortTagDisplayOrderByTagName(activeTagGroupId.value, desc);
-
-    if (changed) {
-        displayOrderModified.value = true;
-    }
-}
-
-function setSortable(): void {
-    if (sortable.value || hasEditingTag.value) {
-        return;
-    }
-
-    searchText.value = '';
-    showHidden.value = true;
-    sortable.value = true;
-    displayOrderModified.value = false;
-}
-
-function saveSortResult(): void {
-    if (!displayOrderModified.value) {
-        showHidden.value = false;
-        sortable.value = false;
-        return;
-    }
-
-    displayOrderSaving.value = true;
-    showLoading();
-
-    transactionTagsStore.updateTagDisplayOrders(activeTagGroupId.value).then(() => {
-        displayOrderSaving.value = false;
-        hideLoading();
-
-        showHidden.value = false;
-        sortable.value = false;
-        displayOrderModified.value = false;
-    }).catch(error => {
-        displayOrderSaving.value = false;
-        hideLoading();
-
-        if (!error.processed) {
-            showToast(error.message || error);
-        }
-    });
-}
-
-function cancelSort(): void {
-    if (!displayOrderModified.value) {
-        showHidden.value = false;
-        sortable.value = false;
-        return;
-    }
-
-    displayOrderSaving.value = true;
-    showLoading();
-
-    transactionTagsStore.loadAllTags({
-        force: false
-    }).then(() => {
-        displayOrderSaving.value = false;
-        hideLoading();
-
-        showHidden.value = false;
-        sortable.value = false;
-        displayOrderModified.value = false;
-    }).catch(error => {
-        displayOrderSaving.value = false;
-        hideLoading();
-
-        if (!error.processed) {
-            showToast(error.message || error);
-        }
-    });
-}
-
-function addTagGroup(): void {
-    showPrompt(tt('New Tag Group Name'), '', (value: string) => {
-        showLoading();
-
-        transactionTagsStore.saveTagGroup({
-            tagGroup: TransactionTagGroup.createNewTagGroup(value)
-        }).then(tagGroup => {
-            hideLoading();
-            activeTagGroupId.value = tagGroup.id;
-        }).catch(error => {
-            hideLoading();
-
-            if (!error.processed) {
-                showToast(error.message || error);
-            }
-        });
-    });
-}
-
-function renameTagGroup(): void {
-    const tagGroup = transactionTagsStore.allTransactionTagGroupsMap[activeTagGroupId.value];
-
-    if (!tagGroup) {
-        showToast('Unable to rename this tag group');
-        return;
-    }
-
-    showPrompt(tt('Rename Tag Group'), tagGroup.name || '', (value: string) => {
-        showLoading();
-
-        const newTagGroup = tagGroup.clone();
-        newTagGroup.name = value;
-
-        transactionTagsStore.saveTagGroup({
-            tagGroup: newTagGroup
-        }).then(() => {
-            hideLoading();
-        }).catch(error => {
-            hideLoading();
-
-            if (!error.processed) {
-                showToast(error.message || error);
-            }
-        });
-    });
-}
-
-function removeTagGroup(): void {
-    const tagGroup = transactionTagsStore.allTransactionTagGroupsMap[activeTagGroupId.value];
-
-    if (!tagGroup) {
-        showToast('Unable to delete this tag group');
-        return;
-    }
-
-    const currentTagGroupIndex = allTagGroupsWithDefault.value.findIndex(group => group.id === tagGroup.id);
-
-    showConfirm('Are you sure you want to delete this tag group?', () => {
-        showLoading();
-
-        transactionTagsStore.deleteTagGroup({
-            tagGroup: tagGroup
-        }).then(() => {
-            hideLoading();
-
-            if (allTagGroupsWithDefault.value[currentTagGroupIndex]) {
-                const newActiveTagGroup = allTagGroupsWithDefault.value[currentTagGroupIndex];
-                activeTagGroupId.value = newActiveTagGroup ? newActiveTagGroup.id : DEFAULT_TAG_GROUP_ID;
-            } else if (allTagGroupsWithDefault.value[currentTagGroupIndex - 1]) {
-                const newActiveTagGroup = allTagGroupsWithDefault.value[currentTagGroupIndex - 1];
-                activeTagGroupId.value = newActiveTagGroup ? newActiveTagGroup.id : DEFAULT_TAG_GROUP_ID;
-            } else {
-                activeTagGroupId.value = DEFAULT_TAG_GROUP_ID;
-            }
-        }).catch(error => {
-            hideLoading();
-
-            if (!error.processed) {
-                showToast(error.message || error);
-            }
-        });
-    });
-}
-
-function changeTagGroupDisplayOrder(): void {
-    props.f7router.navigate('/tag/group/list');
-}
-
-function onSort(event: { el: { id: string }, from: number, to: number }): void {
-    if (!event || !event.el || !event.el.id) {
-        showToast('Unable to move tag');
-        return;
-    }
-
-    const id = parseTagIdFromDomId(event.el.id);
-
-    if (!id) {
-        showToast('Unable to move tag');
-        return;
-    }
-
-    transactionTagsStore.changeTagDisplayOrder({
-        tagId: id,
-        from: event.from,
-        to: event.to
-    }).then(() => {
-        displayOrderModified.value = true;
-    }).catch(error => {
-        showToast(error.message || error);
-    });
-}
-
-function scrollPopoverToSelectedItem(event: { $el: Framework7Dom }): void {
-    scrollToSelectedItem(event.$el[0], '.popover-inner', '.popover-inner', 'li.list-item-selected');
-}
-
-function onPageAfterIn(): void {
-    if (transactionTagsStore.transactionTagListStateInvalid && !loading.value) {
-        reload();
-    }
-
-    routeBackOnError(props.f7router, loadingError);
-}
-
-init();
+void load();
 </script>
-
+<style scoped src="@/styles/mobile/management.css"></style>
 <style scoped>
-.cy-tag-tools{padding:12px 16px 0}.cy-tag-groups{display:flex;gap:7px;align-items:center;overflow:auto;margin-bottom:14px;padding-bottom:3px}.cy-tag-groups button{border:1px solid var(--cy-line);background:var(--cy-card);border-radius:9px;font-size:12px;padding:8px 12px;white-space:nowrap}.cy-tag-groups button[aria-pressed=true]{background:var(--cy-accent);border-color:var(--cy-accent);color:var(--cy-card)}.cy-tag-groups a{color:var(--cy-accent);font-size:12px;white-space:nowrap;padding:8px}.cy-management-search{display:flex;gap:8px;align-items:center;border:1px solid var(--cy-line);border-radius:11px;background:var(--cy-card);padding:0 12px}.cy-management-search .f7-icons{font-size:17px;color:var(--cy-muted)}.cy-management-search input{min-width:0;width:100%;height:42px;border:0;background:transparent;font-size:14px}.cy-management-actions{display:flex;justify-content:space-between;gap:8px;margin:12px 0}.cy-management-actions button,.cy-management-actions a{border:0;background:transparent;color:var(--cy-accent);font-size:12px;padding:5px 0}.cy-management-hint{font-size:11px;line-height:1.6;color:var(--cy-muted);margin-bottom:10px!important}.cy-tag-edit{border:0;background:transparent;color:var(--cy-accent);padding:8px;min-height:36px}.cy-tag-edit .f7-icons{font-size:17px}
+.tag-children{display:flex;flex-wrap:wrap;gap:10px 12px;padding:0 17px 18px 42px}
+.tag-children button{display:flex;align-items:center;gap:6px;min-height:34px;border:0;background:var(--cy-soft);color:var(--cy-accent);border-radius:7px;font-size:13px;padding:7px 11px;max-width:100%;overflow-wrap:anywhere;text-align:left}
 </style>
-
-<style>
-.tag-item-list.list .item-media + .item-inner {
-    margin-inline-start: 5px;
-}
-
-.transaction-tag-list-item-content {
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.tag-group-popover-menu .popover-inner {
-    max-height: 440px;
-    overflow-y: auto;
-}
-</style>
-<style scoped>.cy-tag-parent{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-top:10px;font-size:12px}.cy-tag-parent select{max-width:200px;background:var(--cy-soft);color:var(--cy-ink);padding:6px;border:1px solid var(--cy-line);border-radius:6px}.cy-tag-parent small{width:100%;color:var(--cy-muted)}</style>

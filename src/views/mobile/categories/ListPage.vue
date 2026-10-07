@@ -1,467 +1,148 @@
 <template>
-    <f7-page class="cy-mobile-surface cy-category-management" :ptr="!sortable" @ptr:refresh="reload" @page:afterin="onPageAfterIn">
-        <f7-navbar>
-            <f7-nav-left :class="{ 'disabled': loading }" :back-link="tt('Back')" v-if="!sortable"></f7-nav-left>
-            <f7-nav-left v-else-if="sortable">
-                <f7-link icon-f7="xmark" :class="{ 'disabled': displayOrderSaving }" :aria-label="tt('Cancel')" @click="cancelSort"></f7-link>
-            </f7-nav-left>
-            <f7-nav-title :title="tt(title)"></f7-nav-title>
-            <f7-nav-right :class="{ 'navbar-compact-icons': true, 'disabled': loading }">
-                <f7-link icon-f7="ellipsis" :class="{ 'disabled': !categories.length || sortable }" :aria-label="tt('More')" @click="showMoreActionSheet = true"></f7-link>
-                <f7-link icon-f7="plus" :aria-label="tt('Add')" :href="'/category/add?type=' + categoryType + '&parentId=' + primaryCategoryId + (currentPrimaryCategory ? `&color=${currentPrimaryCategory.color}&icon=${currentPrimaryCategory.icon}` : '')" v-if="!sortable"></f7-link>
-                <f7-link icon-f7="checkmark_alt" :class="{ 'disabled': displayOrderSaving || !displayOrderModified }" :aria-label="tt('Save')" @click="saveSortResult" v-else-if="sortable"></f7-link>
-            </f7-nav-right>
+    <f7-page class="cy-mobile-surface cy-asset-surface" @page:afterin="load">
+        <f7-navbar back-link="返回">
+            <f7-nav-title>
+                <nav v-if="!parentId" class="management-tabs" aria-label="分类类型"><button v-for="tab in types" :key="tab.id" :aria-pressed="categoryType === tab.id" @click="switchType(tab.id)">{{ tab.name }}</button></nav>
+                <span v-else>{{ parentCategory?.name || '二级分类' }}</span>
+            </f7-nav-title>
+            <f7-nav-right><f7-link icon-f7="ellipsis_vertical" aria-label="分类管理更多操作" @click="menuOpen = true" /></f7-nav-right>
         </f7-navbar>
-
-        <section v-if="!loading" class="cy-category-tools">
-            <nav v-if="hasSubCategories" class="cy-segments" aria-label="分类类型"><f7-link :class="{ 'cy-type-active': categoryType === CategoryType.Expense }" href="/category/list?type=2">支出</f7-link><f7-link :class="{ 'cy-type-active': categoryType === CategoryType.Income }" href="/category/list?type=1">收入</f7-link><f7-link :class="{ 'cy-type-active': categoryType === CategoryType.Transfer }" href="/category/list?type=3">转账</f7-link></nav>
-            <p v-else class="cy-parent-label">{{ currentPrimaryCategory?.name }} <span>· 二级分类</span></p>
-            <label class="cy-category-scope-filter">查看范围<select v-model="scopeBookId" :disabled="sortable" aria-label="分类所属账本"><option value="">全部账本</option><option v-for="book in booksStore.allBooks" :key="book.id" :value="book.id">{{ book.name }}</option></select></label>
-            <label class="cy-management-search"><f7-icon f7="search" /><input v-model="searchText" :disabled="sortable" type="search" placeholder="查找分类" aria-label="查找分类" /></label>
-            <div class="cy-management-actions"><button :aria-pressed="showHidden" :disabled="sortable" @click="showHidden = !showHidden">{{ showHidden ? '收起隐藏分类' : '显示隐藏分类' }}</button><button :disabled="sortable || categories.length < 2" @click="searchText = ''; setSortable()">调整顺序</button><f7-link href="/tag/list">管理标签</f7-link></div>
-            <p class="cy-management-hint">{{ sortable ? '拖动右侧把手排序，完成后点右上角保存。' : '点击铅笔编辑名称、图标和颜色；滑动分类可删除。' }}</p>
-            <p v-if="searchText && !filteredCategoryCount" class="cy-management-hint">没有找到匹配的分类。</p>
-        </section>
-
-        <f7-list strong inset dividers class="margin-top-half skeleton-text" v-if="loading">
-            <f7-list-item title="Category Name"
-                          :link="hasSubCategories ? '#' : null"
-                          :key="itemIdx" v-for="itemIdx in [ 1, 2, 3 ]">
-                <template #media>
-                    <f7-icon f7="app_fill"></f7-icon>
-                </template>
-            </f7-list-item>
-        </f7-list>
-
-        <f7-list strong inset dividers class="margin-top-half" v-if="!loading && noAvailableCategory">
-            <f7-list-item :title="tt('No available category')"></f7-list-item>
-            <f7-list-button v-if="hasSubCategories && noCategory"
-                            :title="tt('Add Default Categories')"
-                            :href="'/category/preset?type=' + categoryType"></f7-list-button>
-        </f7-list>
-
-        <f7-list strong inset dividers sortable class="margin-top-half category-list"
-                 :sortable-enabled="sortable"
-                 v-if="!loading"
-                 @sortable:sort="onSort">
-            <f7-list-item swipeout
-                          :class="{ 'actual-first-child': category.id === firstShowingId, 'actual-last-child': category.id === lastShowingId }"
-                          :id="getCategoryDomId(category)"
-                          :title="category.name"
-                          :footer="category.comment"
-                          :link="hasSubCategories ? '/category/list?type=' + categoryType + '&id=' + category.id : null"
-                          :key="category.id"
-                          v-for="category in categories"
-                          v-show="(showHidden || !category.hidden) && matchesSearch(category)"
-                          @taphold="setSortable()">
-                <template #media>
-                    <ItemIcon :icon-type="getCategoryIconType(category.iconType)" :icon-id="category.icon" :color="category.color">
-                        <f7-badge color="gray" class="right-bottom-icon" v-if="category.hidden">
-                            <f7-icon f7="eye_slash_fill"></f7-icon>
-                        </f7-badge>
-                    </ItemIcon>
-                </template>
-                <template #after v-if="!sortable">
-                    <button class="cy-category-edit" :aria-label="`编辑${category.name}`" @click.stop.prevent="edit(category)"><f7-icon f7="pencil" /></button>
-                    <button class="cy-category-edit" :aria-label="`${category.hidden ? '显示' : '隐藏'}${category.name}`" @click.stop.prevent="hide(category, !category.hidden)"><f7-icon :f7="category.hidden ? 'eye_slash' : 'eye'" /></button>
-                </template>
-                <f7-swipeout-actions :left="textDirection === TextDirection.LTR"
-                                     :right="textDirection === TextDirection.RTL"
-                                     v-if="sortable">
-                    <f7-swipeout-button class="padding-horizontal" overswipe close
-                                        :aria-label="category.hidden ? tt('Show') : tt('Hide')"
-                                        :color="category.hidden ? 'blue' : 'gray'"
-                                        @click="hide(category, !category.hidden)">
-                        <f7-icon :f7="category.hidden ? 'eye' : 'eye_slash'"></f7-icon>
-                    </f7-swipeout-button>
-                </f7-swipeout-actions>
-                <f7-swipeout-actions :left="textDirection === TextDirection.RTL"
-                                     :right="textDirection === TextDirection.LTR"
-                                     v-if="!sortable">
-                    <f7-swipeout-button color="orange" close :text="tt('Edit')" @click="edit(category)"></f7-swipeout-button>
-                    <f7-swipeout-button color="red" class="padding-horizontal" :aria-label="tt('Delete')" @click="remove(category, false)">
-                        <f7-icon f7="trash"></f7-icon>
-                    </f7-swipeout-button>
-                </f7-swipeout-actions>
-            </f7-list-item>
-        </f7-list>
-
-        <f7-actions close-by-outside-click close-on-escape :opened="showMoreActionSheet" @actions:closed="showMoreActionSheet = false">
+        <main class="management-body">
+            <label v-if="searchOpen" class="management-search"><f7-icon f7="search" /><input v-model="query" type="search" placeholder="搜索分类" aria-label="搜索分类" /><button class="management-action" aria-label="关闭搜索" @click="query = ''; searchOpen = false"><f7-icon f7="xmark" /></button></label>
+            <label v-if="scopeOpen || scopeBookId" class="management-filter">查看范围<select v-model="scopeBookId" aria-label="分类所属账本"><option value="">全部账本</option><option v-for="book in books.allBooks" :key="book.id" :value="book.id">{{ book.name }}</option></select></label>
+            <p v-if="showHidden" class="management-state"><f7-icon f7="eye_slash" size="14" />正在显示隐藏分类<button @click="showHidden = false">收起</button></p>
+            <p v-if="error" class="cy-message" role="alert">{{ error }}<button @click="load">重试</button></p>
+            <f7-link class="management-card management-add" :href="addLink(parentCategory)"><f7-icon f7="plus_circle" />{{ parentId ? '新增二级分类' : '新增分类' }}</f7-link>
+            <p v-if="loading" class="cy-empty">正在加载分类…</p>
+            <template v-else>
+                <section v-for="category in visibleCategories" :key="category.id" class="management-card">
+                    <div class="management-head">
+                        <button class="management-main" :class="{ 'management-hidden': category.hidden }" :aria-expanded="!parentId ? expanded(category) : undefined" @click="parentId ? openActions(category) : toggle(category.id)">
+                            <f7-icon v-if="!parentId" class="category-chevron" :f7="expanded(category) ? 'chevron_down' : 'chevron_right'" />
+                            <span class="management-icon"><ItemIcon :icon-type="getCategoryIconType(category.iconType)" :icon-id="category.icon" :color="category.color" /></span>
+                            <span class="management-name">{{ category.name }}<small v-if="category.hidden">已隐藏</small></span>
+                        </button>
+                        <button class="management-action" :aria-label="`${category.name}的更多操作`" @click="openActions(category)"><f7-icon f7="text_alignleft" /></button>
+                    </div>
+                    <div v-if="!parentId && expanded(category)" class="category-children">
+                        <button v-for="child in children(category)" :key="child.id" :class="{ 'management-hidden': child.hidden }" :aria-label="`${child.name}的更多操作`" @click="openActions(child)">
+                            <ItemIcon :icon-type="getCategoryIconType(child.iconType)" :icon-id="child.icon" :color="child.color" /><span>{{ child.name }}</span><small v-if="child.hidden">已隐藏</small>
+                        </button>
+                        <f7-link :href="addLink(category)" :aria-label="`为${category.name}新增二级分类`"><f7-icon f7="plus_circle" /><span>新增</span></f7-link>
+                    </div>
+                </section>
+                <p v-if="!visibleCategories.length" class="cy-empty">{{ query ? '没有找到匹配的分类' : '此范围还没有分类' }}<br /><f7-link v-if="!categories.length && !parentId" :href="`/category/preset?type=${categoryType}`">添加默认分类</f7-link></p>
+            </template>
+        </main>
+        <f7-actions :opened="menuOpen" @actions:closed="menuOpen = false">
             <f7-actions-group>
-                <f7-actions-button :class="{ 'disabled': !categories || categories.length < 2 }" @click="setSortable()">{{ tt('Sort') }}</f7-actions-button>
-                <f7-actions-button v-if="!showHidden" @click="showHidden = true">{{ tt('Show Hidden Transaction Categories') }}</f7-actions-button>
-                <f7-actions-button v-if="showHidden" @click="showHidden = false">{{ tt('Hide Hidden Transaction Categories') }}</f7-actions-button>
+                <f7-actions-button @click="searchOpen = true">搜索分类</f7-actions-button>
+                <f7-actions-button @click="scopeOpen = !scopeOpen; scopeBookId = ''">按账本查看</f7-actions-button>
+                <f7-actions-button @click="showHidden = !showHidden">{{ showHidden ? '收起隐藏分类' : '显示隐藏分类' }}</f7-actions-button>
+                <f7-actions-button :class="{ disabled: categories.length < 2 }" @click="openOrder(parentCategory)">调整分类顺序</f7-actions-button>
+                <f7-actions-button v-if="!parentId" @click="expandAll = !expandAll; openIds = new Set()">{{ expandAll ? '收起全部分类' : '展开全部分类' }}</f7-actions-button>
+                <f7-actions-button v-if="!parentId" @click="f7router.navigate(`/category/preset?type=${categoryType}`)">添加默认分类</f7-actions-button>
             </f7-actions-group>
-            <f7-actions-group>
-                <f7-actions-button bold close>{{ tt('Cancel') }}</f7-actions-button>
-            </f7-actions-group>
+            <f7-actions-group><f7-actions-button bold>取消</f7-actions-button></f7-actions-group>
         </f7-actions>
-
-        <f7-actions close-by-outside-click close-on-escape :opened="showDeleteActionSheet" @actions:closed="showDeleteActionSheet = false">
+        <f7-actions :opened="actionsOpen" @actions:closed="actionsOpen = false">
             <f7-actions-group>
-                <f7-actions-label>{{ tt('Are you sure you want to delete this category?') }}</f7-actions-label>
-                <f7-actions-button color="red" @click="remove(categoryToDelete, true)">{{ tt('Delete') }}</f7-actions-button>
+                <f7-actions-label>{{ selected?.name }}</f7-actions-label>
+                <f7-actions-button @click="selected && f7router.navigate(`/category/edit?id=${selected.id}`)">编辑分类</f7-actions-button>
+                <f7-actions-button v-if="selected?.parentId === '0'" @click="selected && f7router.navigate(addLink(selected))">新增二级分类</f7-actions-button>
+                <f7-actions-button v-if="(selected?.subCategories?.length || 0) > 1" @click="openOrder(selected)">调整二级分类顺序</f7-actions-button>
+                <f7-actions-button @click="viewBills">查看账单</f7-actions-button>
+                <f7-actions-button :class="{ disabled: busy }" @click="toggleHidden">{{ selected?.hidden ? '显示分类' : '隐藏分类' }}</f7-actions-button>
+                <f7-actions-button color="red" :class="{ disabled: busy }" @click="confirmDelete">删除分类</f7-actions-button>
             </f7-actions-group>
-            <f7-actions-group>
-                <f7-actions-button bold close>{{ tt('Cancel') }}</f7-actions-button>
-            </f7-actions-group>
+            <f7-actions-group><f7-actions-button bold>取消</f7-actions-button></f7-actions-group>
         </f7-actions>
+        <ManagementOrderPopup v-model:open="orderOpen" :title="orderTitle" :items="orderItems" :busy="busy" :error="orderError" @save="saveOrder" />
     </f7-page>
 </template>
-
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { computed, ref } from 'vue';
 import type { Router } from 'framework7/types';
-
-import { useI18n } from '@/locales/helpers.ts';
-import { useI18nUIComponents, showLoading, hideLoading, onSwipeoutDeleted } from '@/lib/ui/mobile.ts';
-import { useCategoryListPageBase } from '@/views/base/categories/CategoryListPageBase.ts';
-
+import ManagementOrderPopup from '@/components/mobile/ManagementOrderPopup.vue';
 import { useTransactionCategoriesStore } from '@/stores/transactionCategory.ts';
 import { useBooksStore } from '@/stores/books.ts';
-
-import { TextDirection } from '@/core/text.ts';
+import { useI18nUIComponents } from '@/lib/ui/mobile.ts';
+import { useManagementFeedback } from '@/lib/use-management-feedback.ts';
+const { errorText } = useManagementFeedback();
+import { getCategoryIconType } from '@/lib/icon.ts';
 import { CategoryType } from '@/core/category.ts';
 import type { TransactionCategory } from '@/models/transaction_category.ts';
-
-import { getCategoryIconType } from '@/lib/icon.ts';
-import {
-    isNoAvailableCategory,
-    getFirstShowingId,
-    getLastShowingId
-} from '@/lib/category.ts';
-
-const props = defineProps<{
-    f7route: Router.Route;
-    f7router: Router.Router;
-}>();
-
-const { tt, getCurrentLanguageTextDirection } = useI18n();
-const { showAlert, showToast, routeBackOnError } = useI18nUIComponents();
-const { loading, primaryCategoryId, currentPrimaryCategory } = useCategoryListPageBase();
-
-const transactionCategoriesStore = useTransactionCategoriesStore();
-const booksStore = useBooksStore();
-const scopeBookId = ref(booksStore.selectedBookIds.length === 1 ? booksStore.selectedBookIds[0]! : '');
-void booksStore.loadBooks().catch(() => showToast('账本列表加载失败，请返回后重试。'));
-
-const hasSubCategories = ref<boolean>(false);
-const categoryType = ref<CategoryType | 0>(0);
-const loadingError = ref<unknown | null>(null);
-const showHidden = ref<boolean>(false);
-const searchText = ref('');
-const sortable = ref<boolean>(false);
-const categoryToDelete = ref<TransactionCategory | null>(null);
-const showMoreActionSheet = ref<boolean>(false);
-const showDeleteActionSheet = ref<boolean>(false);
-const displayOrderModified = ref<boolean>(false);
-const displayOrderSaving = ref<boolean>(false);
-
-const textDirection = computed<TextDirection>(() => getCurrentLanguageTextDirection());
-
-const categories = computed<TransactionCategory[]>(() => {
-    if (!primaryCategoryId.value || primaryCategoryId.value === '' || primaryCategoryId.value === '0') {
-        if (!transactionCategoriesStore.allTransactionCategories || !transactionCategoriesStore.allTransactionCategories[categoryType.value]) {
-            return [];
-        }
-
-        return transactionCategoriesStore.allTransactionCategories[categoryType.value] ?? [];
-    } else if (primaryCategoryId.value && primaryCategoryId.value !== '' && primaryCategoryId.value !== '0') {
-        if (!transactionCategoriesStore.allTransactionCategoriesMap || !transactionCategoriesStore.allTransactionCategoriesMap[primaryCategoryId.value]) {
-            return [];
-        }
-
-        return transactionCategoriesStore.allTransactionCategoriesMap[primaryCategoryId.value]?.subCategories ?? [];
-    } else {
-        return [];
-    }
-});
-
-const title = computed<string>(() => {
-    let title = '';
-
-    switch (categoryType.value) {
-        case CategoryType.Income:
-            title = 'Income';
-            break;
-        case CategoryType.Expense:
-            title = 'Expense';
-            break;
-        case CategoryType.Transfer:
-            title = 'Transfer';
-            break;
-        default:
-            title = 'Transaction';
-            break;
-    }
-
-    switch (hasSubCategories.value) {
-        case true:
-            title += ' Primary';
-            break;
-        case false:
-            title += ' Secondary';
-            break;
-    }
-
-    return title + ' Categories';
-});
-
-const firstShowingId = computed<string | null>(() => getFirstShowingId(categories.value, showHidden.value));
-const lastShowingId = computed<string | null>(() => getLastShowingId(categories.value, showHidden.value));
-const noAvailableCategory = computed<boolean>(() => isNoAvailableCategory(categories.value, showHidden.value));
-const noCategory = computed<boolean>(() => categories.value.length < 1);
-const filteredCategoryCount = computed(() => categories.value.filter(category => (showHidden.value || !category.hidden) && matchesSearch(category)).length);
-function matchesSearch(category: TransactionCategory): boolean {
-    if (scopeBookId.value && category.bookIds.length && !category.bookIds.includes(scopeBookId.value)) return false;
-    const query = searchText.value.trim().toLocaleLowerCase();
-    return !query || `${category.name} ${category.comment}`.toLocaleLowerCase().includes(query);
+import services from '@/lib/services.ts';
+const { f7route, f7router } = defineProps<{ f7route: Router.Route; f7router: Router.Router }>();
+const store = useTransactionCategoriesStore(), books = useBooksStore();
+const { showConfirm, showToast } = useI18nUIComponents();
+const types = [{ id: CategoryType.Expense, name: '支出' }, { id: CategoryType.Income, name: '收入' }, { id: CategoryType.Transfer, name: '转账' }];
+const routeType = Number(f7route.query['type']);
+const categoryType = ref<CategoryType>(types.some(type => type.id === routeType) ? routeType : CategoryType.Expense);
+const parentId = f7route.query['id'] && f7route.query['id'] !== '0' ? f7route.query['id'] : '';
+const parentCategory = computed(() => store.allTransactionCategoriesMap[parentId]);
+const loading = ref(true), busy = ref(false), error = ref(''), orderError = ref('');
+const query = ref(''), searchOpen = ref(false), scopeOpen = ref(false), showHidden = ref(false), expandAll = ref(false);
+const scopeBookId = ref(books.selectedBookIds.length === 1 ? books.selectedBookIds[0]! : '');
+const openIds = ref(new Set<string>()), menuOpen = ref(false), actionsOpen = ref(false), orderOpen = ref(false);
+const selected = ref<TransactionCategory>(), orderItems = ref<TransactionCategory[]>([]), orderTitle = ref('分类排序');
+const categories = computed(() => parentId ? parentCategory.value?.subCategories || [] : store.allTransactionCategories[categoryType.value] || []);
+function withinScope(category: TransactionCategory) { return (showHidden.value || !category.hidden) && (!scopeBookId.value || !category.bookIds.length || category.bookIds.includes(scopeBookId.value)); }
+function matches(category: TransactionCategory) { return `${category.name} ${category.comment}`.toLocaleLowerCase().includes(query.value.trim().toLocaleLowerCase()); }
+function children(category: TransactionCategory) { return (category.subCategories || []).filter(child => withinScope(child) && (matches(category) || matches(child))); }
+const visibleCategories = computed(() => categories.value.filter(category => withinScope(category) && (matches(category) || children(category).length > 0)));
+function expanded(category: TransactionCategory) { return !!query.value.trim() || (expandAll.value ? !openIds.value.has(category.id) : openIds.value.has(category.id)); }
+function toggle(id: string) { const next = new Set(openIds.value); if (next.has(id)) next.delete(id); else next.add(id); openIds.value = next; }
+function switchType(type: CategoryType) { categoryType.value = type; query.value = ''; openIds.value = new Set(); expandAll.value = false; }
+function addLink(parent?: TransactionCategory) {
+    return '/category/add?' + new URLSearchParams({ type: String(categoryType.value), parentId: parent?.id || '0', ...(parent ? { icon: parent.icon, color: parent.color } : {}) });
 }
-
-function getCategoryDomId(category: TransactionCategory): string {
-    return 'category_' + category.id;
+function openActions(category: TransactionCategory) { selected.value = category; actionsOpen.value = true; }
+async function load() {
+    if (busy.value) return; error.value = '';
+    try { await Promise.all([store.loadAllCategories({ force: false }), books.loadBooks()]); }
+    catch (cause) { error.value = errorText(cause); }
+    finally { loading.value = false; }
 }
-
-function parseCategoryIdFromDomId(domId: string): string | null {
-    if (!domId || domId.indexOf('category_') !== 0) {
-        return null;
-    }
-
-    return domId.substring(9); // category_
+async function toggleHidden() {
+    const category = selected.value; if (!category || busy.value) return;
+    busy.value = true; error.value = '';
+    try { await store.hideCategory({ category, hidden: !category.hidden }); }
+    catch (cause) { error.value = errorText(cause); }
+    finally { busy.value = false; }
 }
-
-function init(): void {
-    const query = props.f7route.query;
-
-    categoryType.value = parseInt(query['type'] || '0');
-
-    if (categoryType.value !== CategoryType.Income &&
-        categoryType.value !== CategoryType.Expense &&
-        categoryType.value !== CategoryType.Transfer) {
-        showToast('Parameter Invalid');
-        loadingError.value = 'Parameter Invalid';
-        return;
-    }
-
-    if (query['id'] && query['id'] !== '0') {
-        primaryCategoryId.value = query['id'];
-        hasSubCategories.value = false;
-    } else {
-        primaryCategoryId.value = '0';
-        hasSubCategories.value = true;
-    }
-
-    loading.value = true;
-
-    transactionCategoriesStore.loadAllCategories({
-        force: false
-    }).then(() => {
-        loading.value = false;
-    }).catch(error => {
-        if (error.processed) {
-            loading.value = false;
-        } else {
-            loadingError.value = error;
-            showToast(error.message || error);
-        }
-    });
+function confirmDelete() {
+    const category = selected.value; if (!category || busy.value) return;
+    showConfirm(`确定删除「${category.name}」${category.subCategories?.length ? `及其 ${category.subCategories.length} 个二级分类` : ''}？已有账单引用的分类不能直接删除，可选择隐藏。`, () => { void remove(category); });
 }
-
-function reload(done?: () => void): void {
-    if (sortable.value) {
-        done?.();
-        return;
-    }
-
-    const force = !!done;
-
-    transactionCategoriesStore.loadAllCategories({
-        force: force
-    }).then(() => {
-        done?.();
-
-        if (force) {
-            showToast('Category list has been updated');
-        }
-    }).catch(error => {
-        done?.();
-
-        if (!error.processed) {
-            showToast(error.message || error);
-        }
-    });
+async function remove(category: TransactionCategory) {
+    if (busy.value) return; busy.value = true; error.value = '';
+    try { await store.deleteCategory({ category }); showToast('分类已删除'); }
+    catch (cause) { error.value = errorText(cause); }
+    finally { busy.value = false; }
 }
-
-function edit(category: TransactionCategory): void {
-    props.f7router.navigate('/category/edit?id=' + category.id);
+function viewBills() { const category = selected.value; if (category) f7router.navigate('/transaction/list?' + new URLSearchParams({ categoryIds: category.id, ...(scopeBookId.value ? { bookIds: scopeBookId.value } : {}) })); }
+function openOrder(parent?: TransactionCategory) {
+    const items = parent ? parent.subCategories || [] : categories.value; if (items.length < 2) return;
+    orderItems.value = [...items]; orderTitle.value = parent ? `${parent.name} · 二级排序` : '分类排序'; orderError.value = ''; orderOpen.value = true;
 }
-
-function hide(category: TransactionCategory, hidden: boolean): void {
-    showLoading();
-
-    transactionCategoriesStore.hideCategory({
-        category: category,
-        hidden: hidden
-    }).then(() => {
-        hideLoading();
-    }).catch(error => {
-        hideLoading();
-
-        if (!error.processed) {
-            showToast(error.message || error);
-        }
-    });
+async function saveOrder(ids: string[]) {
+    if (busy.value) return; busy.value = true; orderError.value = '';
+    try {
+        const response = await services.moveTransactionCategory({ newDisplayOrders: ids.map((id, index) => ({ id, displayOrder: index + 1 })) });
+        if (!response.data.success || !response.data.result) throw new Error('分类顺序保存失败，请重试');
+        store.updateTransactionCategoryListInvalidState(true); await store.loadAllCategories({ force: false }); orderOpen.value = false;
+    } catch (cause) { orderError.value = errorText(cause); }
+    finally { busy.value = false; }
 }
-
-function remove(category: TransactionCategory | null, confirm: boolean): void {
-    if (!category) {
-        showAlert('An error occurred');
-        return;
-    }
-
-    if (!confirm) {
-        categoryToDelete.value = category;
-        showDeleteActionSheet.value = true;
-        return;
-    }
-
-    showDeleteActionSheet.value = false;
-    categoryToDelete.value = null;
-    showLoading();
-
-    transactionCategoriesStore.deleteCategory({
-        category: category,
-        beforeResolve: (done) => {
-            onSwipeoutDeleted(getCategoryDomId(category), done);
-        }
-    }).then(() => {
-        hideLoading();
-    }).catch(error => {
-        hideLoading();
-
-        if (!error.processed) {
-            showToast(error.message || error);
-        }
-    });
-}
-
-function setSortable(): void {
-    if (sortable.value) {
-        return;
-    }
-
-    searchText.value = '';
-    scopeBookId.value = '';
-    showHidden.value = true;
-    sortable.value = true;
-    displayOrderModified.value = false;
-}
-
-function saveSortResult(): void {
-    if (!displayOrderModified.value) {
-        showHidden.value = false;
-        sortable.value = false;
-        return;
-    }
-
-    displayOrderSaving.value = true;
-    showLoading();
-
-    transactionCategoriesStore.updateCategoryDisplayOrders({
-        type: categoryType.value as CategoryType,
-        parentId: primaryCategoryId.value
-    }).then(() => {
-        displayOrderSaving.value = false;
-        hideLoading();
-
-        showHidden.value = false;
-        sortable.value = false;
-        displayOrderModified.value = false;
-    }).catch(error => {
-        displayOrderSaving.value = false;
-        hideLoading();
-
-        if (!error.processed) {
-            showToast(error.message || error);
-        }
-    });
-}
-
-function cancelSort(): void {
-    if (!displayOrderModified.value) {
-        showHidden.value = false;
-        sortable.value = false;
-        return;
-    }
-
-    displayOrderSaving.value = true;
-    showLoading();
-
-    transactionCategoriesStore.loadAllCategories({
-        force: false
-    }).then(() => {
-        displayOrderSaving.value = false;
-        hideLoading();
-
-        showHidden.value = false;
-        sortable.value = false;
-        displayOrderModified.value = false;
-    }).catch(error => {
-        displayOrderSaving.value = false;
-        hideLoading();
-
-        if (!error.processed) {
-            showToast(error.message || error);
-        }
-    });
-}
-
-function onSort(event: { el: { id: string }; from: number; to: number }): void {
-    if (!event || !event.el || !event.el.id) {
-        showToast('Unable to move category');
-        return;
-    }
-
-    const id = parseCategoryIdFromDomId(event.el.id);
-
-    if (!id) {
-        showToast('Unable to move category');
-        return;
-    }
-
-    transactionCategoriesStore.changeCategoryDisplayOrder({
-        categoryId: id,
-        from: event.from,
-        to: event.to
-    }).then(() => {
-        displayOrderModified.value = true;
-    }).catch(error => {
-        showToast(error.message || error);
-    });
-}
-
-function onPageAfterIn(): void {
-    if (transactionCategoriesStore.transactionCategoryListStateInvalid && !loading.value) {
-        reload();
-    }
-
-    routeBackOnError(props.f7router, loadingError);
-}
-
-init();
+void load();
 </script>
-
+<style scoped src="@/styles/mobile/management.css"></style>
 <style scoped>
-.cy-category-scope-filter{display:flex;align-items:center;gap:9px;color:var(--cy-muted);font-size:12px;margin-bottom:12px}.cy-category-scope-filter select{min-width:0;flex:1;background:var(--cy-card);border:1px solid var(--cy-line);border-radius:8px;padding:7px 9px;color:var(--cy-ink)}
-.cy-category-tools{padding:12px 16px 0}.cy-category-tools .cy-segments{justify-content:space-around;margin-bottom:14px}.cy-category-tools .cy-segments a{flex:1;text-align:center;padding:7px 10px;border-radius:8px;color:var(--cy-muted);font-size:13px}.cy-category-tools .cy-segments a.cy-type-active{background:var(--cy-accent);color:var(--cy-card)}.cy-parent-label{font-size:17px;font-weight:600;margin-bottom:12px!important}.cy-parent-label span{font-size:12px;color:var(--cy-muted);font-weight:400}.cy-management-search{display:flex;gap:8px;align-items:center;border:1px solid var(--cy-line);border-radius:11px;background:var(--cy-card);padding:0 12px}.cy-management-search .f7-icons{font-size:17px;color:var(--cy-muted)}.cy-management-search input{min-width:0;width:100%;height:42px;border:0;background:transparent;font-size:14px}.cy-management-actions{display:flex;justify-content:space-between;gap:8px;margin:12px 0}.cy-management-actions button,.cy-management-actions a{border:0;background:transparent;color:var(--cy-accent);font-size:12px;padding:5px 0}.cy-management-hint{font-size:11px;line-height:1.6;color:var(--cy-muted);margin-bottom:10px!important}.cy-category-edit{border:0;background:transparent;color:var(--cy-accent);padding:8px;min-height:36px}.cy-category-edit .f7-icons{font-size:17px}
-</style>
-
-<style>
-.category-list {
-    --f7-list-item-footer-font-size: var(--ebk-large-footer-font-size);
-}
-
-.category-list .item-footer {
-    padding-top: 4px;
-}
+.category-chevron{font-size:11px;color:var(--cy-muted);margin-right:1px;width:12px;flex-shrink:0}
+.category-children{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px 0;padding:2px 10px 17px}
+.category-children button,.category-children a{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:9px;min-height:69px;min-width:0;padding:10px 2px 4px;border:0;background:none;color:var(--cy-ink)}
+.category-children :deep(.icon){font-size:25px}.category-children>a>.icon{color:var(--cy-muted)}
+.category-children span{font-size:11px;line-height:1.5;text-align:center;overflow-wrap:anywhere;max-width:100%}.category-children small{font-size:9px;margin-top:-7px;color:var(--cy-muted)}
+@media(max-width:350px){.category-children{grid-template-columns:repeat(4,minmax(0,1fr))}}
 </style>

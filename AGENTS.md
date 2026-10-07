@@ -33,7 +33,7 @@
 - 每次交付项目修改都告诉用户本地预览方法；最终报告区分已实现、已验证、未实现和依赖外部配置的部分。
 - Android 构建用 `python scripts/build_android.py`，测试版加 `--qa`；`.runtime/android-signing/` 是覆盖升级所需的持久材料，清理时必须保留。手机与电脑数据库独立。
 - 手机备份只保存允许的显示偏好，不保存会话令牌和设备解锁凭据；恢复须先校验、备份当前账本并停止后端，再替换目录。愿望记录不能当作真实资金流水。
-- Compose 参数为 `CYLEDGER_BIND`、`CYLEDGER_PORT`、`CYLEDGER_ROOT_URL`、`CYLEDGER_VOLUME`、`TZ`；可选行情密钥为 `CYLEDGER_COINGECKO_DEMO_API_KEY`，Android SDK 用 `ANDROID_HOME` 或 `--sdk`。不得提交真实密钥或修改全局代理来适配一次构建。
+- Compose 参数为 `CYLEDGER_BIND`、`CYLEDGER_PORT`、`CYLEDGER_ROOT_URL`、`CYLEDGER_VOLUME`、`TZ`；可选行情密钥为 `CYLEDGER_COINGECKO_DEMO_API_KEY`，电脑行情中转用 `CYLEDGER_MARKET_RELAY_URL`、`CYLEDGER_MARKET_RELAY_TOKEN`，Android 中转配置用 `--market-network`。Android SDK 用 `ANDROID_HOME` 或 `--sdk`。不得提交真实密钥或修改全局代理来适配一次构建。
 
 ## 深入文档
 
@@ -42,6 +42,7 @@
 | `README.CYLEDGER.md` | 使用与开发入口 |
 | `docs/CYLEDGER_ARCHITECTURE.md`、`docs/CYLEDGER_API.md` | 数据模型、事务、路由和请求契约 |
 | `docs/CYLEDGER_OPERATIONS.md`、`android/README.md` | 部署、恢复、签名和真机升级 |
+| `docs/CYLEDGER_MARKET_NETWORK.md` | 国内与海外连接边界、可选行情中转配置 |
 | `docs/CYLEDGER_ACCEPTANCE.md` | 当前交付与已验证范围，替换过期记录而非追加流水账 |
 
 ## 上游归属

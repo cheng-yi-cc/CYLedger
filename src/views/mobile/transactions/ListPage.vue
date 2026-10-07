@@ -46,7 +46,7 @@ const { entries, loading, error, load } = useMobileLedger({ applyFilters: () => 
 const query = ref(route['keyword'] || ''), filters = ref(emptyLedgerSearchFilters()), submitted = ref(false), showFilters = ref(false), sort = ref('newest'), visibleLimit = ref(100), selection = ref(false), selectedIds = ref<string[]>([]), busy = ref(false), showMove = ref(false);
 const searchInput = ref<HTMLInputElement>();
 const pictureView = computed(() => route['view'] === 'pictures');
-for (const key of ['accountIds', 'categoryIds', 'bookIds'] as const) if (route[key]) filters.value[key] = route[key]!.split(',').filter(Boolean);
+for (const key of ['accountIds', 'categoryIds', 'bookIds', 'tagIds'] as const) if (route[key]) filters.value[key] = route[key]!.split(',').filter(Boolean);
 if (!route['bookIds'] && books.selectedBookIds.length) filters.value.bookIds = [...books.selectedBookIds];
 if (route['minTime'] && Number(route['minTime']) > 0) filters.value.start = moment.unix(Number(route['minTime'])).tz(scope.timeZone).format('YYYY-MM-DD');
 if (route['maxTime'] && Number(route['maxTime']) > 0) filters.value.end = moment.unix(Number(route['maxTime'])).tz(scope.timeZone).format('YYYY-MM-DD');
